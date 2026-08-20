@@ -1,0 +1,1553 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />  
+    <meta 
+      name="viewport" 
+      content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover"
+    />
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta name="description" content="A compact multi-panel Bible reader" />
+    <!-- Without an explicit og:image, link-preview bots that don't run the
+         page's JS fall back to grabbing the first sizeable <img> in the raw
+         HTML -- which was the Font Size control's small screenshot deep in
+         the (hidden-by-default) Info dialog markup, blown up to thumbnail
+         size and looking oddly zoomed. Pointing these at the actual app
+         icon/name directly avoids that guesswork. -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://unitedbibles.org/" />
+    <meta property="og:title" content="United Bibles" />
+    <meta property="og:description" content="A compact multi-panel Bible reader" />
+    <meta property="og:image" content="https://unitedbibles.org/icons/icon-512.png" />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="United Bibles" />
+    <meta name="twitter:description" content="A compact multi-panel Bible reader" />
+    <meta name="twitter:image" content="https://unitedbibles.org/icons/icon-512.png" />
+    <meta name="asset-version" content="20260821-2" />
+    <meta name="theme-color" content="#284f43" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" /> 
+    <meta name="apple-mobile-web-app-title" content="Bible" /> 
+    <title>Bible</title>
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" type="image/png" href="./icons/icon-192.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="./icons/icon-180.png" />
+    <link rel="stylesheet" href="./styles.css?v=20260821-2" />
+  </head>
+  <body>
+    <header class="app-header">
+      <div class="compact-toolbar">
+        <div
+          class="site-brand"
+          id="site-brand"
+          role="button"
+          tabindex="0"
+          aria-label="Reset to the default view"
+          title="Reset to the default view"
+        >
+          <span class="site-cross" aria-hidden="true">
+            <svg viewBox="0 0 24 24">
+              <path d="M12 4v16M6.5 9h11"></path>
+            </svg>
+          </span>
+          <span>United Bibles</span>
+        </div>
+        <div class="panel-count-control" role="group" aria-label="Panels per screen">
+          <button id="panel-count-one" type="button" aria-label="Show one panel" aria-pressed="false">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <rect x="3" y="4" width="18" height="16" rx="2"></rect>
+            </svg>
+          </button>
+          <button id="panel-count-two" type="button" aria-label="Fit panels to width" aria-pressed="false">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <rect x="3" y="4" width="8" height="16" rx="1.5"></rect>
+              <rect x="13" y="4" width="8" height="16" rx="1.5"></rect>
+            </svg>
+          </button>
+          <div class="combo panel-fit-count-combo">
+            <input
+              class="combo-input panel-fit-count-input"
+              id="panel-fit-count-input"
+              type="text"
+              role="combobox"
+              aria-label="Number of panels to fit to screen width"
+              aria-autocomplete="list"
+              aria-expanded="false"
+              autocomplete="off"
+              readonly
+              inputmode="numeric"
+            />
+            <div class="combo-menu" role="listbox"></div>
+          </div>
+        </div>
+        <div class="font-size-control" aria-label="Bible text size">
+          <button id="font-size-down" type="button" aria-label="Decrease text size">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M5 12h14"></path>
+            </svg>
+          </button>
+          <input
+            id="font-size-value"
+            type="text"
+            inputmode="numeric"
+            autocomplete="off"
+            aria-label="Text size"
+            value="11"
+            readonly
+            tabindex="-1"
+          />
+          <button id="font-size-up" type="button" aria-label="Increase text size">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 5v14M5 12h14"></path>
+            </svg>
+          </button>
+        </div>
+        <div class="header-actions">
+          <button class="button button-secondary" id="open-search" type="button" aria-label="Search Bible" title="Search Bible">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="11" cy="11" r="6.3"></circle>
+              <path d="m15.7 15.7 4.6 4.6"></path>
+            </svg>
+          </button>
+          <button class="button button-secondary" id="panel-options-toggle" type="button" aria-label="More options" title="More options" aria-haspopup="true" aria-expanded="false">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="5" r="1.8"></circle>
+              <circle cx="12" cy="12" r="1.8"></circle>
+              <circle cx="12" cy="19" r="1.8"></circle>
+            </svg>
+          </button>
+          <button class="button button-secondary" id="cancel-move-picking" type="button" aria-label="Cancel move" title="Cancel move" hidden>
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M6 6l12 12M18 6 6 18"></path>
+            </svg>
+          </button>
+          <button class="button button-secondary" id="cancel-link-picking" type="button" aria-label="Cancel link" title="Cancel link" hidden>
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M6 6l12 12M18 6 6 18"></path>
+            </svg>
+          </button>
+          <button class="button button-primary" id="add-panel" type="button" aria-label="Add Bible panel" title="Add Bible panel">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 5v14M5 12h14"></path>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <main class="workspace">
+      <div class="panel-track" id="panel-track" aria-live="polite"></div>
+    </main>
+
+    <dialog class="search-dialog" id="search-dialog">
+      <div class="search-shell">
+        <div class="search-header">
+          <div>
+            <h2 id="search-dialog-title">Search</h2>
+          </div>
+          <button class="icon-button close-button" id="close-search" type="button" aria-label="Close search"><span aria-hidden="true"></span></button>
+        </div>
+
+        <form class="search-form" id="search-form">
+          <div class="search-input-row">
+            <button class="dialog-history-arrow" id="search-history-back" type="button" aria-label="Previous search">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M19 12H5"></path>
+                <path d="m11 6-6 6 6 6"></path>
+              </svg>
+            </button>
+            <button class="dialog-history-arrow" id="search-history-forward" type="button" aria-label="Next search">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M5 12h14"></path>
+                <path d="m13 6 6 6-6 6"></path>
+              </svg>
+            </button>
+            <div class="search-input-wrap">
+              <input
+                class="search-input"
+                id="search-input"
+                name="query"
+                type="text"
+                minlength="1"
+                autocomplete="off"
+                aria-label="Search"
+                placeholder="Keyword"
+                required
+              />
+              <button class="input-clear-button" id="search-input-clear" type="button" aria-label="Clear search">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"></path></svg>
+              </button>
+            </div>
+          </div>
+          <button class="button button-primary icon-only-button" type="submit" aria-label="Search">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="11" cy="11" r="6"></circle>
+              <path d="m16 16 4 4"></path>
+            </svg>
+          </button>
+          <div class="translation-controls dialog-translation-controls" id="search-translation-controls">
+            <div class="translation-picker" id="search-translation-picker">
+              <button
+                class="translation-picker-toggle"
+                id="search-translation-picker-toggle"
+                type="button"
+                aria-haspopup="listbox"
+                aria-expanded="false"
+                aria-label="Add search version"
+                title="Add version"
+              >
+                <svg class="picker-plus" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M12 5v14M5 12h14"></path>
+                </svg>
+              </button>
+              <div
+                class="translation-picker-menu"
+                id="search-translation-picker-menu"
+                hidden
+                role="listbox"
+                aria-label="Available search versions"
+              ></div>
+            </div>
+            <div class="translation-list" id="search-translation-list" aria-label="Search versions"></div>
+          </div>
+        </form>
+
+        <div class="search-meta" id="search-meta"></div>
+        <div class="search-body">
+          <nav class="search-book-list" id="search-book-list" aria-label="Books in search results"></nav>
+          <div class="search-results" id="search-results"></div>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog class="copy-dialog" id="copy-dialog">
+      <div class="copy-shell">
+        <div class="copy-header">
+          <div>
+            <p class="copy-title" id="copy-reference">Copy</p>
+          </div>
+          <button class="icon-button close-button" id="close-copy" type="button" aria-label="Close copy options"><span aria-hidden="true"></span></button>
+        </div>
+
+        <div class="copy-range-row">
+          <div class="selector-control book-selector copy-range-book-selector">
+            <div class="combo book-combo">
+              <input
+                class="combo-input book-input"
+                id="copy-book-input"
+                type="text"
+                role="combobox"
+                aria-label="Book"
+                aria-autocomplete="list"
+                aria-expanded="false"
+                autocomplete="off"
+                spellcheck="false"
+              />
+              <div class="combo-menu" role="listbox"></div>
+            </div>
+          </div>
+          <div class="selector-control chapter-selector copy-range-chapter-selector">
+            <div class="combo chapter-combo">
+              <input
+                class="combo-input chapter-input"
+                id="copy-chapter-input"
+                type="text"
+                role="combobox"
+                aria-label="Chapter"
+                aria-autocomplete="list"
+                aria-expanded="false"
+                autocomplete="off"
+                inputmode="numeric"
+              />
+              <div class="combo-menu" role="listbox"></div>
+            </div>
+          </div>
+          <span class="selector-separator" aria-hidden="true">:</span>
+          <div class="selector-control verse-selector copy-range-verse-selector">
+            <div class="combo verse-combo">
+              <input
+                class="combo-input verse-input"
+                id="copy-start-verse-input"
+                type="text"
+                role="combobox"
+                aria-label="Start verse"
+                aria-autocomplete="list"
+                aria-expanded="false"
+                autocomplete="off"
+                inputmode="numeric"
+              />
+              <div class="combo-menu" role="listbox"></div>
+            </div>
+          </div>
+          <span class="copy-range-hyphen" aria-hidden="true">-</span>
+          <div class="selector-control verse-selector copy-range-verse-selector">
+            <div class="combo verse-combo">
+              <input
+                class="combo-input verse-input"
+                id="copy-end-verse-input"
+                type="text"
+                role="combobox"
+                aria-label="End verse"
+                aria-autocomplete="list"
+                aria-expanded="false"
+                autocomplete="off"
+                inputmode="numeric"
+              />
+              <div class="combo-menu" role="listbox"></div>
+            </div>
+          </div>
+        </div>
+
+        <fieldset>
+          <legend>Versions</legend>
+          <div class="translation-controls dialog-translation-controls" id="copy-translation-controls">
+            <div class="translation-picker" id="copy-translation-picker">
+              <button
+                class="translation-picker-toggle"
+                id="copy-translation-picker-toggle"
+                type="button"
+                aria-haspopup="listbox"
+                aria-expanded="false"
+                aria-label="Add copy version"
+                title="Add version"
+              >
+                <svg class="picker-plus" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M12 5v14M5 12h14"></path>
+                </svg>
+              </button>
+              <div
+                class="translation-picker-menu"
+                id="copy-translation-picker-menu"
+                hidden
+                role="listbox"
+                aria-label="Available copy versions"
+              ></div>
+            </div>
+            <div class="translation-list copy-translation-options" id="copy-translations" aria-label="Copy versions"></div>
+            <div class="panel-reading-mode-control copy-reading-mode-control" role="group" aria-label="Reading mode">
+              <button class="panel-reading-mode-toggle" id="copy-reading-mode-toggle" type="button" aria-label="Reading mode" aria-pressed="false">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <rect x="4" y="3" width="16" height="18" rx="2"></rect>
+                  <path d="M8 9h8M8 12h8M8 15h8" stroke-linecap="round"></path>
+                </svg>
+              </button>
+            </div>
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend id="copy-order-legend">Order</legend>
+          <div class="copy-order-group" id="copy-order-group">
+            <button type="button" class="copy-order-option selected" data-copy-order="verse" aria-pressed="true">
+              <strong>Verse by Verse</strong>
+            </button>
+            <button type="button" class="copy-order-option" data-copy-order="translation" aria-pressed="false">
+              <strong>Version by Version</strong>
+            </button>
+          </div>
+          <div class="copy-order-group" id="copy-numbering-group" hidden>
+            <button type="button" class="copy-order-option selected" data-copy-numbering="off" aria-pressed="true">
+              <strong>Text Only</strong>
+            </button>
+            <button type="button" class="copy-order-option" data-copy-numbering="on" aria-pressed="false">
+              <strong>Text with Numbers</strong>
+            </button>
+          </div>
+        </fieldset>
+
+        <div class="copy-actions">
+          <span class="copy-status" id="copy-status" aria-live="polite"></span>
+          <button class="button button-primary icon-only-button copy-confirm-button" id="confirm-copy" type="button" aria-label="Copy selected verses">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <rect x="8" y="8" width="11" height="11" rx="2"></rect>
+              <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"></path>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog class="copy-dialog" id="highlight-dialog">
+      <div class="copy-shell">
+        <div class="copy-header">
+          <div>
+            <p class="copy-title">Highlight</p>
+          </div>
+          <button class="icon-button close-button" id="close-highlight" type="button" aria-label="Close highlight options"><span aria-hidden="true"></span></button>
+        </div>
+
+        <div class="copy-range-row">
+          <div class="selector-control book-selector copy-range-book-selector">
+            <div class="combo book-combo">
+              <input
+                class="combo-input book-input"
+                id="highlight-book-input"
+                type="text"
+                role="combobox"
+                aria-label="Book"
+                aria-autocomplete="list"
+                aria-expanded="false"
+                autocomplete="off"
+                spellcheck="false"
+              />
+              <div class="combo-menu" role="listbox"></div>
+            </div>
+          </div>
+          <div class="selector-control chapter-selector copy-range-chapter-selector">
+            <div class="combo chapter-combo">
+              <input
+                class="combo-input chapter-input"
+                id="highlight-chapter-input"
+                type="text"
+                role="combobox"
+                aria-label="Chapter"
+                aria-autocomplete="list"
+                aria-expanded="false"
+                autocomplete="off"
+                inputmode="numeric"
+              />
+              <div class="combo-menu" role="listbox"></div>
+            </div>
+          </div>
+          <span class="selector-separator" aria-hidden="true">:</span>
+          <div class="selector-control verse-selector copy-range-verse-selector">
+            <div class="combo verse-combo">
+              <input
+                class="combo-input verse-input"
+                id="highlight-start-verse-input"
+                type="text"
+                role="combobox"
+                aria-label="Start verse"
+                aria-autocomplete="list"
+                aria-expanded="false"
+                autocomplete="off"
+                inputmode="numeric"
+              />
+              <div class="combo-menu" role="listbox"></div>
+            </div>
+          </div>
+          <span class="copy-range-hyphen" aria-hidden="true">-</span>
+          <div class="selector-control verse-selector copy-range-verse-selector">
+            <div class="combo verse-combo">
+              <input
+                class="combo-input verse-input"
+                id="highlight-end-verse-input"
+                type="text"
+                role="combobox"
+                aria-label="End verse"
+                aria-autocomplete="list"
+                aria-expanded="false"
+                autocomplete="off"
+                inputmode="numeric"
+              />
+              <div class="combo-menu" role="listbox"></div>
+            </div>
+          </div>
+        </div>
+
+        <fieldset>
+          <legend>Versions</legend>
+          <div class="translation-controls dialog-translation-controls" id="highlight-translation-controls">
+            <div class="translation-picker" id="highlight-translation-picker">
+              <button
+                class="translation-picker-toggle"
+                id="highlight-translation-picker-toggle"
+                type="button"
+                aria-haspopup="listbox"
+                aria-expanded="false"
+                aria-label="Add highlight version"
+                title="Add version"
+              >
+                <svg class="picker-plus" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M12 5v14M5 12h14"></path>
+                </svg>
+              </button>
+              <div
+                class="translation-picker-menu"
+                id="highlight-translation-picker-menu"
+                hidden
+                role="listbox"
+                aria-label="Available highlight versions"
+              ></div>
+            </div>
+            <div class="translation-list copy-translation-options" id="highlight-translations" aria-label="Highlight versions"></div>
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Color</legend>
+          <div class="highlight-color-group" id="highlight-color-group" role="radiogroup" aria-label="Highlight color">
+            <button type="button" class="highlight-color-option selected" data-highlight-color="red" aria-pressed="true" aria-label="Red">
+              <span class="highlight-color-swatch"></span>
+            </button>
+            <button type="button" class="highlight-color-option" data-highlight-color="orange" aria-pressed="false" aria-label="Orange">
+              <span class="highlight-color-swatch"></span>
+            </button>
+            <button type="button" class="highlight-color-option" data-highlight-color="yellow" aria-pressed="false" aria-label="Yellow">
+              <span class="highlight-color-swatch"></span>
+            </button>
+            <button type="button" class="highlight-color-option" data-highlight-color="green" aria-pressed="false" aria-label="Green">
+              <span class="highlight-color-swatch"></span>
+            </button>
+            <button type="button" class="highlight-color-option" data-highlight-color="blue" aria-pressed="false" aria-label="Blue">
+              <span class="highlight-color-swatch"></span>
+            </button>
+            <button type="button" class="highlight-color-option" data-highlight-color="purple" aria-pressed="false" aria-label="Purple">
+              <span class="highlight-color-swatch"></span>
+            </button>
+          </div>
+        </fieldset>
+
+        <div class="copy-actions">
+          <span class="copy-status" id="highlight-status" aria-live="polite"></span>
+          <button class="button button-primary icon-only-button copy-confirm-button highlight-confirm-button" id="confirm-highlight" type="button" aria-label="Apply highlight">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <g transform="translate(0, 0.6)">
+                <path d="M4,18 L20,18"></path>
+                <rect class="highlight-icon-pencil" x="6.5" y="5.5" width="14" height="7" rx="2" transform="rotate(138 13.5 9)"></rect>
+                <path class="highlight-icon-tip" d="M6.51,11.96 L10.04,15.49 Q10.75,16.2 9.75,16.2 L6.8,16.2 Q5.8,16.2 5.8,15.2 L5.8,12.25 Q5.8,11.25 6.51,11.96 Z"></path>
+              </g>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog class="copy-dialog" id="note-dialog">
+      <div class="copy-shell">
+        <div class="copy-header">
+          <div>
+            <p class="copy-title">Note</p>
+          </div>
+          <button class="icon-button close-button" id="close-note" type="button" aria-label="Close note options"><span aria-hidden="true"></span></button>
+        </div>
+
+        <div class="copy-range-row">
+          <div class="selector-control book-selector copy-range-book-selector">
+            <div class="combo book-combo">
+              <input
+                class="combo-input book-input"
+                id="note-book-input"
+                type="text"
+                role="combobox"
+                aria-label="Book"
+                aria-autocomplete="list"
+                aria-expanded="false"
+                autocomplete="off"
+                spellcheck="false"
+              />
+              <div class="combo-menu" role="listbox"></div>
+            </div>
+          </div>
+          <div class="selector-control chapter-selector copy-range-chapter-selector">
+            <div class="combo chapter-combo">
+              <input
+                class="combo-input chapter-input"
+                id="note-chapter-input"
+                type="text"
+                role="combobox"
+                aria-label="Chapter"
+                aria-autocomplete="list"
+                aria-expanded="false"
+                autocomplete="off"
+                inputmode="numeric"
+              />
+              <div class="combo-menu" role="listbox"></div>
+            </div>
+          </div>
+          <span class="selector-separator" aria-hidden="true">:</span>
+          <div class="selector-control verse-selector copy-range-verse-selector">
+            <div class="combo verse-combo">
+              <input
+                class="combo-input verse-input"
+                id="note-start-verse-input"
+                type="text"
+                role="combobox"
+                aria-label="Start verse"
+                aria-autocomplete="list"
+                aria-expanded="false"
+                autocomplete="off"
+                inputmode="numeric"
+              />
+              <div class="combo-menu" role="listbox"></div>
+            </div>
+          </div>
+          <span class="copy-range-hyphen" aria-hidden="true">-</span>
+          <div class="selector-control verse-selector copy-range-verse-selector">
+            <div class="combo verse-combo">
+              <input
+                class="combo-input verse-input"
+                id="note-end-verse-input"
+                type="text"
+                role="combobox"
+                aria-label="End verse"
+                aria-autocomplete="list"
+                aria-expanded="false"
+                autocomplete="off"
+                inputmode="numeric"
+              />
+              <div class="combo-menu" role="listbox"></div>
+            </div>
+          </div>
+        </div>
+
+        <fieldset>
+          <legend>Note</legend>
+          <textarea class="note-textarea" id="note-textarea" rows="6"></textarea>
+        </fieldset>
+
+        <div class="copy-actions">
+          <span class="copy-status" id="note-status" aria-live="polite"></span>
+          <button class="button button-primary icon-only-button copy-confirm-button note-confirm-button" id="confirm-note" type="button" aria-label="Apply note">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M3,4 A1,1 0 0 1 4,3 H15 L21,9 V20 A1,1 0 0 1 20,21 H4 A1,1 0 0 1 3,20 Z"></path>
+              <path d="M15,3 V9 H21"></path>
+              <path d="M8 13h8M8 16.5h5"></path>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog class="lookup-dialog word-dictionary-dialog" id="strongs-dialog">
+      <div class="lookup-shell word-dictionary-shell">
+        <div class="lookup-header">
+          <div class="lookup-header-title">
+            <h2 id="strongs-dialog-title">Strong's Concordance</h2>
+          </div>
+          <button class="icon-button close-button" id="close-strongs" type="button" aria-label="Close dictionary"><span aria-hidden="true"></span></button>
+        </div>
+
+        <div class="strongs-nav" id="strongs-nav">
+          <button class="strongs-nav-arrow" id="strongs-nav-prev" type="button" aria-label="Previous Strong's number">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M19 12H5"></path>
+              <path d="m11 6-6 6 6 6"></path>
+            </svg>
+          </button>
+          <button class="strongs-nav-arrow" id="strongs-nav-next" type="button" aria-label="Next Strong's number">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M5 12h14"></path>
+              <path d="m13 6 6 6-6 6"></path>
+            </svg>
+          </button>
+          <div class="strongs-lang-picker" id="strongs-lang-picker">
+            <button
+              class="strongs-lang-toggle"
+              id="strongs-lang-toggle"
+              type="button"
+              aria-haspopup="listbox"
+              aria-expanded="false"
+              aria-label="Original language"
+            >
+              <span id="strongs-lang-toggle-label">Hebrew</span>
+            </button>
+            <div class="strongs-lang-menu" id="strongs-lang-menu" role="listbox" aria-label="Original language" hidden>
+              <button class="strongs-lang-option" type="button" data-lang="H" role="option" aria-selected="true">Hebrew</button>
+              <button class="strongs-lang-option" type="button" data-lang="G" role="option" aria-selected="false">Greek</button>
+            </div>
+          </div>
+          <div class="strongs-nav-number-wrap">
+            <input
+              class="strongs-nav-number"
+              id="strongs-nav-number"
+              type="text"
+              inputmode="numeric"
+              autocomplete="off"
+              aria-label="Strong's number"
+              placeholder="0001-8674"
+            />
+          </div>
+          <div class="strongs-nav-english-wrap" id="strongs-nav-english-wrap">
+            <input
+              class="strongs-nav-english"
+              id="strongs-nav-english"
+              type="text"
+              autocomplete="off"
+              aria-label="Transliteration"
+              placeholder="Transliteration"
+            />
+            <button class="input-clear-button" id="strongs-nav-english-clear" type="button" aria-label="Clear transliteration">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"></path></svg>
+            </button>
+            <div class="strongs-nav-suggestions" id="strongs-nav-suggestions" role="listbox" aria-label="Transliteration suggestions" hidden></div>
+          </div>
+          <button class="strongs-nav-search" id="strongs-nav-search" type="button" aria-label="Go to Strong's number">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="11" cy="11" r="6"></circle>
+              <path d="m16 16 4 4"></path>
+            </svg>
+          </button>
+        </div>
+
+        <!-- Relocated into the Original Word field's own row by
+             appendOriginalWordField every time showEntry re-renders --
+             this starting position is never actually seen. -->
+        <a class="biblehub-link" id="strongs-biblehub-link" target="_blank" rel="noopener noreferrer" aria-label="View on Bible Hub" hidden>
+          <span class="biblehub-link-label">Bible Hub</span>
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+            <path d="M15 3h6v6"></path>
+            <path d="M10 14 21 3"></path>
+          </svg>
+        </a>
+
+        <div class="lookup-body" id="strongs-dialog-body"></div>
+      </div>
+    </dialog>
+
+    <dialog class="lookup-dialog tsk-dialog" id="tsk-dialog">
+      <div class="lookup-shell tsk-dialog-shell">
+        <div class="lookup-header tsk-dialog-header">
+          <h2 id="tsk-dialog-title">Treasury of Scripture Knowledge</h2>
+          <button class="icon-button close-button" id="close-tsk" type="button" aria-label="Close cross references"><span aria-hidden="true"></span></button>
+        </div>
+
+        <div class="tsk-selectors">
+          <button class="dialog-history-arrow" id="tsk-history-back" type="button" aria-label="Previous cross reference">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M19 12H5"></path>
+              <path d="m11 6-6 6 6 6"></path>
+            </svg>
+          </button>
+          <button class="dialog-history-arrow" id="tsk-history-forward" type="button" aria-label="Next cross reference">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M5 12h14"></path>
+              <path d="m13 6 6 6-6 6"></path>
+            </svg>
+          </button>
+          <div class="selector-control book-selector">
+            <div class="combo book-combo">
+              <input
+                class="combo-input book-input"
+                id="tsk-book-input"
+                type="text"
+                role="combobox"
+                aria-label="Book"
+                aria-autocomplete="list"
+                aria-expanded="false"
+                autocomplete="off"
+                spellcheck="false"
+              />
+              <div class="combo-menu" role="listbox"></div>
+            </div>
+          </div>
+          <div class="selector-control chapter-selector">
+            <div class="combo chapter-combo">
+              <input
+                class="combo-input chapter-input"
+                id="tsk-chapter-input"
+                type="text"
+                role="combobox"
+                aria-label="Chapter"
+                aria-autocomplete="list"
+                aria-expanded="false"
+                autocomplete="off"
+                inputmode="numeric"
+              />
+              <div class="combo-menu" role="listbox"></div>
+            </div>
+          </div>
+          <span class="selector-separator" aria-hidden="true">:</span>
+          <div class="selector-control verse-selector">
+            <div class="combo verse-combo">
+              <input
+                class="combo-input verse-input"
+                id="tsk-verse-input"
+                type="text"
+                role="combobox"
+                aria-label="Verse"
+                aria-autocomplete="list"
+                aria-expanded="false"
+                autocomplete="off"
+                inputmode="numeric"
+              />
+              <div class="combo-menu" role="listbox"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="translation-controls dialog-translation-controls" id="tsk-translation-controls">
+          <div class="translation-picker" id="tsk-translation-picker">
+            <button
+              class="translation-picker-toggle"
+              id="tsk-translation-picker-toggle"
+              type="button"
+              aria-haspopup="listbox"
+              aria-expanded="false"
+              aria-label="Add version"
+              title="Add version"
+            >
+              <svg class="picker-plus" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 5v14M5 12h14"></path>
+              </svg>
+            </button>
+            <div
+              class="translation-picker-menu"
+              id="tsk-translation-picker-menu"
+              hidden
+              role="listbox"
+              aria-label="Available versions"
+            ></div>
+          </div>
+          <div class="translation-list" id="tsk-translations" aria-label="Selected versions"></div>
+        </div>
+
+        <div class="tsk-verse-text" id="tsk-verse-text"></div>
+
+        <div class="lookup-body" id="tsk-dialog-body"></div>
+      </div>
+    </dialog>
+
+    <dialog class="panel-options-dialog" id="panel-options-dialog">
+      <div class="panel-options-grid">
+        <button class="panel-options-item panel-options-highlight" id="panel-options-highlight" type="button" aria-label="Highlight">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <g transform="translate(0, 0.6)">
+              <path d="M4,18 L20,18"></path>
+              <rect class="highlight-icon-pencil" x="6.5" y="5.5" width="14" height="7" rx="2" transform="rotate(138 13.5 9)"></rect>
+              <path class="highlight-icon-tip" d="M6.51,11.96 L10.04,15.49 Q10.75,16.2 9.75,16.2 L6.8,16.2 Q5.8,16.2 5.8,15.2 L5.8,12.25 Q5.8,11.25 6.51,11.96 Z"></path>
+            </g>
+          </svg>
+        </button>
+        <button class="panel-options-item panel-options-bookmark" id="panel-options-bookmark" type="button" aria-label="Bookmark">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M4 3.5a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1V21l-8-5-8 5Z"></path>
+          </svg>
+        </button>
+        <button class="panel-options-item panel-options-note" id="panel-options-note" type="button" aria-label="Note">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M3,4 A1,1 0 0 1 4,3 H15 L21,9 V20 A1,1 0 0 1 20,21 H4 A1,1 0 0 1 3,20 Z"></path>
+            <path d="M15,3 V9 H21"></path>
+            <path d="M8 13h8M8 16.5h5"></path>
+          </svg>
+        </button>
+        <button class="panel-options-item panel-options-dictionary" id="panel-options-dictionary" type="button" aria-label="Word dictionary">
+          <span aria-hidden="true">אα</span>
+        </button>
+        <button class="panel-options-item panel-options-tsk" id="panel-options-tsk" type="button" aria-label="Cross references">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+            <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+          </svg>
+        </button>
+        <button class="panel-options-item panel-options-info" id="panel-options-info" type="button" aria-label="Info">
+          <svg viewBox="0 0 696 1575" aria-hidden="true">
+            <path d="M675 1405 653 1495Q554 1534 495.0 1554.5Q436 1575 358 1575Q238 1575 171.5 1516.5Q105 1458 105 1368Q105 1333 110.0 1296.5Q115 1260 126 1214L208 922Q219 880 226.5 842.5Q234 805 234 774Q234 718 211.0 696.0Q188 674 123 674Q91 674 57.5 684.0Q24 694 0 703L22 613Q103 580 177.0 556.5Q251 533 317 533Q436 533 500.5 590.5Q565 648 565 740Q565 759 560.5 807.0Q556 855 544 895L462 1186Q452 1221 444.0 1266.0Q436 1311 436 1334Q436 1392 462.0 1413.0Q488 1434 552 1434Q582 1434 620.0 1423.5Q658 1413 675 1405ZM696 184Q696 260 638.5 313.5Q581 367 500 367Q419 367 361.0 313.5Q303 260 303 184Q303 108 361.0 54.0Q419 0 500 0Q581 0 638.5 54.0Q696 108 696 184Z"></path>
+          </svg>
+        </button>
+      </div>
+    </dialog>
+
+    <dialog class="lookup-dialog highlight-list-dialog" id="highlight-list-dialog">
+      <div class="lookup-shell highlight-list-shell">
+        <div class="lookup-header">
+          <h2 id="highlight-list-title">Highlight</h2>
+          <button class="icon-button close-button" id="close-highlight-list" type="button" aria-label="Close highlight list"><span aria-hidden="true"></span></button>
+        </div>
+        <div class="lookup-body" id="highlight-list-body"></div>
+      </div>
+    </dialog>
+
+    <dialog class="lookup-dialog bookmark-list-dialog" id="bookmark-list-dialog">
+      <div class="lookup-shell bookmark-list-shell">
+        <div class="lookup-header">
+          <h2 id="bookmark-list-title">Bookmark</h2>
+          <button class="icon-button close-button" id="close-bookmark-list" type="button" aria-label="Close bookmark list"><span aria-hidden="true"></span></button>
+        </div>
+        <div class="translation-controls dialog-translation-controls" id="bookmark-list-translation-controls">
+          <div class="translation-picker" id="bookmark-list-translation-picker">
+            <button
+              class="translation-picker-toggle"
+              id="bookmark-list-translation-picker-toggle"
+              type="button"
+              aria-haspopup="listbox"
+              aria-expanded="false"
+              aria-label="Add version"
+              title="Add version"
+            >
+              <svg class="picker-plus" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 5v14M5 12h14"></path>
+              </svg>
+            </button>
+            <div
+              class="translation-picker-menu"
+              id="bookmark-list-translation-picker-menu"
+              hidden
+              role="listbox"
+              aria-label="Available versions"
+            ></div>
+          </div>
+          <div class="translation-list" id="bookmark-list-translations" aria-label="Selected versions"></div>
+        </div>
+        <div class="lookup-body" id="bookmark-list-body"></div>
+      </div>
+    </dialog>
+
+    <dialog class="lookup-dialog note-list-dialog" id="note-list-dialog">
+      <div class="lookup-shell note-list-shell">
+        <div class="lookup-header">
+          <h2 id="note-list-title">Note</h2>
+          <button class="icon-button close-button" id="close-note-list" type="button" aria-label="Close note list"><span aria-hidden="true"></span></button>
+        </div>
+        <div class="lookup-body" id="note-list-body"></div>
+      </div>
+    </dialog>
+
+    <dialog class="lookup-dialog info-dialog" id="info-dialog">
+      <div class="lookup-shell info-dialog-shell">
+        <div class="lookup-header">
+          <h2 id="info-dialog-title">Information</h2>
+          <button class="icon-button close-button" id="close-info" type="button" aria-label="Close info"><span aria-hidden="true"></span></button>
+        </div>
+        <div class="lookup-body">
+          <div class="info-results">
+            <div class="info-nav" id="info-nav">
+              <button type="button" class="info-nav-item info-nav-item--top" data-info-target="info-section-1">1. Introduction</button>
+              <button type="button" class="info-nav-item info-nav-item--top" data-info-target="info-section-2">2. Panel</button>
+              <button type="button" class="info-nav-item" data-info-target="info-section-2-1">2.1 Add Panel</button>
+              <button type="button" class="info-nav-item" data-info-target="info-section-2-2">2.2 Panel View</button>
+              <button type="button" class="info-nav-item" data-info-target="info-section-2-3">2.3 Font Size</button>
+              <button type="button" class="info-nav-item" data-info-target="info-section-2-4">2.4 Panel Linking</button>
+              <button type="button" class="info-nav-item" data-info-target="info-section-2-5">2.5 Reading Mode</button>
+              <button type="button" class="info-nav-item info-nav-item--top" data-info-target="info-section-3">3. Bible Versions</button>
+              <button type="button" class="info-nav-item" data-info-target="info-section-3-1">3.1 Add Version</button>
+              <button type="button" class="info-nav-item" data-info-target="info-section-3-2">3.2 Reorder Versions</button>
+              <button type="button" class="info-nav-item" data-info-target="info-section-3-3">3.3 Version Highlight / Mute</button>
+              <button type="button" class="info-nav-item" data-info-target="info-section-3-4">3.4 Modern Translations</button>
+              <button type="button" class="info-nav-item" data-info-target="info-section-3-5">3.5 Hebrew / Greek</button>
+              <button type="button" class="info-nav-item" data-info-target="info-section-3-6">3.6 Study</button>
+              <button type="button" class="info-nav-item info-nav-item--top" data-info-target="info-section-4">4. Bible Concordance</button>
+              <button type="button" class="info-nav-item" data-info-target="info-section-4-1">4.1 Keyword Search</button>
+              <button type="button" class="info-nav-item" data-info-target="info-section-4-2">4.2 Hebrew / Greek Concordance</button>
+              <button type="button" class="info-nav-item" data-info-target="info-section-4-3">4.3 Cross References</button>
+              <button type="button" class="info-nav-item info-nav-item--top" data-info-target="info-section-5">5. Verse Options</button>
+              <button type="button" class="info-nav-item" data-info-target="info-section-5-1">5.1 Verse Selection</button>
+              <button type="button" class="info-nav-item" data-info-target="info-section-5-2">5.2 Copy</button>
+              <button type="button" class="info-nav-item" data-info-target="info-section-5-3">5.3 Go to Verse</button>
+              <button type="button" class="info-nav-item" data-info-target="info-section-5-4">5.4 Highlight</button>
+              <button type="button" class="info-nav-item" data-info-target="info-section-5-5">5.5 Bookmark</button>
+              <button type="button" class="info-nav-item" data-info-target="info-section-5-6">5.6 Note</button>
+            </div>
+            <div class="info-content" id="info-content">
+              <section class="info-section info-section--top" id="info-section-1">
+                <h3 class="info-section-heading">1. Introduction</h3>
+                <p class="info-body-text">This app is a web-based, integrated Bible study app that lets you view multiple Bible texts and Bible concordances side by side, in parallel, by version.</p>
+              </section>
+
+              <section class="info-section info-section--top" id="info-section-2">
+                <h3 class="info-section-heading">2. Panel</h3>
+                <p class="info-body-text">A panel is a single window that displays Bible text, a concordance, notes, and more.</p>
+              </section>
+
+              <section class="info-section" id="info-section-2-1">
+                <h3 class="info-section-heading">2.1 Add Panel</h3>
+                <p class="info-body-text"><img class="info-icon" src="./assets/info/icon-add-panel.png" alt="Add panel icon" /> Adds a new panel to the right of the existing panels.</p>
+              </section>
+
+              <section class="info-section" id="info-section-2-2">
+                <h3 class="info-section-heading">2.2 Panel View</h3>
+                <p class="info-body-text">Sets how many panels are visible on screen at once.</p>
+                <p class="info-body-text"><img class="info-screenshot info-screenshot--icon-row" src="./assets/info/icon-one-panel.png" alt="One-panel icon" width="37" height="32" style="margin-top: -6px;" /> Sets the panel's width to match the full width of the screen, so only one panel is shown.</p>
+                <p class="info-body-text"><img class="info-screenshot info-screenshot--icon-row" src="./assets/info/icon-many-panel-combo.png" alt="Many-panel icon with its number selector" width="75" height="36" style="margin-top: -8px" /> Shows however many panels are set in the number selector on screen at once.</p>
+                <img class="info-screenshot" src="./assets/info/panel-mode-one.png" alt="One-panel mode showing a single full-width panel" />
+                <img class="info-screenshot" src="./assets/info/panel-mode-two.png" alt="Multi-panel mode showing two panels split evenly across the screen" />
+              </section>
+
+              <section class="info-section" id="info-section-2-3">
+                <h3 class="info-section-heading">2.3 Font Size</h3>
+                <p class="info-body-text"><img class="info-screenshot info-screenshot--icon-row" src="./assets/info/control-font-size.png" alt="Font size control" width="79" height="28" style="margin-top: -4px" /> Adjusts the font size of the Bible text shown in the panel.</p>
+              </section>
+
+              <section class="info-section" id="info-section-2-4">
+                <h3 class="info-section-heading">2.4 Panel Linking</h3>
+                <p class="info-body-text">Multiple panels show the same Bible passage, with scrolling linked so the same verse lines up in every panel.</p>
+                <p class="info-body-text"><img class="info-icon" src="./assets/info/icon-link.png" alt="Panel link icon" /> Links with an existing panel, or with a newly added panel.</p>
+                <p class="info-body-text"><img class="info-icon" src="./assets/info/icon-link-hide.png" alt="Hide linked panels icon" /> Hides every linked panel except one.</p>
+                <p class="info-body-text"><img class="info-icon" src="./assets/info/icon-link-show.png" alt="Show linked panels icon" /> Shows the linked panels that were hidden.</p>
+                <img class="info-screenshot" src="./assets/info/mode-link-picking.png" alt="Picking a panel to link with, or adding a new panel to link with" />
+                <img class="info-screenshot" src="./assets/info/panel-linked.png" alt="Two linked panels" />
+              </section>
+
+              <section class="info-section" id="info-section-2-5">
+                <h3 class="info-section-heading">2.5 Reading Mode</h3>
+                <p class="info-body-text">Displays the Bible text as continuous prose, without chapter/verse breaks.</p>
+                <p class="info-body-text"><img class="info-icon" src="./assets/info/icon-reading-mode.png" alt="Reading mode icon" /> Enabled only when a single panel is open with a single version selected.</p>
+                <p class="info-body-text"><img class="info-icon" src="./assets/info/icon-numbering.png" alt="Numbering icon" /> Adds chapter/verse numbers to the text in reading mode.</p>
+                <div class="info-screenshot-row">
+                  <img class="info-screenshot" src="./assets/info/panel-reading-mode.png" alt="A panel in reading mode" />
+                  <img class="info-screenshot" src="./assets/info/panel-reading-mode-numbering.png" alt="A panel in reading mode with chapter/verse numbering enabled" />
+                </div>
+              </section>
+
+              <section class="info-section info-section--top" id="info-section-3">
+                <h3 class="info-section-heading">3. Bible Versions</h3>
+              </section>
+
+              <section class="info-section" id="info-section-3-1">
+                <h3 class="info-section-heading">3.1 Add Version</h3>
+                <p class="info-body-text"><img class="info-icon" src="./assets/info/icon-add-translation.png" alt="Add version icon" /> Adds a version icon to the top of the panel for whichever version you want to view.</p>
+              </section>
+
+              <section class="info-section" id="info-section-3-2">
+                <h3 class="info-section-heading">3.2 Reorder Versions</h3>
+                <p class="info-body-text">Grab a version icon's handle at the top of the panel and drag it to change the order of the versions.</p>
+                <div class="info-screenshot-row">
+                  <img class="info-screenshot" src="./assets/info/reorder-versions-niv-gae.png" alt="A panel with versions shown in NIV, 개역개정 order" />
+                  <img class="info-screenshot" src="./assets/info/reorder-versions-gae-niv.png" alt="The same panel with versions shown in 개역개정, NIV order" />
+                </div>
+              </section>
+
+              <section class="info-section" id="info-section-3-3">
+                <h3 class="info-section-heading">3.3 Version Highlight / Mute</h3>
+                <p class="info-body-text">Click a version icon at the top of the panel to highlight or mute that version's text.</p>
+                <p class="info-body-text"><img class="info-chip-icon" src="./assets/info/icon-tr-NIV-highlight.png" alt="NIV version icon, highlighted" /> Highlighted version icon</p>
+                <p class="info-body-text"><img class="info-chip-icon" src="./assets/info/icon-tr-NIV-mute.png" alt="NIV version icon, muted" /> Muted version icon</p>
+                <div class="info-screenshot-row">
+                  <img class="info-screenshot" src="./assets/info/panel-highlight-niv.png" alt="A panel with the NIV text highlighted" />
+                  <img class="info-screenshot" src="./assets/info/panel-mute-niv.png" alt="A panel with the NIV text muted" />
+                </div>
+              </section>
+
+              <section class="info-section" id="info-section-3-4">
+                <h3 class="info-section-heading">3.4 Modern Translations</h3>
+                <p class="info-body-text info-group-label">English</p>
+                <p class="info-body-text"><img class="info-chip-icon" src="./assets/info/icon-tr-NIV.png" alt="NIV" /> New International Version</p>
+                <p class="info-body-text"><img class="info-chip-icon" src="./assets/info/icon-tr-ESV.png" alt="ESV" /> English Standard Version</p>
+                <p class="info-body-text"><img class="info-chip-icon" src="./assets/info/icon-tr-KJV.png" alt="KJV" /> King James Version</p>
+                <p class="info-body-text"><img class="info-chip-icon" src="./assets/info/icon-tr-NASB.png" alt="NASB" /> New American Standard Bible</p>
+                <p class="info-body-text"><img class="info-chip-icon" src="./assets/info/icon-tr-NRSV.png" alt="NRSV" /> New Revised Standard Version</p>
+                <p class="info-body-text"><img class="info-chip-icon" src="./assets/info/icon-tr-NLT.png" alt="NLT" /> New Living Translation</p>
+                <p class="info-body-text info-group-label">Korean</p>
+                <p class="info-body-text"><img class="info-chip-icon" src="./assets/info/icon-tr-GAE.png" alt="GAE" /> Korean Revised Version</p>
+                <p class="info-body-text"><img class="info-chip-icon" src="./assets/info/icon-tr-KRV.png" alt="KRV" /> Korean Revised Version (1961)</p>
+                <p class="info-body-text"><img class="info-chip-icon" src="./assets/info/icon-tr-SAENEW.png" alt="SAENEW" /> Korean New Translation</p>
+                <p class="info-body-text"><img class="info-chip-icon" src="./assets/info/icon-tr-WLB.png" alt="WLB" /> Woorimal Bible</p>
+                <p class="info-body-text"><img class="info-chip-icon" src="./assets/info/icon-tr-KLB.png" alt="KLB" /> Korean Living Bible</p>
+                <p class="info-body-text"><img class="info-chip-icon" src="./assets/info/icon-tr-EASY.png" alt="EASY" /> Easy Bible</p>
+                <p class="info-body-text info-group-label">Chinese</p>
+                <p class="info-body-text"><img class="info-chip-icon" src="./assets/info/icon-tr-CNV.png" alt="CNV" /> Chinese New Version</p>
+                <p class="info-body-text info-group-label">Indonesian</p>
+                <p class="info-body-text"><img class="info-chip-icon" src="./assets/info/icon-tr-TB.png" alt="TB" /> Terjemahan Baru</p>
+              </section>
+
+              <section class="info-section" id="info-section-3-5">
+                <h3 class="info-section-heading">3.5 Hebrew / Greek</h3>
+                <p class="info-body-text"><img class="info-chip-icon" src="./assets/info/icon-tr-HEB.png" alt="HEB" /> Hebrew Interlinear</p>
+                <p class="info-body-text"><img class="info-chip-icon" src="./assets/info/icon-tr-GRK.png" alt="GRK" /> Greek Interlinear</p>
+                <p class="info-body-text" style="padding-left: 66px;"><img class="info-screenshot info-screenshot--icon-row" src="./assets/info/interlinear-word-block-grk-christos.png" alt="One original-language word block: pronunciation, original word, meaning" width="58" style="margin: 0 8px 0 -66px;" /> Provides an interlinear Bible. Each original-language word block is made up of the English pronunciation / original word / English meaning.</p>
+              </section>
+
+              <section class="info-section" id="info-section-3-6">
+                <h3 class="info-section-heading">3.6 Study</h3>
+                <p class="info-body-text"><img class="info-chip-icon" src="./assets/info/icon-tr-STR.png" alt="STR" /> Strong's Concordance</p>
+                <p class="info-body-text"><img class="info-chip-icon" src="./assets/info/icon-tr-TSK.png" alt="TSK" /> Treasury of Scripture Knowledge</p>
+                <p class="info-body-text"><img class="info-chip-icon" src="./assets/info/icon-tr-NOTE.png" alt="NOTE" /> Note</p>
+              </section>
+
+              <section class="info-section info-section--top" id="info-section-4">
+                <h3 class="info-section-heading">4. Bible Concordance</h3>
+              </section>
+
+              <section class="info-section" id="info-section-4-1">
+                <h3 class="info-section-heading">4.1 Keyword Search</h3>
+                <p class="info-body-text"><img class="info-icon" src="./assets/info/icon-search.png" alt="Keyword search icon" /> See where a keyword you enter appears throughout the Bible, in the versions selected.</p>
+                <img class="info-screenshot" src="./assets/info/dialog-search.png" alt="Keyword search window" />
+              </section>
+
+              <section class="info-section" id="info-section-4-2">
+                <h3 class="info-section-heading">4.2 Hebrew / Greek Concordance</h3>
+                <p class="info-body-text">Strong's Concordance: every Hebrew or Greek word in the Bible has a numeric code -- Hebrew 1-8674, Greek 1-5624 -- with an explanation of its meaning.</p>
+                <p class="info-body-text">Englishman's Concordance: shows how that word is used elsewhere in the Bible.</p>
+                <p class="info-body-text"><img class="info-icon" src="./assets/info/icon-dictionary.png" alt="Original language concordance icon" /> Click a Hebrew or Greek word block to see its concordance entry.</p>
+                <img class="info-screenshot" src="./assets/info/dialog-dictionary.png" alt="Original language concordance window" />
+              </section>
+
+              <section class="info-section" id="info-section-4-3">
+                <h3 class="info-section-heading">4.3 Cross References</h3>
+                <p class="info-body-text">The Treasury of Scripture Knowledge is a cross-reference commentary compiled by Rev. R. A. Torrey.</p>
+                <p class="info-body-text"><img class="info-icon" src="./assets/info/icon-tsk.png" alt="TSK icon" /> For a verse in the KJV Bible, shows the Bible verses associated with each word and phrase, in the versions selected.</p>
+                <img class="info-screenshot" src="./assets/info/dialog-tsk.png" alt="TSK window" />
+              </section>
+
+              <section class="info-section info-section--top" id="info-section-5">
+                <h3 class="info-section-heading">5. Verse Options</h3>
+              </section>
+
+              <section class="info-section" id="info-section-5-1">
+                <h3 class="info-section-heading">5.1 Verse Selection</h3>
+                <p class="info-body-text"><img class="info-icon" src="./assets/info/icon-select-range.png" alt="Select range icon" /> Select Range: selects every verse between the first verse clicked and the second verse clicked.</p>
+                <p class="info-body-text"><img class="info-icon" src="./assets/info/icon-select-individual.png" alt="Select individually icon" /> Select Individually: selects only the verses clicked, one at a time.</p>
+                <div class="info-screenshot-row">
+                  <img class="info-screenshot" src="./assets/info/panel-select-range.png" alt="A panel with Genesis 1:1-5 selected as a range" />
+                  <img class="info-screenshot" src="./assets/info/panel-select-individual.png" alt="A panel with Genesis 1, 3, and 5 selected individually" />
+                </div>
+              </section>
+
+              <section class="info-section" id="info-section-5-2">
+                <h3 class="info-section-heading">5.2 Copy</h3>
+                <p class="info-body-text"><img class="info-icon" src="./assets/info/icon-copy.png" alt="Copy icon" /> Copies the selected verses, by the selected versions.</p>
+                <div class="info-screenshot-row">
+                  <img class="info-screenshot" src="./assets/info/dialog-copy-normal.png" alt="Normal copy options window" />
+                  <img class="info-screenshot" src="./assets/info/dialog-copy-reading.png" alt="Reading-mode copy window" />
+                </div>
+                <div class="info-screenshot-row">
+                  <div>
+                    <p class="info-caption">Verse by Verse</p>
+                    <img class="info-screenshot" src="./assets/info/copy-example-verse-by-verse.png" alt="Example text copied in verse-by-verse order" />
+                  </div>
+                  <div>
+                    <p class="info-caption">Version by Version</p>
+                    <img class="info-screenshot" src="./assets/info/copy-example-version-by-version.png" alt="Example text copied in version-by-version order" />
+                  </div>
+                </div>
+                <div class="info-screenshot-row">
+                  <div>
+                    <p class="info-caption">Text Only</p>
+                    <img class="info-screenshot" src="./assets/info/copy-example-text-only.png" alt="Example text copied as text only" />
+                  </div>
+                  <div>
+                    <p class="info-caption">Text with Numbers</p>
+                    <img class="info-screenshot" src="./assets/info/copy-example-text-with-numbers.png" alt="Example text copied as text with numbers" />
+                  </div>
+                </div>
+              </section>
+
+              <section class="info-section" id="info-section-5-3">
+                <h3 class="info-section-heading">5.3 Go to Verse</h3>
+                <p class="info-body-text">From a list of Bible verses in search results or a concordance, opens that verse in a panel.</p>
+                <p class="info-body-text"><img class="info-icon" src="./assets/info/icon-move.png" alt="Move icon" /> Opens the verse in an existing panel, or in a newly added panel.</p>
+                <img class="info-screenshot" src="./assets/info/search-result-row.png" alt="A search result row for Genesis 1:1, with its reference title, NIV text, and the move, copy, and cross-reference link icons" width="470" />
+                <img class="info-screenshot" src="./assets/info/mode-move-picking.png" alt="Picking a panel to move the verse to, or adding a new panel to move it to" />
+              </section>
+
+              <section class="info-section" id="info-section-5-4">
+                <h3 class="info-section-heading">5.4 Highlight</h3>
+                <p class="info-body-text"><img class="info-icon" src="./assets/info/icon-highlight.png" alt="Highlight icon" /> Highlights the selected version's Bible verse. Click it to change the highlight color or remove it.</p>
+                <img class="info-screenshot" src="./assets/info/verse-highlight-manage.png" alt="Genesis 1:1 with the NIV text highlighted green and the color picker/remove popup open" width="355" />
+              </section>
+
+              <section class="info-section" id="info-section-5-5">
+                <h3 class="info-section-heading">5.5 Bookmark</h3>
+                <p class="info-body-text"><img class="info-icon" src="./assets/info/icon-bookmark.png" alt="Bookmark icon" /> Bookmarks the selected verse. Click the bookmark icon to remove it.</p>
+                <img class="info-screenshot" src="./assets/info/verse-bookmarked.png" alt="Genesis 1:1 with its verse number shown as a bookmark" width="355" />
+              </section>
+
+              <section class="info-section" id="info-section-5-6">
+                <h3 class="info-section-heading">5.6 Note</h3>
+                <p class="info-body-text"><img class="info-icon" src="./assets/info/icon-note.png" alt="Note icon" /> Leaves a note on the selected verse. Click it to view, edit, or delete the note.</p>
+                <img class="info-screenshot" src="./assets/info/verse-note-popup.png" alt="Genesis 1:1 with its note popup open, showing the note text" width="362" />
+              </section>
+            </div>
+          </div>
+        </div>
+      </div>
+    </dialog>
+
+    <template id="panel-template">
+      <article class="bible-panel">
+        <header class="panel-header">
+          <div class="panel-selectors">
+            <button class="panel-history panel-history-back" type="button" aria-label="Previous passage in history">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M19 12H5"></path>
+                <path d="m11 6-6 6 6 6"></path>
+              </svg>
+            </button>
+            <button class="panel-history panel-history-forward" type="button" aria-label="Next passage in history">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M5 12h14"></path>
+                <path d="m13 6 6 6-6 6"></path>
+              </svg>
+            </button>
+            <div class="selector-control book-selector">
+              <div class="combo book-combo">
+                <input
+                  class="combo-input book-input"
+                  type="text"
+                  role="combobox"
+                  aria-label="Book"
+                  aria-autocomplete="list"
+                  aria-expanded="false"
+                  autocomplete="off"
+                  spellcheck="false"
+                />
+                <div class="combo-menu" role="listbox"></div>
+              </div>
+            </div>
+            <div class="selector-control chapter-selector">
+              <div class="combo chapter-combo">
+                <input
+                  class="combo-input chapter-input"
+                  type="text"
+                  role="combobox"
+                  aria-label="Chapter"
+                  aria-autocomplete="list"
+                  aria-expanded="false"
+                  autocomplete="off"
+                  inputmode="numeric"
+                />
+                <div class="combo-menu" role="listbox"></div>
+              </div>
+            </div>
+            <span class="selector-separator" aria-hidden="true">:</span>
+            <div class="selector-control verse-selector">
+              <div class="combo verse-combo">
+                <input
+                  class="combo-input verse-input"
+                  type="text"
+                  role="combobox"
+                  aria-label="Verse"
+                  aria-autocomplete="list"
+                  aria-expanded="false"
+                  autocomplete="off"
+                  inputmode="numeric"
+                />
+                <div class="combo-menu" role="listbox"></div>
+              </div>
+            </div>
+            <button class="icon-button close-button remove-panel" type="button" aria-label="Delete panel"><span aria-hidden="true"></span></button>
+          </div>
+          <div class="panel-strongs-selectors">
+            <button class="strongs-nav-arrow panel-strongs-history-back" type="button" aria-label="Previous Strong's number">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M19 12H5"></path>
+                <path d="m11 6-6 6 6 6"></path>
+              </svg>
+            </button>
+            <button class="strongs-nav-arrow panel-strongs-history-forward" type="button" aria-label="Next Strong's number">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M5 12h14"></path>
+                <path d="m13 6 6 6-6 6"></path>
+              </svg>
+            </button>
+            <div class="strongs-lang-picker panel-strongs-lang-picker">
+              <button
+                class="strongs-lang-toggle"
+                type="button"
+                aria-haspopup="listbox"
+                aria-expanded="false"
+                aria-label="Original language"
+              >
+                <span class="panel-strongs-lang-toggle-label">Hebrew</span>
+              </button>
+              <div class="strongs-lang-menu" role="listbox" aria-label="Original language" hidden>
+                <button class="strongs-lang-option" type="button" data-lang="H" role="option" aria-selected="true">Hebrew</button>
+                <button class="strongs-lang-option" type="button" data-lang="G" role="option" aria-selected="false">Greek</button>
+              </div>
+            </div>
+            <div class="strongs-nav-number-wrap">
+              <input
+                class="strongs-nav-number panel-strongs-nav-number"
+                type="text"
+                inputmode="numeric"
+                autocomplete="off"
+                aria-label="Strong's number"
+                placeholder="0001-8674"
+              />
+            </div>
+            <div class="strongs-nav-english-wrap panel-strongs-nav-english-wrap">
+              <input
+                class="strongs-nav-english panel-strongs-nav-english"
+                type="text"
+                autocomplete="off"
+                aria-label="Transliteration"
+                placeholder="Transliteration"
+              />
+              <button class="input-clear-button panel-strongs-nav-english-clear" type="button" aria-label="Clear transliteration">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"></path></svg>
+              </button>
+              <div class="strongs-nav-suggestions panel-strongs-nav-suggestions" role="listbox" aria-label="Transliteration suggestions" hidden></div>
+            </div>
+            <button class="strongs-nav-search panel-strongs-nav-search" type="button" aria-label="Go to Strong's number">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="11" cy="11" r="6"></circle>
+                <path d="m16 16 4 4"></path>
+              </svg>
+            </button>
+            <button class="icon-button close-button remove-panel panel-strongs-remove" type="button" aria-label="Delete panel"><span aria-hidden="true"></span></button>
+          </div>
+          <div class="translation-controls dialog-translation-controls panel-translation-controls">
+            <div class="panel-translation-controls-left">
+              <div class="panel-reading-translation-picker">
+                <button
+                  class="panel-reading-translation-toggle"
+                  type="button"
+                  aria-haspopup="listbox"
+                  aria-expanded="false"
+                  aria-label="Change version"
+                >
+                  <span class="translation-name"></span>
+                </button>
+                <div
+                  class="panel-reading-translation-menu translation-picker-menu"
+                  role="listbox"
+                  aria-label="Available versions"
+                  hidden
+                ></div>
+              </div>
+              <div class="translation-picker panel-translation-picker">
+                <button
+                  class="translation-picker-toggle panel-translation-picker-toggle"
+                  type="button"
+                  aria-haspopup="listbox"
+                  aria-expanded="false"
+                  aria-label="Add version"
+                  title="Add version"
+                >
+                  <svg class="picker-plus" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M12 5v14M5 12h14"></path>
+                  </svg>
+                </button>
+                <div
+                  class="translation-picker-menu panel-translation-picker-menu"
+                  role="listbox"
+                  aria-label="Available versions"
+                  hidden
+                ></div>
+              </div>
+              <div class="translation-list panel-translation-list" aria-label="Selected versions"></div>
+              <div class="panel-reading-nav">
+                <button class="panel-reading-book-prev" type="button" aria-label="Previous book">
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M15 5 8 12l7 7"></path>
+                  </svg>
+                </button>
+                <div class="selector-control book-selector panel-reading-book-selector">
+                  <div class="combo book-combo">
+                    <input
+                      class="combo-input book-input panel-reading-book-input"
+                      type="text"
+                      role="combobox"
+                      aria-label="Book"
+                      aria-autocomplete="list"
+                      aria-expanded="false"
+                      autocomplete="off"
+                      spellcheck="false"
+                    />
+                    <div class="combo-menu" role="listbox"></div>
+                  </div>
+                </div>
+                <button class="panel-reading-book-next" type="button" aria-label="Next book">
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="m9 5 7 7-7 7"></path>
+                  </svg>
+                </button>
+              </div>
+              <div class="panel-numbering-control" role="group" aria-label="Chapter and verse numbering">
+                <button class="panel-numbering-toggle" type="button" aria-label="Show chapter and verse numbers" aria-pressed="false">
+                  <span aria-hidden="true">#</span>
+                </button>
+              </div>
+            </div>
+            <div class="panel-translation-controls-right">
+              <div class="panel-reading-mode-control" role="group" aria-label="Reading mode">
+                <button class="panel-reading-mode-toggle" type="button" aria-label="Reading mode" aria-pressed="false">
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <rect x="4" y="3" width="16" height="18" rx="2"></rect>
+                    <path d="M8 9h8M8 12h8M8 15h8" stroke-linecap="round"></path>
+                  </svg>
+                </button>
+              </div>
+              <div class="panel-link-visibility-control" role="group" aria-label="Show or hide linked panels" hidden>
+                <button class="panel-link-visibility-toggle" type="button" aria-label="Hide linked panels" aria-pressed="false">
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path class="panel-link-visibility-arrow-left" d="M1 12 L7 12 M3 8.5 L7 12 L3 15.5" stroke-linecap="round" stroke-linejoin="round"></path>
+                    <rect x="7.5" y="4" width="9" height="16" rx="1.5"></rect>
+                    <path class="panel-link-visibility-arrow-right" d="M23 12 L17 12 M21 8.5 L17 12 L21 15.5" stroke-linecap="round" stroke-linejoin="round"></path>
+                  </svg>
+                </button>
+              </div>
+              <div class="panel-link-mode-control" role="group" aria-label="Link panel">
+                <button class="panel-link-mode-toggle" type="button" aria-label="Link panel" aria-pressed="false">
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <rect x="1.5" y="4" width="9" height="16" rx="1.5"></rect>
+                    <rect x="13.5" y="4" width="9" height="16" rx="1.5"></rect>
+                    <path d="M10.5 12h3" stroke-linecap="round"></path>
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </div>
+        </header>
+        <div class="panel-content" tabindex="0"></div>
+        <button class="panel-move-overlay" type="button" aria-label="Move here" hidden>
+          <span class="panel-move-icon">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M5 12h14"></path>
+              <path d="m13 6 6 6-6 6"></path>
+            </svg>
+          </span>
+        </button>
+        <button class="panel-link-overlay" type="button" aria-label="Link with this panel" hidden>
+          <span class="panel-move-icon panel-link-icon">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <rect x="1.5" y="4" width="9" height="16" rx="1.5"></rect>
+              <rect x="13.5" y="4" width="9" height="16" rx="1.5"></rect>
+              <path d="M10.5 12h3" stroke-linecap="round"></path>
+            </svg>
+          </span>
+        </button>
+        <button class="chapter-jump chapter-jump-previous previous-chapter" type="button" aria-label="Previous chapter">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M15 5 8 12l7 7"></path>
+          </svg>
+        </button>
+        <button class="chapter-jump chapter-jump-next next-chapter" type="button" aria-label="Next chapter">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="m9 5 7 7-7 7"></path>
+          </svg>
+        </button>
+        <div class="verse-actions" hidden>
+          <div class="verse-actions-popup" hidden>
+            <button class="verse-actions-highlight" type="button" aria-label="Highlight">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <g transform="translate(0, 0.6)">
+                  <path d="M4,18 L20,18"></path>
+                  <rect class="highlight-icon-pencil" x="6.5" y="5.5" width="14" height="7" rx="2" transform="rotate(138 13.5 9)"></rect>
+                  <path class="highlight-icon-tip" d="M6.51,11.96 L10.04,15.49 Q10.75,16.2 9.75,16.2 L6.8,16.2 Q5.8,16.2 5.8,15.2 L5.8,12.25 Q5.8,11.25 6.51,11.96 Z"></path>
+                </g>
+              </svg>
+            </button>
+            <button class="verse-actions-bookmark" type="button" aria-label="Bookmark">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M4 3.5a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1V21l-8-5-8 5Z"></path>
+              </svg>
+            </button>
+            <button class="verse-actions-note" type="button" aria-label="Note">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M3,4 A1,1 0 0 1 4,3 H15 L21,9 V20 A1,1 0 0 1 20,21 H4 A1,1 0 0 1 3,20 Z"></path>
+                <path d="M15,3 V9 H21"></path>
+                <path d="M8 13h8M8 16.5h5"></path>
+              </svg>
+            </button>
+            <button class="tsk-selection" type="button" aria-label="Related passages">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+              </svg>
+            </button>
+          </div>
+          <div class="selection-mode-control" role="group" aria-label="Verse selection mode">
+            <button class="selection-mode-button selection-mode-range" type="button" aria-label="Select verse range">
+              <span class="selection-bars" aria-hidden="true">
+                <span></span>
+                <span></span>
+                <span></span>
+              </span>
+            </button>
+            <button class="selection-mode-button selection-mode-individual" type="button" aria-label="Select individual verses">
+              <span class="selection-bars selection-bars-gap" aria-hidden="true">
+                <span></span>
+                <span></span>
+                <span></span>
+              </span>
+            </button>
+          </div>
+          <button class="copy-selection" type="button" aria-label="Copy selected verses">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <rect x="8" y="8" width="11" height="11" rx="2"></rect>
+              <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"></path>
+            </svg>
+          </button>
+          <button class="verse-actions-options" type="button" aria-label="More options" aria-haspopup="true" aria-expanded="false">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="5" r="1.8"></circle>
+              <circle cx="12" cy="12" r="1.8"></circle>
+              <circle cx="12" cy="19" r="1.8"></circle>
+            </svg>
+          </button>
+          <button class="cancel-selection" type="button" aria-label="Cancel verse selection">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M6 6l12 12M18 6 6 18"></path>
+            </svg>
+          </button>
+        </div>
+        <div class="word-actions" hidden>
+          <button class="word-dictionary" type="button" aria-label="Dictionary and concordance">
+            <span aria-hidden="true">אα</span>
+          </button>
+          <button class="word-copy" type="button" aria-label="Copy word">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <rect x="8" y="8" width="11" height="11" rx="2"></rect>
+              <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"></path>
+            </svg>
+          </button>
+          <button class="word-cancel" type="button" aria-label="Close word lookup">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M6 6l12 12M18 6 6 18"></path>
+            </svg>
+          </button>
+        </div>
+        <button class="panel-move panel-move-left" type="button" aria-label="Move panel left">
+          <span aria-hidden="true"></span>
+        </button>
+        <button class="panel-move panel-move-right" type="button" aria-label="Move panel right">
+          <span aria-hidden="true"></span>
+        </button>
+        <div class="panel-resize-handle" role="separator" aria-orientation="vertical" aria-label="Resize panel"></div>
+      </article>
+    </template>
+
+    <div class="highlight-manage-popup" id="highlight-manage-popup" hidden>
+      <button class="highlight-manage-swatch" id="highlight-manage-swatch" type="button" aria-label="Change highlight color"></button>
+      <div class="highlight-manage-colors" id="highlight-manage-colors" role="radiogroup" aria-label="Highlight color" hidden>
+        <button type="button" class="highlight-color-option" data-highlight-color="red" aria-label="Red">
+          <span class="highlight-color-swatch"></span>
+        </button>
+        <button type="button" class="highlight-color-option" data-highlight-color="orange" aria-label="Orange">
+          <span class="highlight-color-swatch"></span>
+        </button>
+        <button type="button" class="highlight-color-option" data-highlight-color="yellow" aria-label="Yellow">
+          <span class="highlight-color-swatch"></span>
+        </button>
+        <button type="button" class="highlight-color-option" data-highlight-color="green" aria-label="Green">
+          <span class="highlight-color-swatch"></span>
+        </button>
+        <button type="button" class="highlight-color-option" data-highlight-color="blue" aria-label="Blue">
+          <span class="highlight-color-swatch"></span>
+        </button>
+        <button type="button" class="highlight-color-option" data-highlight-color="purple" aria-label="Purple">
+          <span class="highlight-color-swatch"></span>
+        </button>
+      </div>
+      <button class="highlight-manage-remove" id="highlight-manage-remove" type="button" aria-label="Remove highlight">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M4 7h16"></path>
+          <path d="M6 7V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v2"></path>
+          <path d="M6 7l1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13"></path>
+          <path d="M10 11v6M14 11v6"></path>
+        </svg>
+      </button>
+    </div>
+
+    <div class="bookmark-manage-popup" id="bookmark-manage-popup" hidden>
+      <button class="bookmark-manage-remove" id="bookmark-manage-remove" type="button" aria-label="Remove bookmark">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M4 7h16"></path>
+          <path d="M6 7V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v2"></path>
+          <path d="M6 7l1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13"></path>
+          <path d="M10 11v6M14 11v6"></path>
+        </svg>
+      </button>
+    </div>
+
+    <div class="note-view-popup" id="note-view-popup" hidden>
+      <div class="note-view-header">
+        <p class="note-view-title" id="note-view-title"></p>
+        <button class="note-view-remove" id="note-view-remove" type="button" aria-label="Remove note">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M4 7h16"></path>
+            <path d="M6 7V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v2"></path>
+            <path d="M6 7l1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13"></path>
+            <path d="M10 11v6M14 11v6"></path>
+          </svg>
+        </button>
+      </div>
+      <div class="note-view-body" id="note-view-body"></div>
+    </div>
+
+    <noscript>JavaScript is required to display the Bible text.</noscript>
+    <script type="module" src="./app.js?v=20260821-2"></script>
+  </body>
+</html>
