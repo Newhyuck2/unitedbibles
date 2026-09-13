@@ -5968,13 +5968,16 @@ body * {
 
 /* Reuses .book-combo/.combo-input/.book-input as-is for the box chrome
    (border, radius, font, dropdown-arrow decoration) -- only this wrapper's
-   width is new, sized to "2 Thessalonians" at the combo's own 11px/700
-   font (the longest book title in either language) so the gap between the
+   width is new, sized (empirically, against real rendering -- canvas text
+   measurement alone undershot this by a font-stack mismatch) to fit
+   "1/2 Thessalonians 데살로니가전/후서" (the longest bilingual book name
+   pair) without either language ellipsizing, so the gap between the
    chevrons never has to grow for any book. min-width: 0 lets it shrink
-   below that preferred width as an absolute last resort on a panel too
-   narrow to ever fit it, rather than forcing an overlap elsewhere. */
+   below that preferred width -- gracefully ellipsizing this one longest
+   pair -- as a last resort on a panel too narrow to ever fit it (e.g. a
+   phone in portrait), rather than forcing an overlap elsewhere. */
 .panel-reading-book-selector {
-  flex: 0 1 112px;
+  flex: 0 1 220px;
   min-width: 0;
 }
 
@@ -5984,6 +5987,10 @@ body * {
 
 .panel-reading-book-input {
   text-align: center;
+}
+
+.panel-reading-book-selector .book-input-display {
+  justify-content: center;
 }
 
 /* Same box as .panel-reading-mode-toggle (32x32, radius/hover) minus its

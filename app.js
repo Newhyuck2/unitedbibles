@@ -739,16 +739,10 @@ function updateReadingModeControls(panelState) {
     // No single readable version yet (none selected, or more than one) --
     // renderPanelBody leaves the flow empty and opens the translation
     // picker instead; the nav row still shows, just with a blank version
-    // label (no placeholder text) and the current book in English until
-    // one is actually picked.
+    // label (no placeholder text) until one is actually picked.
     const lang = translation ? translationLanguage(translation) : "en";
-    const book = manifest.books[panelState.book];
     elements.readingBookCombo.setItems(readingBookItems());
     elements.readingBookCombo.setValue(panelState.book);
-    // setValue above always shows the bilingual list label; overwrite it
-    // with just the current translation's own language, matching what the
-    // reading flow itself is rendered in.
-    elements.readingBookInput.value = lang === "ko" ? book.ko : book.en;
     elements.readingTranslationName.textContent = translation ? translationMeta(translation).label : "";
     elements.readingTranslationName.lang = lang;
     if (translation) {
@@ -3183,14 +3177,10 @@ function setupPanelSwipe(panel) {
   panel.addEventListener("touchcancel", (event) => finish(event, true));
 }
 
-// Reading mode's own book selector shows only the book name in the current
-// translation's language (unlike the normal panel's bilingual "Genesis
-// 창세기" combo) -- ko/en stay on each item regardless so matchesBook can
-// still search either language.
-// The dropdown list itself reads exactly like the normal panel's own book
-// combo -- "English 한국어" for every option, regardless of translation --
-// only the closed input's own displayed value (set separately in
-// updateReadingModeControls) follows the current translation's language.
+// Same bilingual "Genesis 창세기" shape as the normal panel's own book
+// combo -- both the closed input's overlay display and the dropdown list
+// always show both languages here too, regardless of which language the
+// current translation itself reads in.
 function readingBookItems() {
   return manifest.books.map((book, index) => ({
     value: index,
