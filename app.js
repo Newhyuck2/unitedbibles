@@ -2354,22 +2354,24 @@ document.addEventListener(
   true,
 );
 
-// The portrait two-row header keeps the "Holy Bible" label only while it
-// fits. The panel-count control sits in the flexible column of the top row,
-// so when space runs out it is the first thing pushed into the brand: that
-// overlap is the signal to drop the label (and re-measure on every resize
-// so it comes back as soon as it fits again).
+// The header keeps the "United Bibles" label only while it fits. The
+// compact toolbar's own grid columns are a mix of "auto" (content-sized)
+// tracks around one flexible spacer, so once the spacer has nowhere left
+// to shrink, further overflow doesn't crowd adjacent items into each other
+// (which an edge-adjacency check could catch) -- it just makes the grid
+// wider than its own box, silently pushing the trailing icon(s) out past
+// the row's (and the screen's) own right edge. Comparing the toolbar's
+// scrollWidth to its clientWidth catches that directly, regardless of
+// which columns happen to be in play at a given breakpoint.
 const brandLabel = siteBrand.querySelector("span:last-child");
-const panelCountControl = panelCountOneButton.closest(".panel-count-control");
+const compactToolbarEl = document.querySelector(".compact-toolbar");
 
 function updateBrandLabelVisibility() {
   if (!brandLabel) return;
   document.body.classList.remove("brand-label-hidden");
-  if (phonePortraitLayout.matches) return;
-  if (!mobileLayout.matches || touchPanelToggleLayout.matches) return;
-  const brandRect = siteBrand.getBoundingClientRect();
-  const controlLeft = panelCountControl.getBoundingClientRect().left;
-  if (controlLeft < brandRect.right + 2) {
+  if (!mobileLayout.matches) return;
+  if (!phonePortraitLayout.matches && touchPanelToggleLayout.matches) return;
+  if (compactToolbarEl.scrollWidth > compactToolbarEl.clientWidth + 1) {
     document.body.classList.add("brand-label-hidden");
   }
 }

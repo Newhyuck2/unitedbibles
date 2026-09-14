@@ -5660,8 +5660,14 @@ body * {
     grid-template-areas: "brand . font actions";
   }
 
+  /* Not !important: body.brand-label-hidden's own rule (see
+     updateBrandLabelVisibility in app.js) needs to still be able to hide
+     this on a phone too narrow to fit it, same as every other mobile
+     layout -- forcing it always visible here was overflowing the header
+     row past the screen's own right edge on narrow phones, clipping the
+     rightmost header icon off entirely. */
   .site-brand > span:last-child {
-    display: inline !important;
+    display: inline;
   }
 
   .panel-count-control {
