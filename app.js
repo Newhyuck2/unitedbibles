@@ -3340,7 +3340,7 @@ function setupPanelMoveReveal(panel, moveLeft, moveRight) {
   panel.addEventListener("pointerleave", clear);
 }
 
-function createPanelElement(panelState, shouldScroll = false) {
+function createPanelElement(panelState) {
   const id = `panel-${++panelIdCounter}`;
   panelState.id = id;
   const fragment = panelTemplate.content.cloneNode(true);
@@ -3690,10 +3690,6 @@ function createPanelElement(panelState, shouldScroll = false) {
   updatePanelCountControls();
   setActivePanel(id);
   loadPanel(panelState, panelState.verse);
-
-  if (shouldScroll) {
-    requestAnimationFrame(() => panel.scrollIntoView({ behavior: "smooth", inline: "end", block: "nearest" }));
-  }
   return panel;
 }
 
@@ -3764,7 +3760,17 @@ function addPanel({ suppressScroll = false } = {}) {
   state.panels.push(panelState);
   saveState();
   const twoPanelTouchMode = isTwoPanelTouchMode();
-  const panel = createPanelElement(panelState, !twoPanelTouchMode && !suppressScroll);
+  const panel = createPanelElement(panelState);
+  // No version selected yet -- open the add-version picker once the new
+  // panel is actually done scrolling into place (matches moveToNewPanel/
+  // linkToNewPanel, which both create their new panel through here too --
+  // moveToNewPanel suppresses this function's own reveal-scroll to run its
+  // own instead, via suppressScroll below). Opening the picker any earlier
+  // positions it against wherever the panel happened to be sitting
+  // mid-scroll (or before that scroll even starts), not its final spot --
+  // reading as the picker opening detached from the panel it belongs to
+  // instead of inside it.
+  const openPicker = () => panelElements.get(panelState.id)?.translationControl.open();
   if (twoPanelTouchMode) {
     panel.animate(
       [
@@ -3780,16 +3786,24 @@ function addPanel({ suppressScroll = false } = {}) {
     // add-panel button (not necessarily this new panel's actual index), and
     // being later it wins the race, silently redirecting the screen away
     // from the panel the caller meant to land on.
-    if (!suppressScroll) {
+    if (suppressScroll) {
+      openPicker();
+    } else {
       const targetIndex = previousCount < 2 ? 0 : Math.min(viewportStart + 1, state.panels.length - 1);
-      requestAnimationFrame(() => scrollToPanelIndex(targetIndex, "smooth", false));
+      animateTrackScroll(panelScrollLeft(targetIndex), 280, openPicker);
     }
+  } else if (suppressScroll) {
+    openPicker();
+  } else {
+    // Aligns the new (always rightmost) panel's own right edge flush with
+    // the track's -- exactly maxScroll, since nothing sits to its right --
+    // which reveals it in full while still showing as much of whatever
+    // came before it as still fits, same as the plain scrollIntoView this
+    // replaced, but driven by hand so openPicker only ever fires once the
+    // scroll has actually finished (see the comment on openPicker above).
+    const targetLeft = Math.max(0, panelTrack.scrollWidth - panelTrack.clientWidth);
+    animateTrackScroll(targetLeft, 280, openPicker);
   }
-  // No version selected yet -- open the add-version picker immediately so
-  // the reader isn't left staring at an empty panel with no obvious next
-  // step (matches moveToNewPanel/linkToNewPanel, which both create their
-  // new panel through here too).
-  panelElements.get(panelState.id)?.translationControl.open();
   return panelState;
 }
 
