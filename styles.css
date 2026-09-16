@@ -427,10 +427,6 @@ p {
   cursor: grab;
   font-size: 16px;
   touch-action: none;
-  /* The grip glyph itself is hidden -- the handle keeps its box (and stays
-     a real drag/touch-reorder target, see setupTouchReorder in app.js) so
-     the chip's own width and its sibling elements' positions don't shift. */
-  opacity: 0;
 }
 
 .move-buttons {
@@ -6736,21 +6732,6 @@ body * {
 .translation-chip .chip-remove:hover {
   background: rgba(162, 79, 98, 0.14);
   color: #a24f62;
-}
-
-/* Same reveal-on-hover pattern as .panel-move: hidden by default (including
-   every touch/coarse-pointer layout, which never matches this query at
-   all), shown only once a real mouse is actually over the chip. */
-@media (hover: hover) and (pointer: fine) {
-  .translation-chip .chip-remove {
-    opacity: 0;
-    transition: opacity 130ms ease;
-  }
-
-  .translation-chip:hover .chip-remove,
-  .translation-chip .chip-remove:focus-visible {
-    opacity: 1;
-  }
 }
 
 /* Touch press-drag selection needs the browser to leave these gestures
