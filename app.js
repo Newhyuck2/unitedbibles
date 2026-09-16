@@ -2665,14 +2665,6 @@ function panelIndexAtViewportStart() {
   return closestIndex;
 }
 
-function scrollToPanelIndex(index, behavior = "smooth", activate = true) {
-  if (!state.panels.length) return;
-  const targetIndex = Math.max(0, Math.min(index, state.panels.length - 1));
-  panelTrack.scrollTo({ left: panelScrollLeft(targetIndex), behavior });
-  const targetState = state.panels[targetIndex];
-  if (activate && targetState) setActivePanel(targetState.id);
-}
-
 function setupCombobox({ input, menu, items, selectedValue, matches, onSelect, selectOnFocus = true }) {
   let allItems = items;
   let selected = selectedValue;
@@ -3964,13 +3956,30 @@ function animateTrackScroll(targetLeft, duration, done) {
     done?.();
     return;
   }
+  // .panel-track's own CSS sets scroll-behavior: smooth (for a plain wheel/
+  // trackpad scroll to glide) -- but on WebKit that applies to *any*
+  // scrollLeft change, direct property assignment included, not just the
+  // scrollTo()/scrollBy() calls it's meant for. Left in place, every frame
+  // below re-triggers WebKit's own native smooth-scroll on top of this
+  // already-eased one, so the actually-rendered position (and anything
+  // that reads it, like getBoundingClientRect on a descendant) lags well
+  // behind scrollLeft's own value for several frames after this finishes
+  // -- exactly what let a picker menu opened right after a reveal-scroll
+  // measure its panel's still-mid-glide position on Safari specifically.
+  // Forced to instant for the duration of this hand-rolled animation, then
+  // released back to the CSS default once it's done.
+  panelTrack.style.scrollBehavior = "auto";
   const startTime = performance.now();
   const easeOutCubic = (t) => 1 - (1 - t) ** 3;
   const step = (now) => {
     const progress = Math.min((now - startTime) / duration, 1);
     panelTrack.scrollLeft = startLeft + distance * easeOutCubic(progress);
-    if (progress < 1) requestAnimationFrame(step);
-    else done?.();
+    if (progress < 1) {
+      requestAnimationFrame(step);
+    } else {
+      panelTrack.style.scrollBehavior = "";
+      done?.();
+    }
   };
   requestAnimationFrame(step);
 }

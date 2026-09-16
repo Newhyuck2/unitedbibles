@@ -445,7 +445,21 @@ p {
   overflow-x: auto;
   overflow-anchor: none;
   padding: 0 24px;
-  scroll-behavior: smooth;
+  /* Every scroll this app drives itself already goes through its own
+     hand-rolled easing (animateTrackScroll) or an explicit instant/smooth
+     behavior on the scrollTo() call making it -- nothing here still relies
+     on this CSS default for a plain scrollTo()/scrollIntoView() call. Left
+     as smooth, WebKit (unlike Chromium) also applies it to a bare
+     scrollLeft assignment, so every frame of that hand-rolled animation
+     (or any other direct scrollLeft write, e.g. a scroll-position restore
+     guard elsewhere in app.js) re-triggers its own native smooth-scroll on
+     top -- the actually-rendered position, and anything that reads it via
+     getBoundingClientRect, then lags well behind scrollLeft's own value
+     for several frames. That's what let a picker menu opened right after
+     a reveal-scroll measure its still-mid-glide panel and misplace itself
+     on Safari specifically, and could do the same to any of this file's
+     other same-tick "scroll back to where it was" guards. */
+  scroll-behavior: auto;
   scroll-snap-type: x proximity;
   scrollbar-color: var(--muted-faint) transparent;
   scrollbar-width: thin;
