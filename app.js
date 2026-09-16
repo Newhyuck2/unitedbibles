@@ -2009,6 +2009,17 @@ function setupDialogTranslationControl({
   };
 
   const render = () => {
+    // Rebuilding the chip row (list.replaceChildren, inside
+    // renderTranslationChipList) destroys and recreates every chip element,
+    // including whichever one was just clicked -- and some browsers nudge
+    // the shared outer panel-track's own horizontal scroll position as a
+    // side effect of that churn (the same class of "browser follows a
+    // removed/replaced node" behavior movePanel already works around for
+    // reordering), which read as the whole panel row bouncing toward an
+    // earlier panel and back whenever this fired from the last panel's own
+    // chip. Saving/restoring here is a harmless no-op for every dialog
+    // context (TSK/copy/search), which has no bearing on panelTrack at all.
+    const savedScrollLeft = panelTrack.scrollLeft;
     renderTranslationChipList({
       list,
       order: getOrder(),
@@ -2032,6 +2043,10 @@ function setupDialogTranslationControl({
       },
     });
     if (!menu.hidden) renderMenu();
+    panelTrack.scrollLeft = savedScrollLeft;
+    requestAnimationFrame(() => {
+      panelTrack.scrollLeft = savedScrollLeft;
+    });
   };
 
   // Hebrew and Greek occupy a single shared "original language" slot: picking
@@ -3499,7 +3514,15 @@ function createPanelElement(panelState, shouldScroll = false) {
     onToggleActive: (id, options) => toggleTranslationChip(panelState, id, options),
     onChange: () => {
       saveState();
+      // Same panel-track scroll-position guard as translationControl's own
+      // render() above, against the same class of side effect -- this
+      // panel's own content gets fully replaced here too.
+      const savedScrollLeft = panelTrack.scrollLeft;
       renderPanelBody(panelState);
+      panelTrack.scrollLeft = savedScrollLeft;
+      requestAnimationFrame(() => {
+        panelTrack.scrollLeft = savedScrollLeft;
+      });
       refreshTskCrossColumnTranslations(panelState);
     },
   });
