@@ -3123,7 +3123,15 @@ function setupPanelSwipe(panel) {
     const distanceX = Math.abs(deltaX);
     const distanceY = Math.abs(deltaY);
 
-    if (!gesture.axis && Math.max(distanceX, distanceY) >= 3) {
+    // A real swipe clears this within its first couple of samples; a
+    // stationary press never does (ordinary finger tremor while held down
+    // is only a couple of px) -- too low a threshold here used to latch
+    // "horizontal" off plain tremor and then track every later wobble
+    // 1:1 into scrollLeft for as long as the finger stayed down, which
+    // read as the panel row continuously bouncing left-right on any press
+    // (only visible once there's scroll slack to move within, e.g. 3
+    // panels open under the 2-panel-wide preset).
+    if (!gesture.axis && Math.max(distanceX, distanceY) >= 8) {
       gesture.axis = distanceX > distanceY ? "horizontal" : "vertical";
     }
     if (gesture.axis !== "horizontal") return;
