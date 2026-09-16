@@ -1980,10 +1980,11 @@ function positionTranslationPickerMenuFor(picker, menu) {
   // a picker menu taller than the room left in that shell gets clipped
   // instead of flipping above/shrinking to fit.
   const inDialog = Boolean(picker.closest("dialog") || picker.closest(".study-tool-pane"));
-  const width = menu.getBoundingClientRect().width;
   const anchor = picker.getBoundingClientRect();
-  const left = Math.max(8, Math.min(anchor.left, window.innerWidth - width - 8));
   if (inDialog) {
+    menu.style.width = "";
+    const width = menu.getBoundingClientRect().width;
+    const left = Math.max(8, Math.min(anchor.left, window.innerWidth - width - 8));
     const gap = 6;
     const below = window.innerHeight - anchor.bottom - gap - 8;
     const above = anchor.top - gap - 8;
@@ -1997,6 +1998,26 @@ function positionTranslationPickerMenuFor(picker, menu) {
     menu.style.maxHeight = `${maxHeight}px`;
     return;
   }
+  // Shrinks to fit this picker's own panel first, before ever trying to
+  // position it -- .translation-picker-columns already wraps its two
+  // columns to a single stacked one once it doesn't have room for both
+  // side by side (see that class's own comment), so narrowing the menu is
+  // a graceful reflow, not a broken one. This is what actually fixes
+  // "opens outside the panel" for a panel narrower than the menu's own
+  // natural up-to-640px width: there's no longer a fight between "flush
+  // with the panel" and "fits on screen" below, since the menu itself
+  // essentially always fits the panel now (a genuinely too-narrow panel --
+  // wouldn't happen with a real .bible-panel, floored well above this by
+  // MIN_PANEL_WIDTH -- still falls back to the viewport-safe clamp).
+  const panelBounds = picker.closest(".bible-panel")?.getBoundingClientRect();
+  const naturalWidth = Math.min(640, window.innerWidth - 16);
+  const fitWidth = panelBounds ? Math.max(316, Math.min(naturalWidth, panelBounds.width - 16)) : naturalWidth;
+  menu.style.width = `${fitWidth}px`;
+  const width = menu.getBoundingClientRect().width;
+  const preferredLeft = panelBounds
+    ? Math.max(panelBounds.left, Math.min(anchor.left, panelBounds.right - width))
+    : anchor.left;
+  const left = Math.max(8, Math.min(preferredLeft, window.innerWidth - width - 8));
   menu.style.position = "";
   menu.style.right = "auto";
   menu.style.left = `${left - anchor.left}px`;
@@ -2710,14 +2731,29 @@ function setupCombobox({ input, menu, items, selectedValue, matches, onSelect, s
     if (!combo) return false;
     const comboRect = combo.getBoundingClientRect();
     const bookKind = comboKind === "book";
-    const preferredWidth = Math.min(bookKind ? 520 : 270, window.innerWidth - 24);
+    const naturalWidth = Math.min(bookKind ? 520 : 270, window.innerWidth - 24);
+    // A combo living directly in a panel's own header (as opposed to a
+    // real <dialog> or an embedded study-tool shell, neither of which sit
+    // inside a .bible-panel at all) shrinks to fit that panel first, the
+    // same reasoning as positionTranslationPickerMenuFor's own -- the
+    // book list's grid (.book-combo .combo-menu, styles.css) auto-fits
+    // however many minmax(150px,1fr) columns actually fit a narrower
+    // width instead of needing a fixed column count, so this is a graceful
+    // reflow (taller, not clipped or squeezed) rather than a broken one.
+    const panelBounds = input.closest(".bible-panel")?.getBoundingClientRect();
+    const preferredWidth = panelBounds
+      ? Math.max(bookKind ? 220 : 160, Math.min(naturalWidth, panelBounds.width - 16))
+      : naturalWidth;
     const gap = 5;
     const below = window.innerHeight - comboRect.bottom - gap - 8;
     const above = comboRect.top - gap - 8;
     const openAbove = below < 160 && above > below;
     const maxHeight = Math.max(120, Math.min(bookKind ? 480 : 418, openAbove ? above : below));
     const naturalLeft = bookKind ? comboRect.left : comboRect.right - preferredWidth;
-    const left = Math.max(8, Math.min(naturalLeft, window.innerWidth - preferredWidth - 8));
+    const preferredLeft = panelBounds
+      ? Math.max(panelBounds.left, Math.min(naturalLeft, panelBounds.right - preferredWidth))
+      : naturalLeft;
+    const left = Math.max(8, Math.min(preferredLeft, window.innerWidth - preferredWidth - 8));
     menu.style.position = "fixed";
     menu.style.left = `${left}px`;
     menu.style.right = "auto";
@@ -3542,18 +3578,9 @@ function createPanelElement(panelState) {
     onToggleActive: (id, options) => toggleTranslationChip(panelState, id, options),
     onChange: () => {
       saveState();
-      // Same panel-track scroll-position guard as translationControl's own
-      // render() above, against the same class of side effect -- this
-      // panel's own content gets fully replaced here too.
-      const savedScrollLeft = panelTrack.scrollLeft;
+      // renderPanelBody guards panelTrack's own scroll position itself now
+      // (every caller needs it, not just this one).
       renderPanelBody(panelState);
-      panelTrack.scrollLeft = savedScrollLeft;
-      requestAnimationFrame(() => {
-        panelTrack.scrollLeft = savedScrollLeft;
-        requestAnimationFrame(() => {
-          panelTrack.scrollLeft = savedScrollLeft;
-        });
-      });
       refreshTskCrossColumnTranslations(panelState);
     },
   });
@@ -5838,6 +5865,28 @@ function createEmbeddedStrongsTool(panelState) {
 function renderPanelBody(panelState) {
   const elements = panelElements.get(panelState.id);
   if (!elements || !panelState.data) return;
+  // Rebuilding this panel's own content below (elements.content.innerHTML
+  // = "" / .replaceChildren(fragment) further down) is the same class of
+  // DOM churn as renderTranslationChipList's own -- some browsers/machines
+  // nudge the shared outer panel-track's own horizontal scroll position as
+  // an invisible side effect of it. This is the one place that actually
+  // reaches every caller (a direct chip click already has its own guard
+  // one level up, but a cross-reference link, a linked partner's own TSK
+  // activation, or an interlinear word click all call this directly
+  // without going through that guard at all) -- guarding here once covers
+  // all of them instead of needing the same guard repeated at each call
+  // site. Double-frame follow-up matches alignPanelsAfterLayoutChange's
+  // own -- a single restore isn't reliably enough on every machine.
+  const savedScrollLeft = panelTrack.scrollLeft;
+  const restoreScrollLeft = () => {
+    panelTrack.scrollLeft = savedScrollLeft;
+    requestAnimationFrame(() => {
+      panelTrack.scrollLeft = savedScrollLeft;
+      requestAnimationFrame(() => {
+        panelTrack.scrollLeft = savedScrollLeft;
+      });
+    });
+  };
   // A study tool's own cached instance (see getStudyToolInstance) outlives
   // deactivation so its history/typed input/current word are all still
   // there if it's reactivated later -- pruneStudyToolInstances only drops
@@ -5868,6 +5917,7 @@ function renderPanelBody(panelState) {
     if (readingTranslation) renderReadingFlow(panelState, readingTranslation);
     else elements.content.innerHTML = "";
     updatePanelControls(panelState);
+    restoreScrollLeft();
     return;
   }
 
@@ -6056,6 +6106,7 @@ function renderPanelBody(panelState) {
     panelState.frozenRowHeights = { book: panelState.book, chapter: panelState.chapter, heights };
   }
   if (panelState.linkGroupId != null) scheduleGroupRowHeightSync(panelState.linkGroupId);
+  restoreScrollLeft();
 }
 
 function refreshPanelBodies() {
