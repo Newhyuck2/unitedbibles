@@ -6699,7 +6699,7 @@ body * {
    this query, so they're untouched). */
 @media (hover: hover) and (pointer: fine) {
   .translation-name {
-    transform: translateY(-1px);
+    transform: translateY(-0.5px);
   }
 }
 
