@@ -1839,13 +1839,37 @@ function buildTranslationPickerOption({ id, meta, isEnabled, disabled, onPick })
 // Hebrew/Greek interlinear "translations" — only the option matching the
 // panel's current testament is clickable; the other is shown disabled.
 function renderDialogTranslationPickerMenu({ menu, picker, getOrder, onToggle, originalLanguageTestament, showStudyTools }) {
+  // Rebuilding this menu (menu.replaceChildren just below) is the same
+  // class of DOM churn as renderTranslationChipList's own -- it nudges the
+  // shared outer panel-track's own horizontal scroll position as an
+  // invisible side effect on some browsers/machines (see the matching
+  // guard on translationControl's own render()). Guarded independently
+  // here too since this menu can rebuild entirely on its own -- straight
+  // from open(), or from picking an option inside it (rerender below) --
+  // without translationControl's own render() ever running in between.
+  // The double-frame follow-up matches alignPanelsAfterLayoutChange's own:
+  // a single restore isn't reliably enough on every machine for whatever
+  // correction the browser itself makes next.
+  const savedScrollLeft = panelTrack.scrollLeft;
+  const restoreScrollLeft = () => {
+    panelTrack.scrollLeft = savedScrollLeft;
+    requestAnimationFrame(() => {
+      panelTrack.scrollLeft = savedScrollLeft;
+      requestAnimationFrame(() => {
+        panelTrack.scrollLeft = savedScrollLeft;
+      });
+    });
+  };
   menu.replaceChildren();
   // Callers that never pass getOriginalLanguageTestament (TSK's own panes
   // and dialogs) never render the second "Original languages" column
   // below -- the menu would otherwise sit at its fixed two-column width
   // with nothing but empty space where that column would have been.
   menu.classList.toggle("translation-picker-menu--single-column", !originalLanguageTestament);
-  if (!manifest) return;
+  if (!manifest) {
+    restoreScrollLeft();
+    return;
+  }
   const order = getOrder();
   const rerender = () => {
     renderDialogTranslationPickerMenu({ menu, picker, getOrder, onToggle, originalLanguageTestament, showStudyTools });
@@ -1945,6 +1969,7 @@ function renderDialogTranslationPickerMenu({ menu, picker, getOrder, onToggle, o
   }
 
   menu.append(columns);
+  restoreScrollLeft();
 }
 
 function positionTranslationPickerMenuFor(picker, menu) {
@@ -2046,6 +2071,9 @@ function setupDialogTranslationControl({
     panelTrack.scrollLeft = savedScrollLeft;
     requestAnimationFrame(() => {
       panelTrack.scrollLeft = savedScrollLeft;
+      requestAnimationFrame(() => {
+        panelTrack.scrollLeft = savedScrollLeft;
+      });
     });
   };
 
@@ -3522,6 +3550,9 @@ function createPanelElement(panelState) {
       panelTrack.scrollLeft = savedScrollLeft;
       requestAnimationFrame(() => {
         panelTrack.scrollLeft = savedScrollLeft;
+        requestAnimationFrame(() => {
+          panelTrack.scrollLeft = savedScrollLeft;
+        });
       });
       refreshTskCrossColumnTranslations(panelState);
     },
