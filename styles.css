@@ -6693,16 +6693,6 @@ body * {
   white-space: nowrap;
 }
 
-/* Centered by height/align-items above, the name's own font metrics still
-   read as sitting a hair below true center on a mouse-driven desktop --
-   nudged up slightly there only (touch/coarse-pointer layouts never match
-   this query, so they're untouched). */
-@media (hover: hover) and (pointer: fine) {
-  .translation-name {
-    transform: translateY(-0.5px);
-  }
-}
-
 .translation-chip .chip-remove {
   display: flex;
   width: 18px;
