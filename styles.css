@@ -604,6 +604,21 @@ p {
   transform: translate(-50%, -50%) rotate(-45deg);
 }
 
+/* Every dialog's own close button (search/copy/highlight/note/strongs/tsk/
+   highlight-list/bookmark-list/note-list/info) draws its X as an svg now,
+   matching .remove-panel's exactly (same viewBox and path) -- .close-button
+   span/::before/::after above stay as they are for .chip-remove, the one
+   other .close-button that still renders its X that way. */
+.close-button svg {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+
 .icon-only-button {
   display: grid;
   min-width: 44px;
