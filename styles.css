@@ -40,7 +40,6 @@
   --bars-border: #817c73;
   --bars-fill: #837e75;
   --heading-warm: #5f4630;
-  --dim-text: #b3b0aa;
   --verse-font-size: 14px;
   --toolbar-icon-gap: 4px;
   --shadow: 0 18px 45px rgba(55, 45, 30, 0.1);
@@ -85,7 +84,6 @@
   --bars-border: #9a9384;
   --bars-fill: #86806f;
   --heading-warm: #c9a36e;
-  --dim-text: #6f6a5f;
 }
 
 /* The Info dialog is documentation with light-background screenshots
@@ -127,7 +125,6 @@
   --bars-border: #817c73;
   --bars-fill: #837e75;
   --heading-warm: #5f4630;
-  --dim-text: #b3b0aa;
 }
 
 * {
@@ -753,6 +750,18 @@ input:focus {
   display: flex;
   flex-wrap: wrap;
   gap: 4px 0;
+}
+
+/* Word order within the row still reads correctly right-to-left (see
+   row.dir in buildInterlinearWordRow) -- but left unset here, a Hebrew
+   verse shorter than the panel packs flush against the row's own start
+   edge, which dir="rtl" puts on the right, leaving it floating with empty
+   space on the left instead of lining up with every other (left-starting)
+   translation above and below it. flex-end packs toward dir="rtl"'s own
+   end edge -- physically the left -- instead, without touching the
+   words' own right-to-left order among themselves. */
+.interlinear-word-row[dir="rtl"] {
+  justify-content: flex-end;
 }
 
 .interlinear-word {
@@ -6604,6 +6613,17 @@ body * {
   }
 }
 
+/* Same stacked treatment as the (max-width: 480px) rule above, but keyed
+   to the menu's own width (see positionTranslationPickerMenuFor) rather
+   than the viewport's -- a panel can force this same single-column stack
+   on a screen far wider than 480px. */
+.translation-picker-menu--stacked .translation-picker-column-languages {
+  padding-left: 0;
+  margin-top: 7px;
+  padding-top: 7px;
+  border-top: 1px solid var(--line);
+}
+
 .translation-picker-group + .translation-picker-group {
   margin-top: 7px;
   padding-top: 7px;
@@ -6730,7 +6750,7 @@ body * {
 .translation-chip .chip-remove span::before,
 .translation-chip .chip-remove span::after {
   width: 9px;
-  height: 1.5px;
+  height: 1.1px;
 }
 
 .translation-chip .chip-remove:hover {
@@ -7301,13 +7321,6 @@ body * {
    too-dark-on-dark-bg translation color. */
 [data-theme="dark"] .translation-line--highlight .translation-text {
   filter: brightness(1.5) saturate(1.08);
-}
-
-/* Dimmed version: its verse text fades to a neutral pale gray, well past
-   the shared --muted so it reads as clearly de-emphasized next to the
-   full-strength ink of non-dimmed lines. */
-.translation-line--dim .translation-text {
-  color: var(--dim-text);
 }
 
 /* Move-target picking mode (see enterMovePicking/exitMovePicking in app.js):

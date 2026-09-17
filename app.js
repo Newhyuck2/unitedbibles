@@ -2013,6 +2013,17 @@ function positionTranslationPickerMenuFor(picker, menu) {
   const naturalWidth = Math.min(640, window.innerWidth - 16);
   const fitWidth = panelBounds ? Math.max(316, Math.min(naturalWidth, panelBounds.width - 16)) : naturalWidth;
   menu.style.width = `${fitWidth}px`;
+  // .translation-picker-column-languages carries a left gutter meant for
+  // sitting *beside* the main column (see its own rule) -- once shrinking
+  // the menu above makes .translation-picker-columns' own flex-wrap stack
+  // it below instead (both columns are flex: 1 1 300px with a 10px gap, so
+  // they need >= 610px of content room to stay side by side), that same
+  // gutter reads as a stray indent on what's now a single stacked column.
+  // The existing @media (max-width: 480px) rule already zeroes it, but
+  // only for a narrow *viewport* -- this menu can just as easily end up
+  // this narrow on a wide screen with several panels open, which that
+  // media query never sees.
+  menu.classList.toggle("translation-picker-menu--stacked", fitWidth < 626);
   const width = menu.getBoundingClientRect().width;
   const preferredLeft = panelBounds
     ? Math.max(panelBounds.left, Math.min(anchor.left, panelBounds.right - width))
@@ -4781,14 +4792,18 @@ function noteKey(book, chapter, verse) {
 function buildTranslationLinesInto(pane, panelState, verseNumber, texts, list, highlightedList, dimmedList, originalLanguageHidden) {
   // STR/TSK chips never carry per-verse text of their own -- they only
   // ever render via getStudyToolInstance (see renderPanelBody), so they're
-  // excluded here even when enabled but not the active study tool.
+  // excluded here even when enabled but not the active study tool. A
+  // dimmed translation drops out the same way a hidden original-language
+  // one already does -- its own line (label included) simply isn't built
+  // at all, rather than rendering pale gray text as before.
   list = list.filter((translation) => (
     !STUDY_TOOL_IDS.includes(translation)
     && !(originalLanguageHidden && ORIGINAL_LANGUAGE_IDS.includes(translation))
+    && !dimmedList.includes(translation)
   ));
   list.forEach((translation) => {
     if (translation === "NOTE") {
-      buildNoteTranslationLinesInto(pane, panelState, verseNumber, highlightedList, dimmedList);
+      buildNoteTranslationLinesInto(pane, panelState, verseNumber, highlightedList);
       return;
     }
     const isOriginalLanguage = ORIGINAL_LANGUAGE_IDS.includes(translation);
@@ -4798,7 +4813,6 @@ function buildTranslationLinesInto(pane, panelState, verseNumber, texts, list, h
     const line = document.createElement("div");
     line.className = "translation-line";
     line.classList.toggle("translation-line--highlight", highlightedList.includes(translation));
-    line.classList.toggle("translation-line--dim", dimmedList.includes(translation));
     // Driven purely by this panel's own translation-name toggle (see the
     // "..." popup menu) -- no longer tied to how many translations are
     // actually enabled, so the label stays visible even with just one
@@ -4882,11 +4896,10 @@ function buildTranslationLinesInto(pane, panelState, verseNumber, texts, list, h
 // is always exactly one row, labeled "NOTE" itself rather than a real
 // translation's name, showing that verse's one note in place of Bible text
 // (blank, not skipped, when there isn't one yet -- see buildEditableNoteField).
-function buildNoteTranslationLinesInto(pane, panelState, verseNumber, highlightedList, dimmedList) {
+function buildNoteTranslationLinesInto(pane, panelState, verseNumber, highlightedList) {
   const line = document.createElement("div");
   line.className = "translation-line translation-line--note";
   line.classList.toggle("translation-line--highlight", highlightedList.includes("NOTE"));
-  line.classList.toggle("translation-line--dim", dimmedList.includes("NOTE"));
   line.classList.toggle("translation-line--name-hidden", !panelState.translationNamesShown);
   line.lang = translationLanguage("NOTE");
   line.style.setProperty("--translation-color", TRANSLATION_COLORS.NOTE);
