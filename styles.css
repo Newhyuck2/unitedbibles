@@ -6742,6 +6742,20 @@ body * {
   white-space: nowrap;
 }
 
+/* Same box, same font, same everything else -- but on a real desktop
+   specifically, this panel-header chip's own text still renders a couple
+   px lower than the identical chip in the copy/highlight/note/tsk dialogs
+   (measured directly against a side-by-side screenshot, not just eyeballed
+   -- getBoundingClientRect on this element reports the exact same centered
+   box in both places, so whatever causes it sits below what that box
+   model can see). Nudged up here, scoped to just the panel's own chip
+   list, so the dialogs -- already correct -- are untouched. */
+@media (hover: hover) and (pointer: fine) {
+  .panel-translation-list .translation-name {
+    transform: translateY(-2.5px);
+  }
+}
+
 .translation-chip .chip-remove {
   display: flex;
   width: 18px;
