@@ -455,6 +455,16 @@ p {
   color: var(--ink);
 }
 
+/* The ⠇ glyph's own advance width is a full two-column braille cell, so
+   centering it (via the button's place-items: center above) centers that
+   whole cell -- empty right column included -- leaving the visible left-
+   column dots sitting left of the button's true center. Nudging just the
+   glyph itself right re-centers the ink without moving the button's own
+   box/hit-area. */
+.chip-mode-toggle span {
+  transform: translateX(2px);
+}
+
 .move-buttons {
   display: flex;
 }
@@ -7784,7 +7794,8 @@ body * {
    showChipModePopup, positioned by positionChipModePopup) is the same
    again, anchored below a translation chip -- see its own swatch rules
    further down for how its three options differ from a highlight/bookmark
-   popup's own swatch/remove pair. */
+   popup's own swatch/remove pair, and its own z-index rule below for why
+   it can't share this one's. */
 .highlight-manage-popup,
 .bookmark-manage-popup,
 .chip-mode-popup {
@@ -7798,6 +7809,17 @@ body * {
   border-radius: 8px;
   background: var(--surface-strong);
   box-shadow: 0 5px 14px rgba(37, 35, 31, 0.18);
+}
+
+/* Unlike highlight/bookmark-manage-popup (anchored down in the verse text,
+   well clear of any header), this one opens right under a chip that lives
+   *inside* .panel-header -- which establishes its own stacking context at
+   z-index: 26 (see the .app-header comment up top), high enough to paint
+   over this popup's own z-index: 20 and clip its top edge under the
+   header's own background. Only .chip-mode-popup needs the higher value to
+   clear that; the other two never overlap a header at all. */
+.chip-mode-popup {
+  z-index: 30;
 }
 
 .highlight-manage-swatch {

@@ -1675,8 +1675,15 @@ function renderTranslationChipList({ list, order, getEmphasis, onToggleActive, o
       // old ⠿ (U+283F, dots 1-6) drag-handle glyph -- same font, same size,
       // so it reads as "half of that handle," not a new icon drawn from
       // scratch, and keeps the same 22x24 box the name/remove button were
-      // already laid out around.
-      handle.textContent = "⠇";
+      // already laid out around. Wrapped in its own span (nudged right in
+      // CSS) since the glyph's own advance width is a full two-column
+      // braille cell -- centering that box centers the empty right column
+      // along with the visible left one, leaving the actual ink looking
+      // off-center within the button.
+      const glyph = document.createElement("span");
+      glyph.setAttribute("aria-hidden", "true");
+      glyph.textContent = "⠇";
+      handle.append(glyph);
       handle.addEventListener("click", (event) => {
         event.stopPropagation();
         onOpenModePopup(id, chip);
