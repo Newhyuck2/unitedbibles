@@ -23,7 +23,7 @@
     <meta name="twitter:title" content="United Bibles" />
     <meta name="twitter:description" content="A compact multi-panel Bible reader" />
     <meta name="twitter:image" content="https://unitedbibles.org/icons/icon-512.png" />
-    <meta name="asset-version" content="20260917-9" />
+    <meta name="asset-version" content="20260921-1" />
     <meta name="theme-color" content="#284f43" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" /> 
@@ -32,7 +32,7 @@
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" type="image/png" href="./icons/icon-192.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="./icons/icon-180.png" />
-    <link rel="stylesheet" href="./styles.css?v=20260917-9" />
+    <link rel="stylesheet" href="./styles.css?v=20260921-1" />
     <!-- Applies the saved theme before first paint so a dark-theme visitor
          never sees a light-theme flash while app.js's module script (and
          its manifest.json fetch) is still loading. Reads the same
@@ -1628,6 +1628,18 @@
       </button>
     </div>
 
+    <div class="chip-mode-popup" id="chip-mode-popup" hidden role="menu" aria-label="Translation display mode">
+      <button type="button" class="chip-mode-option" data-mode="highlight" role="menuitem" aria-label="Highlight">
+        <span class="chip-mode-swatch chip-mode-swatch--highlight"></span>
+      </button>
+      <button type="button" class="chip-mode-option" data-mode="normal" role="menuitem" aria-label="Normal">
+        <span class="chip-mode-swatch chip-mode-swatch--normal" id="chip-mode-normal-swatch"></span>
+      </button>
+      <button type="button" class="chip-mode-option" data-mode="hidden" role="menuitem" aria-label="Hidden">
+        <span class="chip-mode-swatch chip-mode-swatch--hidden"></span>
+      </button>
+    </div>
+
     <div class="note-view-popup" id="note-view-popup" hidden>
       <div class="note-view-header">
         <p class="note-view-title" id="note-view-title"></p>
@@ -1644,6 +1656,6 @@
     </div>
 
     <noscript>JavaScript is required to display the Bible text.</noscript>
-    <script type="module" src="./app.js?v=20260917-9"></script>
+    <script type="module" src="./app.js?v=20260921-1"></script>
   </body>
 </html>

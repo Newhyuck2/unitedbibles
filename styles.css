@@ -426,6 +426,60 @@ p {
   touch-action: none;
 }
 
+/* Panel chip row only (see renderTranslationChipList's own onOpenModePopup
+   branch): replaces the ⠿ drag-handle with a "..." button that opens the
+   chip's mode popup (see .chip-mode-popup below) -- the chip's whole body
+   is the drag surface instead (see the panel-translation-list touch-action
+   rule further down), so this button only needs to opt itself out of that
+   (see its own pointerdown listener in app.js), not carry dragging itself. */
+.chip-mode-toggle {
+  display: grid;
+  flex: 0 0 auto;
+  width: 22px;
+  height: 24px;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  border-radius: 5px;
+  color: var(--muted-soft);
+}
+
+.chip-mode-toggle:hover {
+  background: var(--hover-bg-strong);
+  color: var(--ink);
+}
+
+/* Three stacked dots drawn from one span (the dot itself) plus a matching
+   pair of ::before/::after copies above and below -- crisp at any zoom,
+   unlike relying on a "⋮" glyph's own baseline/spacing across fonts. */
+.chip-mode-toggle span {
+  position: relative;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.chip-mode-toggle span::before,
+.chip-mode-toggle span::after {
+  position: absolute;
+  left: 0;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: currentColor;
+  content: "";
+}
+
+.chip-mode-toggle span::before {
+  top: -6px;
+}
+
+.chip-mode-toggle span::after {
+  top: 6px;
+}
+
 .move-buttons {
   display: flex;
 }
@@ -5105,6 +5159,18 @@ body * {
   scroll-snap-align: start;
 }
 
+/* Panel chip row only (see renderTranslationChipList's own onOpenModePopup
+   branch, and setupTouchReorder's own handle: chip there): the whole chip
+   body is the drag surface here, not just a dedicated ⠿ handle, so touch
+   dragging needs full control over it rather than ceding horizontal pans to
+   native scrolling first the way the base rule above does for every other
+   (handle-only-drag) translation-chip list. A many-translation panel row
+   that overflows can no longer be swipe-scrolled from on top of a chip as a
+   result -- only from the row's own edges/gaps between chips. */
+.panel-translation-list .translation-chip {
+  touch-action: none;
+}
+
 .copy-translation-option {
   cursor: grab;
   touch-action: pan-y;
@@ -5125,7 +5191,8 @@ body * {
 /* Bigger handle hit target for fingers. */
 @media (max-width: 820px), (max-width: 1366px) and (any-pointer: coarse) {
   .drag-handle,
-  .copy-drag-handle {
+  .copy-drag-handle,
+  .chip-mode-toggle {
     display: inline-flex;
     width: 24px;
     height: 28px;
@@ -7738,9 +7805,14 @@ body * {
    by positionBookmarkManagePopup) is the exact same floating-popup
    mechanism just anchored below a bookmarked .verse-number instead of
    past a highlighted run's last character -- same chrome, so it shares
-   this rule rather than repeating it. */
+   this rule rather than repeating it. .chip-mode-popup (shown by
+   showChipModePopup, positioned by positionChipModePopup) is the same
+   again, anchored below a translation chip -- see its own swatch rules
+   further down for how its three options differ from a highlight/bookmark
+   popup's own swatch/remove pair. */
 .highlight-manage-popup,
-.bookmark-manage-popup {
+.bookmark-manage-popup,
+.chip-mode-popup {
   position: fixed;
   z-index: 20;
   display: flex;
@@ -7810,6 +7882,100 @@ body * {
 .note-view-remove:hover {
   background: var(--hover-bg-strong);
   color: #b23b3b;
+}
+
+/* .chip-mode-popup's own three options (see showChipModePopup in app.js) --
+   same 26px button / 18px swatch as .highlight-manage-colors' own compact
+   picker above, just a fixed highlight/normal/hidden row instead of a
+   six-color one, and never more than one popup's worth of these on screen
+   at a time (that popup is reused across every chip), so plain classes
+   instead of a per-translation modifier are enough here. */
+.chip-mode-option {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+}
+
+.chip-mode-option:hover {
+  background: var(--hover-bg-strong);
+}
+
+.chip-mode-swatch {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1px solid rgba(37, 35, 31, 0.18);
+}
+
+/* That translation's own highlight color (see showChipModePopup, which sets
+   this from TRANSLATION_COLORS) -- the same full-strength color
+   .translation-line--highlight renders its body text in. */
+.chip-mode-swatch--highlight {
+  background: var(--chip-mode-highlight-color, var(--ink));
+}
+
+/* Same brightening as .translation-line--highlight's own dark-theme rule --
+   this swatch paints the same too-dark-on-dark-bg translation color. */
+[data-theme="dark"] .chip-mode-swatch--highlight {
+  filter: brightness(1.5) saturate(1.08);
+}
+
+/* Plain, single-color normal swatch for a real translation. HEB/GRK swap
+   this for the three-band .chip-mode-swatch--interlinear variant instead
+   (see showChipModePopup) -- solid black/white would read oddly for a row
+   whose own "normal" rendering is itself three separately-colored parts. */
+.chip-mode-swatch--normal {
+  background: var(--ink);
+}
+
+/* HEB/GRK's own normal mode (see showChipModePopup): banded to match
+   .interlinear-translit/-original/-gloss's own top-to-bottom colors exactly
+   (pronunciation, the word itself, gloss), since that IS what "normal" for
+   these two chips actually looks like. */
+.chip-mode-swatch--normal.chip-mode-swatch--interlinear {
+  background: linear-gradient(
+    to bottom,
+    var(--link-blue) 0 34%,
+    var(--ink) 34% 66%,
+    var(--emphasis-orange) 66% 100%
+  );
+}
+
+/* Hidden: an empty, dashed-outline circle with a small x inside -- same
+   "nothing here, deliberately" reading for both a real translation's own
+   dim state and HEB/GRK's own hide toggle, since both drop the row from
+   the panel entirely (see buildTranslationLinesInto). */
+.chip-mode-swatch--hidden {
+  position: relative;
+  border-style: dashed;
+  border-color: var(--muted-soft);
+  background: none;
+}
+
+.chip-mode-swatch--hidden::before,
+.chip-mode-swatch--hidden::after {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 8px;
+  height: 1.2px;
+  border-radius: 999px;
+  background: var(--muted-soft);
+  content: "";
+  transform-origin: center;
+}
+
+.chip-mode-swatch--hidden::before {
+  transform: translate(-50%, -50%) rotate(45deg);
+}
+
+.chip-mode-swatch--hidden::after {
+  transform: translate(-50%, -50%) rotate(-45deg);
 }
 
 /* Floating read-only note viewer (see showNoteViewPopup in app.js) --
