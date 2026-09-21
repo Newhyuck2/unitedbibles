@@ -251,7 +251,6 @@ let bookmarkManagePanelEl = null;
 // showChipModePopup), which has no highlight mode of its own.
 const chipModePopup = document.querySelector("#chip-mode-popup");
 const chipModeHighlightButton = chipModePopup.querySelector('.chip-mode-option[data-mode="highlight"]');
-const chipModeNormalSwatch = document.querySelector("#chip-mode-normal-swatch");
 // The panel/id a still-open chip mode popup is currently pointed at -- null
 // whenever it's hidden, since there's nothing for its own option buttons to
 // act on then.
@@ -1485,8 +1484,20 @@ function toggleTranslationChip(panelState, id, { isNewlyAdded = false } = {}) {
     if (wasShowingStudyTool) {
       restorePreStudyToolEmphasis(panelState, fields);
     } else {
-      panelState[fields.highlighted] = [];
-      panelState[fields.dimmed] = [...STUDY_TOOL_IDS];
+      // Only STUDY_TOOL_IDS get dimmed here, added to whatever's already
+      // dimmed -- not a wholesale reset of highlighted/dimmed, which used to
+      // wipe every *other* chip's own independently-chosen mode back to
+      // normal the instant this one's hidden toggle (or the mode popup's
+      // own normal/hidden pick -- see setOriginalLanguageHidden) touched
+      // it, even though neither of them was ever showing a study tool.
+      const highlighted = new Set(panelState[fields.highlighted]);
+      const dimmed = new Set(panelState[fields.dimmed]);
+      for (const toolId of STUDY_TOOL_IDS) {
+        highlighted.delete(toolId);
+        dimmed.add(toolId);
+      }
+      panelState[fields.highlighted] = [...highlighted];
+      panelState[fields.dimmed] = [...dimmed];
     }
     panelState[fields.hidden] = (isNewlyAdded || wasShowingStudyTool) ? false : !panelState[fields.hidden];
     return;
@@ -1560,8 +1571,18 @@ function setOriginalLanguageHidden(panelState, id, hidden) {
   if (wasShowingStudyTool) {
     restorePreStudyToolEmphasis(panelState, fields);
   } else {
-    panelState[fields.highlighted] = [];
-    panelState[fields.dimmed] = [...STUDY_TOOL_IDS];
+    // Same fix as toggleTranslationChip's own ORIGINAL_LANGUAGE_IDS branch --
+    // only add STUDY_TOOL_IDS to whatever's already dimmed, never reset
+    // every other chip's own independently-chosen highlight/dim back to
+    // normal just because this one's hidden state changed.
+    const highlighted = new Set(panelState[fields.highlighted]);
+    const dimmed = new Set(panelState[fields.dimmed]);
+    for (const toolId of STUDY_TOOL_IDS) {
+      highlighted.delete(toolId);
+      dimmed.add(toolId);
+    }
+    panelState[fields.highlighted] = [...highlighted];
+    panelState[fields.dimmed] = [...dimmed];
   }
   panelState[fields.hidden] = hidden;
 }
@@ -1612,7 +1633,7 @@ function applyTranslationOrder(panelState, order) {
   }
 }
 
-function renderTranslationChipList({ list, order, getEmphasis, onToggleActive, onOpenModePopup, onRemove, onMove }) {
+function renderTranslationChipList({ list, order, getEmphasis, onToggleActive, onOpenModePopup, hasActiveStudyTool, onRemove, onMove }) {
   list.replaceChildren();
 
   // Everything else that
@@ -1650,9 +1671,12 @@ function renderTranslationChipList({ list, order, getEmphasis, onToggleActive, o
       handle.className = "chip-mode-toggle";
       handle.title = "Change mode";
       handle.setAttribute("aria-label", `${meta.label} mode`);
-      const dots = document.createElement("span");
-      dots.setAttribute("aria-hidden", "true");
-      handle.append(dots);
+      // U+2807 (BRAILLE PATTERN DOTS-123) is exactly the left column of the
+      // old ⠿ (U+283F, dots 1-6) drag-handle glyph -- same font, same size,
+      // so it reads as "half of that handle," not a new icon drawn from
+      // scratch, and keeps the same 22x24 box the name/remove button were
+      // already laid out around.
+      handle.textContent = "⠇";
       handle.addEventListener("click", (event) => {
         event.stopPropagation();
         onOpenModePopup(id, chip);
@@ -1689,8 +1713,19 @@ function renderTranslationChipList({ list, order, getEmphasis, onToggleActive, o
     // chip's own body (see the handle branch above) -- but STR/TSK's tool
     // switch and HEB/GRK's own show/hide toggle (see toggleTranslationChip)
     // aren't part of that cycle at all, so their body click stays exactly
-    // as it always was, popup or not.
-    const clickCyclesOnBody = !onOpenModePopup || STUDY_TOOL_IDS.includes(id) || ORIGINAL_LANGUAGE_IDS.includes(id);
+    // as it always was, popup or not. A real translation's own body click
+    // still needs to do ONE thing though: while a study tool is showing,
+    // toggleTranslationChip's own activeStudyTool branch exits it and shows
+    // this translation instead, before ever reaching the cycle -- that's
+    // not the cycle being replaced, it's "switch away from the study tool,"
+    // so it stays wired up too, just gated to only when a tool is actually
+    // active (checked fresh at render time, which re-runs on every state
+    // change -- see onChange's own render() call -- so this re-evaluates
+    // live instead of going stale the moment the tool exits).
+    const clickCyclesOnBody = !onOpenModePopup
+      || STUDY_TOOL_IDS.includes(id)
+      || ORIGINAL_LANGUAGE_IDS.includes(id)
+      || Boolean(hasActiveStudyTool?.());
     if (onToggleActive && clickCyclesOnBody) {
       chip.addEventListener("click", () => onToggleActive(id));
     }
@@ -1800,7 +1835,21 @@ function setupTouchReorder({ item, handle, container, itemClass, id, getOrder, o
       item.style.transform = "";
       document.body.classList.remove("reordering-chip");
       hoverTarget?.classList.remove("drag-over");
-      if (dragging) {
+      // `dragging` latches true the moment the 6px move threshold is
+      // crossed even once, and a real finger wobbles past that on what's
+      // meant as a plain tap far more often than a mouse ever would --
+      // especially on a chip whose own click still does something (STR/TSK,
+      // HEB/GRK: see toggleTranslationChip) now that the whole body, not
+      // just the old ⠿ handle, starts this tracking. Suppressing that tap's
+      // own click just because it wobbled mid-gesture, even though the
+      // finger is back where it started by release, broke exactly that
+      // click. Falling back to the release-time displacement (or an actual
+      // hoverTarget, meaning a reorder is genuinely about to happen) instead
+      // reads a wobble-and-return as the tap it actually was.
+      const endDx = finishEvent.clientX - startX;
+      const endDy = finishEvent.clientY - startY;
+      const wasRealDrag = dragging && (Boolean(hoverTarget) || Math.hypot(endDx, endDy) >= 6);
+      if (wasRealDrag) {
         finishEvent.preventDefault();
         suppressClick = true;
         window.setTimeout(() => {
@@ -2145,6 +2194,7 @@ function setupDialogTranslationControl({
   getEmphasis,
   onToggleActive,
   onOpenModePopup,
+  hasActiveStudyTool,
   onChange,
   getOriginalLanguageTestament,
   showStudyTools,
@@ -2186,6 +2236,7 @@ function setupDialogTranslationControl({
         onChange?.();
       }),
       onOpenModePopup,
+      hasActiveStudyTool,
       onRemove: (id) => {
         setOrder(getOrder().filter((item) => item !== id));
         render();
@@ -3682,6 +3733,7 @@ function createPanelElement(panelState) {
     // mode popup below (see onOpenModePopup), not this cycle.
     onToggleActive: (id, options) => toggleTranslationChip(panelState, id, options),
     onOpenModePopup: (id, chipEl) => showChipModePopup(chipEl, panelState, id),
+    hasActiveStudyTool: () => Boolean(panelState.activeStudyTool),
     onChange: () => {
       saveState();
       // renderPanelBody guards panelTrack's own scroll position itself now
@@ -7047,13 +7099,13 @@ function positionChipModePopup() {
 // pressing it does nothing, same as the rest of that chip's own click.
 // HEB/GRK show only normal/hidden (no highlight option -- see
 // chipModeHighlightButton.hidden below); every other translation shows all
-// three. --chip-mode-highlight-color is read by .chip-mode-swatch--highlight
-// (see styles.css); irrelevant, so left unset, for HEB/GRK.
+// three, and every id's own "normal" swatch is the same plain --ink circle.
+// --chip-mode-highlight-color is read by .chip-mode-swatch--highlight (see
+// styles.css); irrelevant, so left unset, for HEB/GRK.
 function showChipModePopup(chipEl, panelState, id) {
   if (STUDY_TOOL_IDS.includes(id)) return;
   const isOriginalLanguage = ORIGINAL_LANGUAGE_IDS.includes(id);
   chipModeHighlightButton.hidden = isOriginalLanguage;
-  chipModeNormalSwatch.classList.toggle("chip-mode-swatch--interlinear", isOriginalLanguage);
   if (!isOriginalLanguage) chipModePopup.style.setProperty("--chip-mode-highlight-color", TRANSLATION_COLORS[id]);
   chipModeTarget = { panelState, id };
   chipModeAnchorRect = chipEl.getBoundingClientRect();

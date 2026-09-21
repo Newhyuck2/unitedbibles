@@ -431,7 +431,10 @@ p {
    chip's mode popup (see .chip-mode-popup below) -- the chip's whole body
    is the drag surface instead (see the panel-translation-list touch-action
    rule further down), so this button only needs to opt itself out of that
-   (see its own pointerdown listener in app.js), not carry dragging itself. */
+   (see its own pointerdown listener in app.js), not carry dragging itself.
+   Same box/font-size as .drag-handle above -- its own glyph (see app.js) is
+   literally that handle's own left column, so this reuses its chrome
+   verbatim rather than drawing a new icon at a different size. */
 .chip-mode-toggle {
   display: grid;
   flex: 0 0 auto;
@@ -443,41 +446,13 @@ p {
   background: transparent;
   border-radius: 5px;
   color: var(--muted-soft);
+  font-size: 16px;
+  cursor: pointer;
 }
 
 .chip-mode-toggle:hover {
   background: var(--hover-bg-strong);
   color: var(--ink);
-}
-
-/* Three stacked dots drawn from one span (the dot itself) plus a matching
-   pair of ::before/::after copies above and below -- crisp at any zoom,
-   unlike relying on a "⋮" glyph's own baseline/spacing across fonts. */
-.chip-mode-toggle span {
-  position: relative;
-  width: 3px;
-  height: 3px;
-  border-radius: 50%;
-  background: currentColor;
-}
-
-.chip-mode-toggle span::before,
-.chip-mode-toggle span::after {
-  position: absolute;
-  left: 0;
-  width: 3px;
-  height: 3px;
-  border-radius: 50%;
-  background: currentColor;
-  content: "";
-}
-
-.chip-mode-toggle span::before {
-  top: -6px;
-}
-
-.chip-mode-toggle span::after {
-  top: 6px;
 }
 
 .move-buttons {
@@ -7925,25 +7900,11 @@ body * {
   filter: brightness(1.5) saturate(1.08);
 }
 
-/* Plain, single-color normal swatch for a real translation. HEB/GRK swap
-   this for the three-band .chip-mode-swatch--interlinear variant instead
-   (see showChipModePopup) -- solid black/white would read oddly for a row
-   whose own "normal" rendering is itself three separately-colored parts. */
+/* Plain --ink normal swatch, same for every chip type including HEB/GRK
+   (see showChipModePopup -- their popup just hides the highlight option
+   above, leaving this and the hidden swatch below). */
 .chip-mode-swatch--normal {
   background: var(--ink);
-}
-
-/* HEB/GRK's own normal mode (see showChipModePopup): banded to match
-   .interlinear-translit/-original/-gloss's own top-to-bottom colors exactly
-   (pronunciation, the word itself, gloss), since that IS what "normal" for
-   these two chips actually looks like. */
-.chip-mode-swatch--normal.chip-mode-swatch--interlinear {
-  background: linear-gradient(
-    to bottom,
-    var(--link-blue) 0 34%,
-    var(--ink) 34% 66%,
-    var(--emphasis-orange) 66% 100%
-  );
 }
 
 /* Hidden: an empty, dashed-outline circle with a small x inside -- same
