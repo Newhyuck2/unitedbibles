@@ -7565,7 +7565,24 @@ body * {
      row's own box on the exact same edges as .panel-content, so the
      padding below can just copy .verse-group's own current left/right
      values directly and land in the same place, instead of trying to
-     reason about two different ancestors' padding at once. */
+     reason about two different ancestors' padding at once.
+     margin-top: this row butts right up against the chip row above it
+     with no gap at all otherwise -- in stacked mode, that same gap comes
+     from .panel-header's own 8px padding-bottom landing right after the
+     chip row (plus this border's own 1px, 9px total measured); adding
+     that same 8px here (measured, not guessed) before this border
+     reproduces it exactly instead of leaving this row flush against the
+     chip row above.
+     margin-bottom: without this, the *next* gap (this row's own text down
+     to .panel-header's own border-bottom) stacks this row's 6px padding-
+     bottom on top of .panel-header's own trailing 8px+1px border again --
+     18px total (measured 15px after subpixel rounding), visibly wider
+     than the 6px above the text even though both should read the same.
+     Cancelling that trailing 8px+1px here (measured exactly) leaves only
+     this row's own 6px padding-bottom below the text, matching the gap
+     above it. */
+  margin-top: 8px;
+  margin-bottom: -9px;
   margin-inline: -10px;
   padding: 6px 6px 6px 31px;
   border-top: 1px solid var(--line);
