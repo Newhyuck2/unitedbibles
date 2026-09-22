@@ -23,7 +23,7 @@
     <meta name="twitter:title" content="United Bibles" />
     <meta name="twitter:description" content="A compact multi-panel Bible reader" />
     <meta name="twitter:image" content="https://unitedbibles.org/icons/icon-512.png" />
-    <meta name="asset-version" content="20260922-6" />
+    <meta name="asset-version" content="20260922-7" />
     <meta name="theme-color" content="#284f43" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" /> 
@@ -32,7 +32,7 @@
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" type="image/png" href="./icons/icon-192.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="./icons/icon-180.png" />
-    <link rel="stylesheet" href="./styles.css?v=20260922-6" />
+    <link rel="stylesheet" href="./styles.css?v=20260922-7" />
     <!-- Applies the saved theme before first paint so a dark-theme visitor
          never sees a light-theme flash while app.js's module script (and
          its manifest.json fetch) is still loading. Reads the same
@@ -1438,6 +1438,18 @@
                   </svg>
                 </button>
                 <div class="panel-more-menu" role="menu" hidden>
+                  <div class="panel-verse-layout-control" role="group" aria-label="Verse translation layout">
+                    <button class="panel-verse-layout-stacked" type="button" role="menuitemradio" aria-label="Stack translations vertically" aria-pressed="true">
+                      <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M5 6h14M5 12h14M5 18h14" stroke-linecap="round"></path>
+                      </svg>
+                    </button>
+                    <button class="panel-verse-layout-columns" type="button" role="menuitemradio" aria-label="Show translations side by side" aria-pressed="false">
+                      <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M6 5v14M12 5v14M18 5v14" stroke-linecap="round"></path>
+                      </svg>
+                    </button>
+                  </div>
                   <button class="panel-reading-mode-toggle" type="button" role="menuitem" aria-label="Reading mode" aria-pressed="false">
                     <svg viewBox="0 0 24 24" aria-hidden="true">
                       <rect x="4" y="3" width="16" height="18" rx="2"></rect>
@@ -1465,6 +1477,7 @@
               </div>
             </div>
           </div>
+          <div class="panel-column-header"></div>
         </header>
         <div class="panel-content" tabindex="0"></div>
         <button class="panel-move-overlay" type="button" aria-label="Move here" hidden>
@@ -1657,6 +1670,6 @@
     </div>
 
     <noscript>JavaScript is required to display the Bible text.</noscript>
-    <script type="module" src="./app.js?v=20260922-6"></script>
+    <script type="module" src="./app.js?v=20260922-7"></script>
   </body>
 </html>

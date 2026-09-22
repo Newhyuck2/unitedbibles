@@ -442,6 +442,7 @@ function freshState() {
       activeStudyTool: null,
       readingMode: false,
       translationNamesShown: true,
+      verseLayout: "stacked",
       history: [{ book: 0, chapter: 1, verse: 1 }],
       historyIndex: 0,
     }],
@@ -600,6 +601,7 @@ function sanitizeState() {
       // end up hidden, matching the toggle's own default-on state (see the
       // "..." popup menu).
       const translationNamesShown = panel.translationNamesShown !== false;
+      const verseLayout = panel.verseLayout === "columns" ? "columns" : "stacked";
       return {
         book,
         chapter,
@@ -615,6 +617,7 @@ function sanitizeState() {
         activeStudyTool,
         readingMode,
         translationNamesShown,
+        verseLayout,
         linkGroupId,
       };
     })
@@ -662,6 +665,7 @@ function saveState() {
         activeStudyTool,
         readingMode,
         translationNamesShown,
+        verseLayout,
         linkGroupId,
       }) => ({
         book,
@@ -678,6 +682,7 @@ function saveState() {
         activeStudyTool,
         readingMode,
         translationNamesShown,
+        verseLayout,
         linkGroupId,
       })),
     }),
@@ -3540,6 +3545,9 @@ function createPanelElement(panelState) {
   const translationPickerToggleEl = fragment.querySelector(".panel-translation-picker-toggle");
   const translationPickerMenuEl = fragment.querySelector(".panel-translation-picker-menu");
   const translationListEl = fragment.querySelector(".panel-translation-list");
+  const verseLayoutStackedEl = fragment.querySelector(".panel-verse-layout-stacked");
+  const verseLayoutColumnsEl = fragment.querySelector(".panel-verse-layout-columns");
+  const columnHeaderEl = fragment.querySelector(".panel-column-header");
   const readingModeToggleEl = fragment.querySelector(".panel-reading-mode-toggle");
   const linkModeToggleEl = fragment.querySelector(".panel-link-mode-toggle");
   const translationNameToggleEl = fragment.querySelector(".panel-translation-name-toggle");
@@ -3730,6 +3738,14 @@ function createPanelElement(panelState) {
   // leaving a stray popup sitting open over the changed screen would read
   // as broken, and closing unconditionally for the name toggle too keeps
   // all three consistent rather than two closing and one not.
+  verseLayoutStackedEl.addEventListener("click", () => {
+    closePanelMoreMenu();
+    setPanelVerseLayout(panelState, "stacked");
+  });
+  verseLayoutColumnsEl.addEventListener("click", () => {
+    closePanelMoreMenu();
+    setPanelVerseLayout(panelState, "columns");
+  });
   readingModeToggleEl.addEventListener("click", () => {
     closePanelMoreMenu();
     toggleReadingMode(panelState);
@@ -3832,6 +3848,9 @@ function createPanelElement(panelState) {
     previous,
     next,
     translationControl,
+    verseLayoutStacked: verseLayoutStackedEl,
+    verseLayoutColumns: verseLayoutColumnsEl,
+    columnHeader: columnHeaderEl,
     readingModeToggle: readingModeToggleEl,
     linkModeToggle: linkModeToggleEl,
     translationNameToggle: translationNameToggleEl,
@@ -3941,6 +3960,7 @@ function addPanel({ suppressScroll = false } = {}) {
     activeStudyTool: null,
     readingMode: false,
     translationNamesShown: source?.translationNamesShown ?? true,
+    verseLayout: source?.verseLayout === "columns" ? "columns" : "stacked",
   };
   state.panels.push(panelState);
   saveState();
@@ -6082,6 +6102,7 @@ function renderPanelBody(panelState) {
   // follows.
   updateLinkModeControls(panelState);
   updateTranslationNameToggleControls(panelState);
+  updatePanelVerseLayoutControls(panelState);
   if (panelState.readingMode) {
     if (readingTranslation) renderReadingFlow(panelState, readingTranslation);
     else elements.content.innerHTML = "";
@@ -6119,6 +6140,40 @@ function renderPanelBody(panelState) {
     }
     fragment.append(instance.element);
   } else {
+    // Side-by-side layout only (see setPanelVerseLayout/styles.css's own
+    // .bible-panel[data-verse-layout="columns"] rules) -- stacked mode never
+    // reads --translation-count or .panel-column-header at all, but this is
+    // cheap enough to just always keep current rather than only doing it
+    // when already in columns mode, so switching into columns mode never
+    // shows a stale header from whenever it was last built.
+    // Same filter as buildTranslationLinesInto's own opening one (STUDY_TOOL_IDS/
+    // hidden-original-language/dimmed all drop out) -- this needs it once
+    // up front rather than per verse, since it drives a single shared grid
+    // template (--translation-count, set on the panel itself so both
+    // .panel-column-header and every .verse-group below inherit the same
+    // value) instead of each verse recomputing its own column count.
+    const visibleTranslations = enabled.filter((translation) => (
+      !STUDY_TOOL_IDS.includes(translation)
+      && !(panelState.originalLanguageHidden && ORIGINAL_LANGUAGE_IDS.includes(translation))
+      && !panelState.dimmedTranslations.includes(translation)
+    ));
+    elements.panel.style.setProperty("--translation-count", String(Math.max(visibleTranslations.length, 1)));
+    elements.columnHeader.replaceChildren(
+      ...visibleTranslations.map((translation) => {
+        const heading = document.createElement("span");
+        // Reuses .translation-label verbatim (color/font-size/weight/
+        // letter-spacing, including its own dark-theme brightness rule) --
+        // per explicit request this must read identically to the inline
+        // label it replaces, not a separate lookalike style declared here.
+        // .panel-column-heading (styles.css) only adds this context's own
+        // layout (centered within its grid cell instead of inline-flex).
+        heading.className = "translation-label panel-column-heading";
+        heading.lang = translationLanguage(translation);
+        heading.textContent = translationMeta(translation).label;
+        heading.style.setProperty("--translation-color", TRANSLATION_COLORS[translation]);
+        return heading;
+      }),
+    );
     for (const [verseNumber, texts] of panelState.data.v) {
       const group = document.createElement("section");
       group.className = "verse-group";
@@ -7936,6 +7991,35 @@ function updateTranslationNameToggleControls(panelState) {
 function toggleTranslationNamesShown(panelState) {
   panelState.translationNamesShown = !panelState.translationNamesShown;
   updateTranslationNameToggleControls(panelState);
+  saveState();
+  renderPanelBody(panelState);
+}
+
+// elements.panel's own [data-verse-layout] attribute (see styles.css --
+// .bible-panel[data-verse-layout="columns"] is what actually switches
+// .verse-group/.translation-line/.translation-label and reveals
+// .panel-column-header) is the single source the CSS keys off; this just
+// keeps that and the pill's own .selected/aria-pressed pair in sync with
+// panelState.verseLayout, the same way every other "..." popup item's own
+// update* function does.
+function updatePanelVerseLayoutControls(panelState) {
+  const elements = panelElements.get(panelState.id);
+  if (!elements) return;
+  const columns = panelState.verseLayout === "columns";
+  elements.verseLayoutStacked.classList.toggle("selected", !columns);
+  elements.verseLayoutColumns.classList.toggle("selected", columns);
+  elements.verseLayoutStacked.setAttribute("aria-pressed", String(!columns));
+  elements.verseLayoutColumns.setAttribute("aria-pressed", String(columns));
+  elements.panel.dataset.verseLayout = panelState.verseLayout;
+}
+
+// Purely a per-panel display preference, same as toggleTranslationNamesShown
+// above -- an explicit set (there's no third state to cycle through) rather
+// than a toggle, matching the pill's own two-button "pick one" shape.
+function setPanelVerseLayout(panelState, layout) {
+  if (layout !== "stacked" && layout !== "columns") return;
+  panelState.verseLayout = layout;
+  updatePanelVerseLayoutControls(panelState);
   saveState();
   renderPanelBody(panelState);
 }

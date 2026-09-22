@@ -5966,6 +5966,55 @@ body * {
   box-shadow: 0 16px 40px rgba(40, 35, 27, 0.2);
 }
 
+/* This popup's leftmost item -- the stacked/columns verse-layout toggle
+   (see setPanelVerseLayout in app.js). Per explicit request its own two
+   icons match .panel-count-control's own segmented-pill container (a
+   bordered pill of borderless buttons, selected = accent-soft fill/accent
+   ink, not the individually-32x32-boxed look the other three items in
+   this popup use), but each icon's own drawn size/stroke matches
+   .panel-reading-mode-toggle svg's below exactly, same 32px height as the
+   items beside it so the row stays visually level. */
+.panel-verse-layout-control {
+  display: flex;
+  align-items: center;
+  height: 32px;
+  padding: 1px 3px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-strong);
+}
+
+.panel-verse-layout-control button {
+  display: grid;
+  width: 29px;
+  height: 28px;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+}
+
+.panel-verse-layout-control button:hover {
+  background: var(--hover-bg);
+}
+
+.panel-verse-layout-control button.selected,
+.panel-verse-layout-control button.selected:hover {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.panel-verse-layout-control svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-width: 1.7;
+}
+
 /* Sized and bordered to match .translation-picker-toggle (the add-version
    "+" button) exactly -- same 32x32 box, border, radius and white/hover/
    disabled treatment; only the .selected (reading-mode-on/link-mode-on/
@@ -6097,7 +6146,8 @@ body * {
 }
 
 .bible-panel.reading-mode-active .panel-more-menu .panel-link-mode-toggle,
-.bible-panel.reading-mode-active .panel-more-menu .panel-translation-name-toggle {
+.bible-panel.reading-mode-active .panel-more-menu .panel-translation-name-toggle,
+.bible-panel.reading-mode-active .panel-more-menu .panel-verse-layout-control {
   display: none;
 }
 
@@ -7449,6 +7499,99 @@ body * {
 
 .translation-line--color-gray .translation-text {
   color: var(--translation-gray-text);
+}
+
+/* Side-by-side ("columns") verse layout (see setPanelVerseLayout in
+   app.js) -- an alternative to the default stacked layout, where one
+   verse's own translations sit in a shared row of columns instead of one
+   below another. --translation-count (set once per render on .bible-panel
+   itself, in renderPanelBody) is inherited from there by both this
+   panel's own .panel-column-header (in .panel-header) and every
+   .verse-group (in .panel-content) -- siblings of each other, but both
+   descendants of the panel -- so the two stay in sync without
+   recomputing per verse-group.
+   Specificity here (.bible-panel[data-verse-layout="columns"] .foo, three
+   or four simple selectors) is deliberately higher than every existing
+   .verse-group/.translation-line/.translation-label rule scattered
+   earlier in this file (several already comment "in either verse layout,"
+   written long before this one existed) so this wins regardless of
+   source order, without needing to hunt down and edit every one of them. */
+.bible-panel[data-verse-layout="columns"] .verse-group {
+  display: grid;
+  grid-template-columns: repeat(var(--translation-count, 1), minmax(0, 1fr));
+  align-items: start;
+  gap: 16px;
+}
+
+.bible-panel[data-verse-layout="columns"] .translation-line {
+  display: block;
+}
+
+.bible-panel[data-verse-layout="columns"] .translation-line + .translation-line {
+  margin-top: 0;
+}
+
+/* The inline per-verse label this layout replaces with a shared header
+   row instead (see .panel-column-header below) -- scoped to inside
+   .verse-group specifically so it never touches .panel-column-heading's
+   own labels, which reuse this same .translation-label class elsewhere
+   entirely (see the next rule down) and still need to render. */
+.bible-panel[data-verse-layout="columns"] .verse-group .translation-label {
+  display: none;
+}
+
+/* Sits in .panel-header, not .panel-content (the scrolling element) --
+   see index.html, right after .panel-translation-controls -- so it reads
+   as "the row right below the version icons" and simply stays on screen
+   while the body text below it scrolls, no position: sticky/backdrop-blur
+   needed for either. Hidden outright in stacked mode, where nothing ever
+   populates it (see renderPanelBody, which still rebuilds its content on
+   every render regardless of the current layout, so it's never stale
+   when a reader does switch into columns mode). */
+.panel-column-header {
+  display: none;
+}
+
+.bible-panel[data-verse-layout="columns"] .panel-column-header {
+  display: grid;
+  grid-template-columns: repeat(var(--translation-count, 1), minmax(0, 1fr));
+  gap: 16px;
+  /* .panel-header's own padding (8px 10px, its one unconditional rule) sits
+     between this and the panel's true edge same as .panel-content, but
+     .panel-content itself carries no padding of its own (see the "Left/
+     right flush" comment on it elsewhere in this file) -- .verse-group's
+     own padding is what actually keeps its content off the edge there.
+     Cancelling .panel-header's 10px with this negative margin puts this
+     row's own box on the exact same edges as .panel-content, so the
+     padding below can just copy .verse-group's own current left/right
+     values directly and land in the same place, instead of trying to
+     reason about two different ancestors' padding at once. */
+  margin-inline: -10px;
+  padding: 6px 6px 6px 31px;
+  border-top: 1px solid var(--line);
+}
+
+/* Matches .verse-group's own padding-left at this breakpoint (39px, not
+   the wider layout's 31px) -- see the shared comment above. */
+@media (max-width: 820px), (max-width: 1366px) and (any-pointer: coarse) {
+  .bible-panel[data-verse-layout="columns"] .panel-column-header {
+    padding-left: 39px;
+  }
+}
+
+/* .translation-label itself (see renderPanelBody, which sets this class
+   alongside .panel-column-heading) already carries the exact color/
+   font-size/font-weight/letter-spacing this needs -- per explicit
+   request, identical to the inline label it replaces -- so this only
+   adds this context's own layout: centered within its own grid cell
+   instead of sitting inline before body text. */
+.translation-label.panel-column-heading {
+  display: flex;
+  min-width: 0;
+  margin: 0;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
 }
 
 /* Move-target picking mode (see enterMovePicking/exitMovePicking in app.js):
