@@ -434,8 +434,22 @@ p {
 
 .drag-handle {
   cursor: grab;
+  /* Narrower than the shared 22px .move-translation/.drag-handle rule
+     above -- matches .chip-mode-toggle's own 18px exactly (see its own
+     comment) now that both draw the identical dots glyph (see
+     renderTranslationChipList in app.js), per explicit request for visual
+     consistency between this dialog-only handle and the panel's own. */
+  width: 18px;
   font-size: 16px;
   touch-action: none;
+}
+
+/* Same reasoning as .chip-mode-toggle span's own rule below -- the glyph's
+   own advance width is a full two-column braille cell, so centering it
+   centers that whole cell (empty right column included) rather than the
+   visible left-column ink actually in it. */
+.drag-handle span {
+  transform: translateX(2px);
 }
 
 /* Panel chip row only (see renderTranslationChipList's own onOpenModePopup

@@ -1636,26 +1636,30 @@ function renderTranslationChipList({ list, order, getEmphasis, onToggleActive, o
     // translation -- STR/TSK/HEB/GRK carry no bold/color of their own, so
     // theirs is disabled outright (see isIndexableTranslationId), not just
     // inert, matching the explicit "make it truly unclickable" request this
-    // came from. Every other caller (copy/search/TSK dialogs, none of which
-    // carry the mode-popup concept at all) keeps the plain decorative
-    // handle and its own handle-gated touch-drag exactly as before.
+    // came from. Every other caller (copy/search/TSK/highlight/note/
+    // bookmark dialogs, none of which carry the mode-popup concept at all)
+    // shows the exact same dots -- per explicit request, purely for visual
+    // consistency with the panel's own chips -- but keeps the plain
+    // decorative handle and its own handle-gated touch-drag underneath
+    // them exactly as before: no click, no hover reaction, nothing to
+    // disable because there was never anything to fire in the first place.
+    // U+2807 (BRAILLE PATTERN DOTS-123) is exactly the left column of the
+    // old ⠿ (U+283F, dots 1-6) drag-handle glyph both branches used to draw
+    // -- same font, same size, so it reads as "half of that handle," not a
+    // new icon drawn from scratch. Wrapped in its own span (nudged right in
+    // CSS) since the glyph's own advance width is a full two-column
+    // braille cell -- centering that box centers the empty right column
+    // along with the visible left one, leaving the actual ink looking
+    // off-center within its own box otherwise.
+    const glyph = document.createElement("span");
+    glyph.setAttribute("aria-hidden", "true");
+    glyph.textContent = "⠇";
     let handle;
     if (onOpenModePopup) {
       const hasModePopup = isIndexableTranslationId(id);
       handle = document.createElement("button");
       handle.type = "button";
       handle.className = "chip-mode-toggle";
-      // U+2807 (BRAILLE PATTERN DOTS-123) is exactly the left column of the
-      // old ⠿ (U+283F, dots 1-6) drag-handle glyph -- same font, same size,
-      // so it reads as "half of that handle," not a new icon drawn from
-      // scratch. Wrapped in its own span (nudged right in CSS) since the
-      // glyph's own advance width is a full two-column braille cell --
-      // centering that box centers the empty right column along with the
-      // visible left one, leaving the actual ink looking off-center within
-      // the button.
-      const glyph = document.createElement("span");
-      glyph.setAttribute("aria-hidden", "true");
-      glyph.textContent = "⠇";
       handle.append(glyph);
       if (hasModePopup) {
         handle.title = "Change style";
@@ -1676,9 +1680,9 @@ function renderTranslationChipList({ list, order, getEmphasis, onToggleActive, o
     } else {
       handle = document.createElement("span");
       handle.className = "drag-handle";
-      handle.textContent = "⠿";
       handle.title = "Drag to reorder";
       handle.setAttribute("aria-hidden", "true");
+      handle.append(glyph);
     }
     setupTouchReorder({
       item: chip,
