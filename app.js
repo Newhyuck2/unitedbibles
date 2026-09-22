@@ -7119,15 +7119,14 @@ function toggleChipModeBold() {
 
 // A picked swatch's own action: sets the target chip directly to that text
 // color (see setTranslationTextColor -- an explicit set, never a toggle/
-// cycle) and closes the popup immediately, same as picking a highlight
-// color in the highlight-manage popup re-colors in place -- unlike the B
-// button above, a color pick is mutually exclusive with the other two, so
-// there's nothing left to keep the popup open for.
+// cycle). Leaves the popup open, same as the B button above -- per
+// explicit request, only the outside-pointerdown handler further down
+// closes it now, not a pick itself, so trying a color (or several in a
+// row) doesn't need reopening the popup each time.
 function applyChipModeColor(color) {
   if (!chipModeTarget) return;
   const { panelState, id } = chipModeTarget;
   setTranslationTextColor(panelState, id, color);
-  hideChipModePopup();
   saveState();
   renderPanelBody(panelState);
   refreshTskCrossColumnTranslations(panelState);
