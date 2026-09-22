@@ -91,7 +91,11 @@
   --bars-border: #9a9384;
   --bars-fill: #86806f;
   --heading-warm: #c9a36e;
-  --translation-gray-text: #b9b2a7;
+  /* A smaller lighten than the light-theme value's own +20%-toward-white --
+     dark ink here is already near-white, so lightening this by the same
+     amount read as too close to it (too little contrast against it) per
+     explicit correction; #a89f91 is --muted's own unlightened dark value. */
+  --translation-gray-text: #a89f91;
 }
 
 /* The Info dialog is documentation with light-background screenshots
@@ -460,7 +464,14 @@ p {
   cursor: pointer;
 }
 
-.chip-mode-toggle:hover {
+/* :not(:disabled) here (not a separate :disabled:hover override) --
+   :disabled:hover alone would win the cascade for whichever properties it
+   sets, but this rule's own color would still leak through unoverridden on
+   hover since a plain .chip-mode-toggle:disabled (no :hover) never touches
+   color at all. Excluding :disabled from the selector entirely means a
+   disabled button (see below) never matches this rule under any state, not
+   just background -- true zero reaction to the cursor, not just a muted one. */
+.chip-mode-toggle:not(:disabled):hover {
   background: var(--hover-bg-strong);
   color: var(--ink);
 }
@@ -470,19 +481,13 @@ p {
    dots are disabled outright (not just visually inert) rather than opening
    nothing on a tap. Per explicit request this stays visually identical to
    every other chip's own dots (no fade/opacity of its own, unlike every
-   other disabled control in this app) -- disabled is enforced purely at
-   the DOM level (the button's own disabled attribute blocks pointer/
-   keyboard activation entirely), not signaled visually at all. Hover is
-   still cancelled below, since a disabled button can otherwise still
-   visually catch :hover under the cursor even though it can never actually
-   be clicked, and that reactive-on-hover look would itself be a visible
-   difference from a real chip's own dots sitting untouched. */
+   other disabled control in this app) -- disabled is enforced at the DOM
+   level (the button's own disabled attribute blocks pointer/keyboard
+   activation entirely) and, via :not(:disabled) on the hover rule above,
+   at the CSS level too, so the cursor sitting over it changes nothing
+   at all, not even a color shift with no matching background change. */
 .chip-mode-toggle:disabled {
   cursor: default;
-}
-
-.chip-mode-toggle:disabled:hover {
-  background: transparent;
 }
 
 /* The ⠇ glyph's own advance width is a full two-column braille cell, so
@@ -2927,6 +2932,16 @@ mark {
   fill: white;
   stroke: black;
   stroke-width: 1.5;
+}
+
+/* Dark theme: white on black reads as a stark cutout against this button's
+   own dark surface, so the pencil/tip instead fill with that same
+   surface color (blending into the button, same as a plain outline icon
+   would) and stroke white -- an inverted, not just recolored, look. */
+[data-theme="dark"] .panel-options-highlight .highlight-icon-pencil,
+[data-theme="dark"] .panel-options-highlight .highlight-icon-tip {
+  fill: var(--surface-strong);
+  stroke: white;
 }
 
 /* Matches .word-dictionary's own size/nudge exactly. */
@@ -5447,6 +5462,17 @@ body * {
   stroke-width: 1.5;
 }
 
+/* Same inversion as .panel-options-highlight's own dark-theme rule above --
+   both buttons' own background is var(--surface-strong) too (see
+   .copy-confirm-button, which .highlight-confirm-button inherits from). */
+[data-theme="dark"] .verse-actions-highlight .highlight-icon-pencil,
+[data-theme="dark"] .highlight-confirm-button .highlight-icon-pencil,
+[data-theme="dark"] .verse-actions-highlight .highlight-icon-tip,
+[data-theme="dark"] .highlight-confirm-button .highlight-icon-tip {
+  fill: var(--surface-strong);
+  stroke: white;
+}
+
 .selection-bars {
   display: grid;
   width: 20px;
@@ -7937,7 +7963,11 @@ body * {
   border: 0;
   border-radius: 6px;
   background: var(--surface-strong);
-  color: var(--ink);
+  /* Same base color as .panel-reading-mode-toggle's own glyph (see its own
+     shared rule) -- .selected below already matches its own .selected
+     color (var(--accent)), so this makes the resting state consistent
+     with it too. */
+  color: var(--muted);
   font-family: Georgia, "Noto Serif KR", serif;
   font-size: 13px;
   font-weight: 800;
