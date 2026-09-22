@@ -8007,6 +8007,14 @@ function toggleTranslationNamesShown(panelState) {
 // keeps that and the pill's own .selected/aria-pressed pair in sync with
 // panelState.verseLayout, the same way every other "..." popup item's own
 // update* function does.
+// Columns needs real horizontal room per translation that phone portrait
+// never has (see the matching CSS, which hides .panel-verse-layout-control
+// there entirely) -- so the attribute driving the actual render is forced
+// stacked there regardless of the stored preference below, kept as-is for
+// when the reader rotates or switches to a wider device. The pill's own
+// .selected state still reflects that stored preference, not this forced
+// override, so it reads correctly the moment the control (and columns
+// rendering) becomes available again instead of flashing the wrong one.
 function updatePanelVerseLayoutControls(panelState) {
   const elements = panelElements.get(panelState.id);
   if (!elements) return;
@@ -8015,7 +8023,7 @@ function updatePanelVerseLayoutControls(panelState) {
   elements.verseLayoutColumns.classList.toggle("selected", columns);
   elements.verseLayoutStacked.setAttribute("aria-pressed", String(!columns));
   elements.verseLayoutColumns.setAttribute("aria-pressed", String(columns));
-  elements.panel.dataset.verseLayout = panelState.verseLayout;
+  elements.panel.dataset.verseLayout = columns && !phonePortraitLayout.matches ? "columns" : "stacked";
 }
 
 // Purely a per-panel display preference, same as toggleTranslationNamesShown
@@ -11502,6 +11510,13 @@ searchInputClear.addEventListener("click", () => {
 });
 portraitLayout.addEventListener("change", schedulePanelLayoutAlignment);
 phonePortraitLayout.addEventListener("change", schedulePanelLayoutAlignment);
+// Crossing into/out of phone portrait changes the columns-mode force in
+// updatePanelVerseLayoutControls above, but that only ever runs as part of
+// renderPanelBody -- a bare rotation/resize past this breakpoint doesn't
+// otherwise trigger one, so the attribute it sets (and the popup's own
+// .selected state) would keep showing whatever was true before the cross
+// until some unrelated re-render happened to come along.
+phonePortraitLayout.addEventListener("change", refreshPanelBodies);
 touchPanelToggleLayout.addEventListener("change", schedulePanelLayoutAlignment);
 touchPanelToggleLayout.addEventListener("change", syncTrackFreeScroll);
 

@@ -5028,6 +5028,16 @@ body * {
   .panel-count-control {
     display: none !important;
   }
+
+  /* Columns mode needs real horizontal room per translation that a single
+     phone-portrait panel never has -- see the matching
+     phonePortraitLayout.matches check in updatePanelVerseLayoutControls
+     (app.js), which forces the panel itself back to stacked rendering
+     regardless of the stored preference. This just hides the now-useless
+     control for picking a mode that can't actually show here. */
+  .panel-verse-layout-control {
+    display: none !important;
+  }
 }
 
 /* Phones in landscape and tablets run the exact desktop panel mechanism:
