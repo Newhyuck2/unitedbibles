@@ -40,6 +40,13 @@
   --bars-border: #817c73;
   --bars-fill: #837e75;
   --heading-warm: #5f4630;
+  /* The chip mode popup's own "gray" text-color pick (see
+     .translation-line--color-gray/.chip-mode-swatch--gray) -- a step
+     lighter than --muted specifically for this, since --muted-soft's own
+     dark-theme value happens to land slightly darker than --muted there
+     (fine for its own de-emphasis uses, wrong direction for "lighter"
+     body text here). */
+  --translation-gray-text: #918c84;
   --verse-font-size: 14px;
   --toolbar-icon-gap: 4px;
   --shadow: 0 18px 45px rgba(55, 45, 30, 0.1);
@@ -84,6 +91,7 @@
   --bars-border: #9a9384;
   --bars-fill: #86806f;
   --heading-warm: #c9a36e;
+  --translation-gray-text: #b9b2a7;
 }
 
 /* The Info dialog is documentation with light-background screenshots
@@ -460,14 +468,17 @@ p {
 /* STR/TSK/HEB/GRK have no bold/color of their own -- see
    renderTranslationChipList's own hasModePopup check in app.js -- so their
    dots are disabled outright (not just visually inert) rather than opening
-   nothing on a tap. Faded like every other disabled control in this app
-   (see .panel-reading-mode-toggle:disabled's own opacity) and with hover
-   explicitly cancelled, since a disabled button can still visually catch
-   :hover under the cursor even though it can never actually be clicked. */
+   nothing on a tap. Per explicit request this stays visually identical to
+   every other chip's own dots (no fade/opacity of its own, unlike every
+   other disabled control in this app) -- disabled is enforced purely at
+   the DOM level (the button's own disabled attribute blocks pointer/
+   keyboard activation entirely), not signaled visually at all. Hover is
+   still cancelled below, since a disabled button can otherwise still
+   visually catch :hover under the cursor even though it can never actually
+   be clicked, and that reactive-on-hover look would itself be a visible
+   difference from a real chip's own dots sitting untouched. */
 .chip-mode-toggle:disabled {
-  color: var(--muted-soft);
   cursor: default;
-  opacity: 0.28;
 }
 
 .chip-mode-toggle:disabled:hover {
@@ -2203,6 +2214,8 @@ mark {
 .highlight-confirm-button svg {
   width: 23px;
   height: 23px;
+  stroke: #b5e4b5;
+  stroke-width: 7;
 }
 
 /* Identical to .verse-actions-note svg (the panel's own bottom-bar note
@@ -2904,14 +2917,17 @@ mark {
 .panel-options-highlight svg {
   width: 23px;
   height: 23px;
+  stroke: #b5e4b5;
+  stroke-width: 7;
+  stroke-linecap: round;
 }
 
-/* Solid flat marker (barrel + chiseled tip) with a lighter diagonal band
-   across it, matching the reference highlighter artwork -- both pull
-   currentColor (see .highlight-icon-pencil/-tip/-band's own shared rule
-   further down), so unlike the old fixed black-on-white version this one
-   theme-adapts and stays legible on any button background automatically,
-   .highlight-confirm-button's own dark-green fill included. */
+.panel-options-highlight .highlight-icon-pencil,
+.panel-options-highlight .highlight-icon-tip {
+  fill: white;
+  stroke: black;
+  stroke-width: 1.5;
+}
 
 /* Matches .word-dictionary's own size/nudge exactly. */
 .panel-options-dictionary {
@@ -5405,32 +5421,30 @@ body * {
   height: 18px;
 }
 
+/* A thick light-green bar (a highlighter stroke) with a thick, filled,
+   rounded pencil shape -- and its sharpened triangular tip, sitting
+   where the pencil meets the bar -- drawn above it. Overrides the
+   shared rule's currentColor/stroke-width for the bar;
+   .highlight-icon-pencil/.highlight-icon-tip below pull the pencil rect
+   and tip triangle back to a fixed black-on-white look (unlike every
+   other, single-tone currentColor verse-action icon, so they stay
+   legible against this button's own dark-green fill too) since they'd
+   otherwise inherit this thick green stroke, with no fill at all, from
+   their parent svg. The rect's own rx rounds all four corners. */
 .verse-actions-highlight svg {
   width: 23px;
   height: 23px;
+  stroke: #b5e4b5;
+  stroke-width: 7;
 }
 
-/* Solid flat marker: the rounded pencil barrel and its sharpened
-   triangular tip both fill with currentColor, same as every other
-   single-tone verse-action/panel-options icon (see .panel-options-highlight
-   above for the fuller explanation) -- .verse-actions-highlight/
-   .panel-options-item's own color: var(--ink) and .highlight-confirm-
-   button's own color: white (via .button-primary) each already resolve
-   this correctly, light or dark theme, with no per-button override needed
-   here. The lighter diagonal band across the barrel (the chiseled tip's
-   own highlight facet, matching the reference artwork) is the same
-   currentColor at reduced opacity instead of a second fixed color -- that
-   blends toward whichever button's own background is actually behind it,
-   rather than assuming white every time. The rect's own rx rounds all
-   four corners. */
-.highlight-icon-pencil,
-.highlight-icon-tip {
-  fill: currentColor;
-}
-
-.highlight-icon-band {
-  fill: currentColor;
-  opacity: 0.32;
+.verse-actions-highlight .highlight-icon-pencil,
+.highlight-confirm-button .highlight-icon-pencil,
+.verse-actions-highlight .highlight-icon-tip,
+.highlight-confirm-button .highlight-icon-tip {
+  fill: white;
+  stroke: black;
+  stroke-width: 1.5;
 }
 
 .selection-bars {
@@ -5613,6 +5627,8 @@ body * {
   .highlight-confirm-button svg {
     width: 28px;
     height: 28px;
+    stroke: #b5e4b5;
+    stroke-width: 7;
   }
 
   .word-dictionary {
@@ -7406,7 +7422,7 @@ body * {
 }
 
 .translation-line--color-gray .translation-text {
-  color: var(--muted);
+  color: var(--translation-gray-text);
 }
 
 /* Move-target picking mode (see enterMovePicking/exitMovePicking in app.js):
@@ -7902,33 +7918,38 @@ body * {
 
 /* .chip-mode-popup's own B toggle (see toggleTranslationBold in app.js) --
    same 26px box as the three swatch buttons beside it, but a rounded
-   square rather than a circle so it reads as a control, not a color pick.
-   "Selected" (bold is on for this chip) reuses the exact same green
-   border/background/ink convention as .panel-reading-mode-toggle.selected,
-   including its own dark-theme values (see that rule's own colors). */
+   square rather than a circle so it reads as a control, not a color pick,
+   and borderless like those three (a plain hover/selected fill instead --
+   see below) rather than the bordered .panel-reading-mode-toggle look this
+   used to share. line-height: 1 keeps the glyph's own line box from adding
+   invisible height around it that place-items: center would otherwise
+   center *that* box, not the visible "B", within -- and the small
+   padding-bottom corrects for this serif bold capital's own ink sitting
+   a couple px below its line box's true middle (measured directly against
+   this button's own edges, not assumed), which line-height: 1 alone
+   doesn't fix. */
 .chip-mode-bold {
   display: grid;
   place-items: center;
   width: 26px;
   height: 26px;
-  padding: 0;
-  border: 1px solid var(--line);
+  padding: 0 0 2px;
+  border: 0;
   border-radius: 6px;
   background: var(--surface-strong);
   color: var(--ink);
   font-family: Georgia, "Noto Serif KR", serif;
   font-size: 13px;
   font-weight: 800;
+  line-height: 1;
 }
 
 .chip-mode-bold:hover {
-  border-color: var(--line-strong);
-  background: var(--hover-bg);
+  background: var(--hover-bg-strong);
 }
 
 .chip-mode-bold.selected,
 .chip-mode-bold.selected:hover {
-  border-color: var(--accent-border-light);
   background: var(--accent-soft);
   color: var(--accent);
 }
@@ -7979,7 +8000,7 @@ body * {
 }
 
 .chip-mode-swatch--gray {
-  background: var(--muted);
+  background: var(--translation-gray-text);
 }
 
 /* Floating read-only note viewer (see showNoteViewPopup in app.js) --
