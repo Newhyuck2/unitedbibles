@@ -35,13 +35,13 @@ const HIGHLIGHT_COLORS = {
 };
 const TRANSLATION_GROUPS = [
   { label: "English", ids: ["NIV", "ESV", "KJV", "NASB", "NRSV", "NLT"] },
-  { label: "Korean", ids: ["GAE", "KRV", "SAENEW", "WLB", "KLB", "EASY"] },
+  { label: "Korean", ids: ["GAE", "SAENEW", "WLB", "KLB", "EASY", "KRV"] },
   { label: "Chinese", ids: ["CNV"] },
   { label: "Indonesian", ids: ["TB"] },
 ];
 const TRANSLATION_CANONICAL_ORDER = TRANSLATION_GROUPS.flatMap((group) => group.ids);
 const DEFAULT_ENABLED_TRANSLATIONS = ["NIV", "GAE"];
-const DEFAULT_HIGHLIGHTED_TRANSLATIONS = [];
+const DEFAULT_BOLD_TRANSLATIONS = [];
 const DEFAULT_DIMMED_TRANSLATIONS = [];
 
 // Hebrew/Greek interlinear "translations" are synthetic: they are not part of
@@ -91,11 +91,7 @@ function blendTranslationColors(whiteRatio) {
     }),
   );
 }
-// Chip background: very pale. Chip border, once highlighted: midway between
-// that pale background and the translation's own full-strength text color.
 // Dimmed chip text: paler than full strength but still legible on white.
-const PALE_TRANSLATION_COLORS = blendTranslationColors(0.85);
-const MEDIUM_TRANSLATION_COLORS = blendTranslationColors(0.45);
 const DIM_TRANSLATION_COLORS = blendTranslationColors(0.55);
 const ASSET_VERSION = document.querySelector('meta[name="asset-version"]').content;
 const MOBILE_LAYOUT_QUERY = "(max-width: 820px), (max-width: 1366px) and (any-pointer: coarse)";
@@ -243,14 +239,14 @@ const bookmarkManageRemoveButton = document.querySelector("#bookmark-manage-remo
 let bookmarkManageTarget = null;
 let bookmarkManageAnchorRect = null;
 let bookmarkManagePanelEl = null;
-// Small popup opened from a panel translation chip's own "..." button (see
-// showChipModePopup) -- same floating-popup chrome as highlightManagePopup/
-// bookmarkManagePopup above, just anchored below the chip instead, and
-// offering a direct normal/highlight/hidden pick instead of a color/remove
-// pair. #chip-mode-option--highlight is hidden for HEB/GRK (see
-// showChipModePopup), which has no highlight mode of its own.
+// Small popup opened from a real translation chip's own "..." button (see
+// showChipModePopup -- STR/TSK/HEB/GRK's own button is disabled outright,
+// so this never opens for them) -- same floating-popup chrome as
+// highlightManagePopup/bookmarkManagePopup above, just anchored below the
+// chip instead, and offering a bold toggle plus a direct own-color/black/
+// gray text-color pick instead of a color/remove pair.
 const chipModePopup = document.querySelector("#chip-mode-popup");
-const chipModeHighlightButton = chipModePopup.querySelector('.chip-mode-option[data-mode="highlight"]');
+const chipModeBoldButton = document.querySelector("#chip-mode-bold");
 // The panel/id a still-open chip mode popup is currently pointed at -- null
 // whenever it's hidden, since there's nothing for its own option buttons to
 // act on then.
@@ -439,7 +435,8 @@ function freshState() {
       chapter: 1,
       verse: 1,
       enabledTranslations: [...DEFAULT_ENABLED_TRANSLATIONS],
-      highlightedTranslations: [...DEFAULT_HIGHLIGHTED_TRANSLATIONS],
+      boldTranslations: [...DEFAULT_BOLD_TRANSLATIONS],
+      translationTextColors: {},
       dimmedTranslations: [...DEFAULT_DIMMED_TRANSLATIONS],
       originalLanguageHidden: false,
       activeStudyTool: null,
@@ -571,13 +568,26 @@ function sanitizeState() {
         (Array.isArray(panel.enabledTranslations) ? panel.enabledTranslations : legacyEnabled ?? DEFAULT_ENABLED_TRANSLATIONS)
           .filter((id) => validTranslations.has(id)),
       )];
-      const highlightedTranslations = [...new Set(
-        (Array.isArray(panel.highlightedTranslations) ? panel.highlightedTranslations : DEFAULT_HIGHLIGHTED_TRANSLATIONS)
+      // Bold and text color are independent per-translation style picks (see
+      // toggleTranslationBold/setTranslationTextColor) -- unlike the old
+      // highlight/dim cycle they replaced, a translation can freely be both
+      // bold AND hidden at once, so neither filters against the other here.
+      const boldTranslations = [...new Set(
+        (Array.isArray(panel.boldTranslations) ? panel.boldTranslations : DEFAULT_BOLD_TRANSLATIONS)
           .filter((id) => enabledTranslations.includes(id)),
       )];
+      const rawTextColors = panel.translationTextColors && typeof panel.translationTextColors === "object"
+          && !Array.isArray(panel.translationTextColors)
+        ? panel.translationTextColors
+        : {};
+      const translationTextColors = Object.fromEntries(
+        Object.entries(rawTextColors).filter(([id, color]) => (
+          enabledTranslations.includes(id) && (color === "own" || color === "gray")
+        )),
+      );
       const dimmedTranslations = [...new Set(
         (Array.isArray(panel.dimmedTranslations) ? panel.dimmedTranslations : DEFAULT_DIMMED_TRANSLATIONS)
-          .filter((id) => enabledTranslations.includes(id) && !highlightedTranslations.includes(id)),
+          .filter((id) => enabledTranslations.includes(id)),
       )];
       const activeStudyTool = STUDY_TOOL_IDS.includes(panel.activeStudyTool) && enabledTranslations.includes(panel.activeStudyTool)
         ? panel.activeStudyTool
@@ -598,7 +608,8 @@ function sanitizeState() {
         historyIndex,
         width: Number.isFinite(width) ? Math.max(1, Math.min(width, 5000)) : null,
         enabledTranslations,
-        highlightedTranslations,
+        boldTranslations,
+        translationTextColors,
         dimmedTranslations,
         originalLanguageHidden,
         activeStudyTool,
@@ -644,7 +655,8 @@ function saveState() {
         historyIndex,
         width,
         enabledTranslations,
-        highlightedTranslations,
+        boldTranslations,
+        translationTextColors,
         dimmedTranslations,
         originalLanguageHidden,
         activeStudyTool,
@@ -659,7 +671,8 @@ function saveState() {
         historyIndex,
         width,
         enabledTranslations,
-        highlightedTranslations,
+        boldTranslations,
+        translationTextColors,
         dimmedTranslations,
         originalLanguageHidden,
         activeStudyTool,
@@ -1394,84 +1407,85 @@ function moveTranslationInOrder(order, from, to) {
 
 // The per-column state fields a STUDY_TOOL_IDS entry (or its activation)
 // needs to update, bundled so left/right callers can pass their own field
-// names once instead of repeating ternaries each. preToolHighlighted/
-// preToolDimmed hold a snapshot of highlighted/dimmed from just before a
-// study tool took over -- see toggleTranslationChip's own entering branch
-// and restorePreStudyToolEmphasis below.
+// names once instead of repeating ternaries each. preToolDimmed holds a
+// snapshot of dimmedTranslations (see its own comment on the panel state
+// shape -- it doubles as "hidden" for a real translation now, not just
+// STR/TSK's own auto-dim) from just before a study tool took over -- see
+// toggleTranslationChip's own entering branch and restorePreStudyToolEmphasis
+// below. Bold/text-color (see toggleTranslationBold/setTranslationTextColor)
+// are independent style picks a study tool coming or going never touches at
+// all, so they carry no matching snapshot field here.
 function studyToolFieldNames() {
   return { active: "activeStudyTool", enabled: "enabledTranslations",
-      highlighted: "highlightedTranslations", dimmed: "dimmedTranslations",
+      dimmed: "dimmedTranslations",
       hidden: "originalLanguageHidden",
-      preToolHighlighted: "preStudyToolHighlighted", preToolDimmed: "preStudyToolDimmed" };
+      preToolDimmed: "preStudyToolDimmed" };
 }
 
-// Restores whatever highlight/dim split the *other* chips had right before
-// a study tool started dimming them all uniformly (see the snapshot taken
-// in toggleTranslationChip's own STUDY_TOOL_IDS branch below), instead of
-// leaving every chip at plain normal strength once the tool goes away.
-// Filtered against the current enabled list, since a chip could have been
-// removed while the tool was showing; STUDY_TOOL_IDS themselves always end
-// up dimmed regardless of what the snapshot says, matching every other
-// exit-a-study-tool path's own convention.
+// Restores whatever hidden set the *other* chips had right before a study
+// tool started dimming them all uniformly (see the snapshot taken in
+// toggleTranslationChip's own STUDY_TOOL_IDS branch below), instead of
+// leaving every chip shown once the tool goes away. Filtered against the
+// current enabled list, since a chip could have been removed while the tool
+// was showing; STUDY_TOOL_IDS themselves always end up dimmed regardless of
+// what the snapshot says, matching every other exit-a-study-tool path's own
+// convention.
 function restorePreStudyToolEmphasis(panelState, fields) {
   const enabled = panelState[fields.enabled];
-  const highlighted = (panelState[fields.preToolHighlighted] ?? []).filter((id) => enabled.includes(id));
-  const dimmed = (panelState[fields.preToolDimmed] ?? []).filter((id) => enabled.includes(id) && !highlighted.includes(id));
-  panelState[fields.highlighted] = highlighted;
+  const dimmed = (panelState[fields.preToolDimmed] ?? []).filter((id) => enabled.includes(id));
   panelState[fields.dimmed] = [...new Set([...dimmed, ...STUDY_TOOL_IDS])];
-  panelState[fields.preToolHighlighted] = null;
   panelState[fields.preToolDimmed] = null;
 }
 
-// STR/TSK (see STUDY_TOOL_META) are mutually exclusive with each other
-// and with the normal highlight/dim cycle: picking one shows that tool's
-// own content in place of verse text for this column (see renderPanelBody)
-// and dims every other id currently enabled there -- both real translations
-// and any other study tool -- so its own chip is the only one left at
-// normal strength. Picking a normal translation while a study tool is
-// active doesn't run the usual cycle on it; the click's only job then is
-// "go back to normal verse text," which clears the study tool and returns
-// every chip (not just the one clicked) to normal strength.
+// STR/TSK (see STUDY_TOOL_META) are mutually exclusive with each other and
+// with a real translation's own hidden/shown toggle: picking one shows that
+// tool's own content in place of verse text for this column (see
+// renderPanelBody) and dims every other id currently enabled there -- both
+// real translations and any other study tool -- so its own chip is the only
+// one left at normal strength. Picking a normal translation while a study
+// tool is active doesn't toggle its hidden state; the click's only job then
+// is "go back to normal verse text," which clears the study tool and
+// returns every chip (not just the one clicked) to whatever it was showing
+// before.
 function toggleTranslationChip(panelState, id, { isNewlyAdded = false } = {}) {
   const fields = studyToolFieldNames();
   const activeStudyTool = panelState[fields.active];
 
   if (STUDY_TOOL_IDS.includes(id)) {
-    // Already showing -- unlike a normal chip's own normal -> highlight ->
-    // dim -> normal click cycle, this one has no "click again to turn it
-    // off": the only way off is picking a different chip (either branch
-    // below), which is what actually decides what should show instead.
+    // Already showing -- unlike a real translation's own hidden/shown
+    // toggle, this one has no "click again to turn it off": the only way
+    // off is picking a different chip (either branch below), which is what
+    // actually decides what should show instead.
     if (activeStudyTool === id) return;
     // Snapshot only on the first hop into a tool, not a later STR<->TSK
     // switch -- otherwise switching again would snapshot the *dimmed-for-
     // a-tool* state instead of what was there before either tool showed up.
     if (!activeStudyTool) {
-      panelState[fields.preToolHighlighted] = panelState[fields.highlighted];
       panelState[fields.preToolDimmed] = panelState[fields.dimmed];
     }
     panelState[fields.active] = id;
-    // Left at normal strength rather than highlighted: everything *else*
-    // dims, so the active one reading as the lone plain-colored icon among
-    // faded siblings is itself what marks it as "this is what's showing" --
-    // no separate colored chip-active treatment needed.
-    panelState[fields.highlighted] = [];
+    // Left shown rather than picking some other visual treatment:
+    // everything *else* dims, so the active one reading as the lone
+    // undimmed icon among faded siblings is itself what marks it as "this
+    // is what's showing" -- no separate colored chip-active treatment
+    // needed.
     panelState[fields.dimmed] = panelState[fields.enabled].filter((otherId) => otherId !== id);
     return;
   }
 
-  // HEB/GRK's own chip never shows the normal highlight/dim *cycle* --
-  // the "selection mode" some earlier revisions of this gave the chip
-  // itself turned out to be about individual .interlinear-word blocks in
-  // the rendered text instead, not this chip (see
-  // .interlinear-word.selected/selectInterlinearWord). Clicking it still
-  // dims STR/TSK specifically (only those, not any other real translation)
-  // and exits whichever study tool was active, every time.
-  // It does have its own separate on/off toggle, though (fields.hidden):
-  // on hides the original-language text entirely for this panel/side (see
-  // buildTranslationLinesInto and getEmphasis's own OR with it below),
-  // reading exactly as if the chip itself had been removed, while the
-  // chip stays put so it can be clicked again to bring the text back.
-  // That toggle only actually flips on a "plain" click, though -- one
+  // HEB/GRK's own chip never shows a real translation's own bold/color
+  // popup (see showChipModePopup) -- the "selection mode" some earlier
+  // revisions of this gave the chip itself turned out to be about
+  // individual .interlinear-word blocks in the rendered text instead, not
+  // this chip (see .interlinear-word.selected/selectInterlinearWord).
+  // Clicking it still dims STR/TSK specifically (only those, not any other
+  // real translation) and exits whichever study tool was active, every
+  // time. It does have its own separate on/off toggle, though
+  // (fields.hidden): on hides the original-language text entirely for this
+  // panel/side (see buildTranslationLinesInto and getEmphasis's own OR with
+  // it below), reading exactly as if the chip itself had been removed,
+  // while the chip stays put so it can be clicked again to bring the text
+  // back. That toggle only actually flips on a "plain" click, though -- one
   // that isn't also doing something else already: isNewlyAdded (passed
   // only from the picker's own "just added, activate it" call -- see
   // onToggle in setupDialogTranslationControl) or exiting a study tool
@@ -1485,18 +1499,11 @@ function toggleTranslationChip(panelState, id, { isNewlyAdded = false } = {}) {
       restorePreStudyToolEmphasis(panelState, fields);
     } else {
       // Only STUDY_TOOL_IDS get dimmed here, added to whatever's already
-      // dimmed -- not a wholesale reset of highlighted/dimmed, which used to
-      // wipe every *other* chip's own independently-chosen mode back to
-      // normal the instant this one's hidden toggle (or the mode popup's
-      // own normal/hidden pick -- see setOriginalLanguageHidden) touched
-      // it, even though neither of them was ever showing a study tool.
-      const highlighted = new Set(panelState[fields.highlighted]);
+      // dimmed -- not a wholesale reset that would wipe every *other*
+      // chip's own independently-hidden state back to shown just because
+      // this one's own toggle fired.
       const dimmed = new Set(panelState[fields.dimmed]);
-      for (const toolId of STUDY_TOOL_IDS) {
-        highlighted.delete(toolId);
-        dimmed.add(toolId);
-      }
-      panelState[fields.highlighted] = [...highlighted];
+      for (const toolId of STUDY_TOOL_IDS) dimmed.add(toolId);
       panelState[fields.dimmed] = [...dimmed];
     }
     panelState[fields.hidden] = (isNewlyAdded || wasShowingStudyTool) ? false : !panelState[fields.hidden];
@@ -1509,82 +1516,40 @@ function toggleTranslationChip(panelState, id, { isNewlyAdded = false } = {}) {
     return;
   }
 
-  const highlighted = new Set(panelState[fields.highlighted]);
+  // Plain click on a real translation chip: toggle it hidden/shown (see
+  // buildTranslationLinesInto's own dimmedList filter and .chip-dimmed in
+  // styles.css for the chip's own matching fade). Bold and text color (see
+  // toggleTranslationBold/setTranslationTextColor, driven by the chip's own
+  // "..." popup instead) are independent style picks this never touches.
   const dimmed = new Set(panelState[fields.dimmed]);
-  if (highlighted.has(id)) {
-    highlighted.delete(id);
-    dimmed.add(id);
-  } else if (dimmed.has(id)) {
-    dimmed.delete(id);
-  } else {
-    highlighted.add(id);
-  }
-  // A real translation chip's own click cycle only ever touches itself
-  // above -- but whichever one just became "what's showing" still reads
-  // as such against STR/TSK specifically, so those dim here too, same as
-  // an original-language chip's click does.
-  for (const toolId of STUDY_TOOL_IDS) {
-    highlighted.delete(toolId);
-    dimmed.add(toolId);
-  }
-  panelState[fields.highlighted] = [...highlighted];
+  if (dimmed.has(id)) dimmed.delete(id); else dimmed.add(id);
+  // Whichever one just became "what's showing" still reads as such against
+  // STR/TSK specifically, so those dim here too, same as an
+  // original-language chip's click does.
+  for (const toolId of STUDY_TOOL_IDS) dimmed.add(toolId);
   panelState[fields.dimmed] = [...dimmed];
 }
 
-// Direct-set counterpart to toggleTranslationChip's own real-translation
-// cycle, above -- driven by an explicit pick in the chip's mode popup (see
-// showChipModePopup) instead of a click cycling through normal -> highlight
-// -> dim -> normal one step at a time. Exiting an active study tool first
-// (same as toggleTranslationChip's own activeStudyTool branch) so the
-// picked mode lands on this id specifically rather than on whatever it was
-// still dimmed-for-a-tool from a moment ago.
-function setTranslationEmphasis(panelState, id, mode) {
-  const fields = studyToolFieldNames();
-  if (panelState[fields.active]) {
-    panelState[fields.active] = null;
-    restorePreStudyToolEmphasis(panelState, fields);
-  }
-  const highlighted = new Set(panelState[fields.highlighted]);
-  const dimmed = new Set(panelState[fields.dimmed]);
-  highlighted.delete(id);
-  dimmed.delete(id);
-  if (mode === "highlight") highlighted.add(id);
-  else if (mode === "dim") dimmed.add(id);
-  // Same "whichever one is showing reads as such against STR/TSK too" rule
-  // as toggleTranslationChip's own tail.
-  for (const toolId of STUDY_TOOL_IDS) {
-    highlighted.delete(toolId);
-    dimmed.add(toolId);
-  }
-  panelState[fields.highlighted] = [...highlighted];
-  panelState[fields.dimmed] = [...dimmed];
+// The chip mode popup's own B button (see showChipModePopup) -- a plain
+// independent toggle, never touched by a study tool coming or going and
+// never tied to hidden/shown, so unlike the old highlight/dim cycle it
+// replaces, a translation can freely be both bold and hidden at once.
+function toggleTranslationBold(panelState, id) {
+  const bold = new Set(panelState.boldTranslations);
+  if (bold.has(id)) bold.delete(id); else bold.add(id);
+  panelState.boldTranslations = [...bold];
 }
 
-// Direct-set counterpart to toggleTranslationChip's own ORIGINAL_LANGUAGE_IDS
-// branch, for the mode popup's normal/hidden pick -- sets originalLanguageHidden
-// to exactly what was picked (never a toggle/coin-flip) while still exiting
-// whichever study tool was active, same as a plain click on the chip does.
-function setOriginalLanguageHidden(panelState, id, hidden) {
-  const fields = studyToolFieldNames();
-  const wasShowingStudyTool = Boolean(panelState[fields.active]);
-  panelState[fields.active] = null;
-  if (wasShowingStudyTool) {
-    restorePreStudyToolEmphasis(panelState, fields);
-  } else {
-    // Same fix as toggleTranslationChip's own ORIGINAL_LANGUAGE_IDS branch --
-    // only add STUDY_TOOL_IDS to whatever's already dimmed, never reset
-    // every other chip's own independently-chosen highlight/dim back to
-    // normal just because this one's hidden state changed.
-    const highlighted = new Set(panelState[fields.highlighted]);
-    const dimmed = new Set(panelState[fields.dimmed]);
-    for (const toolId of STUDY_TOOL_IDS) {
-      highlighted.delete(toolId);
-      dimmed.add(toolId);
-    }
-    panelState[fields.highlighted] = [...highlighted];
-    panelState[fields.dimmed] = [...dimmed];
-  }
-  panelState[fields.hidden] = hidden;
+// The chip mode popup's own three color swatches -- "black" is the
+// baseline .translation-text color already, so it's stored as the absence
+// of an entry rather than an explicit value (see buildTranslationLinesInto/
+// getEmphasis's own reads of this), keeping a freshly added translation's
+// saved state exactly as small as before this existed.
+function setTranslationTextColor(panelState, id, color) {
+  const colors = { ...panelState.translationTextColors };
+  if (color === "black") delete colors[id];
+  else colors[id] = color;
+  panelState.translationTextColors = colors;
 }
 
 // Shared by both columns' setOrder (see createPanelElement): keeps the
@@ -1602,38 +1567,44 @@ function applyTranslationOrder(panelState, order) {
   // should switch to displaying it, the same as clicking the active tool's
   // own chip to exit -- otherwise the new chip just sits there dimmed next
   // to a tool pane that's still all that's visible.
+  let handledStudyToolChange = false;
   if (panelState[fields.active] && order.some((id) => !previousOrder.includes(id) && !STUDY_TOOL_IDS.includes(id))) {
     panelState[fields.active] = null;
     restorePreStudyToolEmphasis(panelState, fields);
-    return;
+    handledStudyToolChange = true;
   }
-  const studyToolRemoved = panelState[fields.active] && !order.includes(panelState[fields.active]);
-  if (studyToolRemoved) panelState[fields.active] = null;
-  // A study tool chip can end up enabled but not active -- dimmed alongside
-  // a real translation that's the one actually showing, or left that way
-  // once that translation is removed. If nothing else is left to show at
-  // all (every remaining id is a study tool -- HEB/GRK still count as
-  // something to show, so this only fires once even those are gone too),
-  // the column would otherwise render as blank verse rows with a chip
-  // sitting right there that could show something; activate it instead.
-  if (!panelState[fields.active] && order.length && !order.some((id) => !STUDY_TOOL_IDS.includes(id))) {
-    panelState[fields.active] = order.find((id) => STUDY_TOOL_IDS.includes(id));
+  if (!handledStudyToolChange) {
+    const studyToolRemoved = panelState[fields.active] && !order.includes(panelState[fields.active]);
+    if (studyToolRemoved) panelState[fields.active] = null;
+    // A study tool chip can end up enabled but not active -- dimmed
+    // alongside a real translation that's the one actually showing, or left
+    // that way once that translation is removed. If nothing else is left
+    // to show at all (every remaining id is a study tool -- HEB/GRK still
+    // count as something to show, so this only fires once even those are
+    // gone too), the column would otherwise render as blank verse rows
+    // with a chip sitting right there that could show something; activate
+    // it instead.
+    if (!panelState[fields.active] && order.length && !order.some((id) => !STUDY_TOOL_IDS.includes(id))) {
+      panelState[fields.active] = order.find((id) => STUDY_TOOL_IDS.includes(id));
+    }
+    if (panelState[fields.active]) {
+      panelState[fields.dimmed] = order.filter((otherId) => otherId !== panelState[fields.active]);
+    } else if (studyToolRemoved) {
+      restorePreStudyToolEmphasis(panelState, fields);
+    } else {
+      panelState[fields.dimmed] = panelState[fields.dimmed].filter((otherId) => order.includes(otherId));
+    }
   }
-  if (panelState[fields.active]) {
-    // Left at normal strength, not highlighted -- see toggleTranslationChip's
-    // own matching comment: dimming every other chip is what marks the
-    // active one, not a separate colored treatment on this one.
-    panelState[fields.highlighted] = [];
-    panelState[fields.dimmed] = order.filter((otherId) => otherId !== panelState[fields.active]);
-  } else if (studyToolRemoved) {
-    restorePreStudyToolEmphasis(panelState, fields);
-  } else {
-    panelState[fields.highlighted] = panelState[fields.highlighted].filter((otherId) => order.includes(otherId));
-    panelState[fields.dimmed] = panelState[fields.dimmed].filter((otherId) => order.includes(otherId));
-  }
+  // Bold/text-color are independent style picks a study tool never touches
+  // (see toggleTranslationBold/setTranslationTextColor above) -- only
+  // dropped here for whatever's no longer enabled at all.
+  panelState.boldTranslations = panelState.boldTranslations.filter((id) => order.includes(id));
+  panelState.translationTextColors = Object.fromEntries(
+    Object.entries(panelState.translationTextColors).filter(([id]) => order.includes(id)),
+  );
 }
 
-function renderTranslationChipList({ list, order, getEmphasis, onToggleActive, onOpenModePopup, hasActiveStudyTool, onRemove, onMove }) {
+function renderTranslationChipList({ list, order, getEmphasis, onToggleActive, onOpenModePopup, onRemove, onMove }) {
   list.replaceChildren();
 
   // Everything else that
@@ -1645,10 +1616,7 @@ function renderTranslationChipList({ list, order, getEmphasis, onToggleActive, o
     const emphasis = getEmphasis?.(id) ?? "normal";
     const chip = document.createElement("div");
     chip.className = "translation-chip";
-    chip.classList.toggle("chip-active", emphasis === "highlight");
     chip.classList.toggle("chip-dimmed", emphasis === "dim");
-    chip.style.setProperty("--translation-color-pale", PALE_TRANSLATION_COLORS[id]);
-    chip.style.setProperty("--translation-color-medium", MEDIUM_TRANSLATION_COLORS[id]);
     chip.style.setProperty("--translation-color-dim", DIM_TRANSLATION_COLORS[id]);
     chip.draggable = true;
     chip.dataset.translation = id;
@@ -1659,35 +1627,42 @@ function renderTranslationChipList({ list, order, getEmphasis, onToggleActive, o
     // surface (native HTML5 drag needs no dedicated handle at all, and
     // passing the chip itself as setupTouchReorder's own handle below gives
     // touch the same), so this corner instead becomes a "..." button that
-    // opens the mode popup (see showChipModePopup) -- a real translation
-    // chip's own body click no longer cycles emphasis at all, that's what
-    // the popup replaces. Every other caller (copy/search/TSK dialogs, none
-    // of which carry the emphasis concept) keeps the plain decorative
+    // opens the bold/color popup (see showChipModePopup) for a real
+    // translation -- STR/TSK/HEB/GRK carry no bold/color of their own, so
+    // theirs is disabled outright (see isIndexableTranslationId), not just
+    // inert, matching the explicit "make it truly unclickable" request this
+    // came from. Every other caller (copy/search/TSK dialogs, none of which
+    // carry the mode-popup concept at all) keeps the plain decorative
     // handle and its own handle-gated touch-drag exactly as before.
     let handle;
     if (onOpenModePopup) {
+      const hasModePopup = isIndexableTranslationId(id);
       handle = document.createElement("button");
       handle.type = "button";
       handle.className = "chip-mode-toggle";
-      handle.title = "Change mode";
-      handle.setAttribute("aria-label", `${meta.label} mode`);
       // U+2807 (BRAILLE PATTERN DOTS-123) is exactly the left column of the
       // old ⠿ (U+283F, dots 1-6) drag-handle glyph -- same font, same size,
       // so it reads as "half of that handle," not a new icon drawn from
-      // scratch, and keeps the same 22x24 box the name/remove button were
-      // already laid out around. Wrapped in its own span (nudged right in
-      // CSS) since the glyph's own advance width is a full two-column
-      // braille cell -- centering that box centers the empty right column
-      // along with the visible left one, leaving the actual ink looking
-      // off-center within the button.
+      // scratch. Wrapped in its own span (nudged right in CSS) since the
+      // glyph's own advance width is a full two-column braille cell --
+      // centering that box centers the empty right column along with the
+      // visible left one, leaving the actual ink looking off-center within
+      // the button.
       const glyph = document.createElement("span");
       glyph.setAttribute("aria-hidden", "true");
       glyph.textContent = "⠇";
       handle.append(glyph);
-      handle.addEventListener("click", (event) => {
-        event.stopPropagation();
-        onOpenModePopup(id, chip);
-      });
+      if (hasModePopup) {
+        handle.title = "Change style";
+        handle.setAttribute("aria-label", `${meta.label} style`);
+        handle.addEventListener("click", (event) => {
+          event.stopPropagation();
+          onOpenModePopup(id, chip);
+        });
+      } else {
+        handle.disabled = true;
+        handle.setAttribute("aria-hidden", "true");
+      }
       // Same opt-out-of-drag pointerdown as the remove button below -- this
       // button is a dedicated tap target for the popup, not part of the
       // drag surface, even though the chip body around it is (see handle:
@@ -1716,24 +1691,11 @@ function renderTranslationChipList({ list, order, getEmphasis, onToggleActive, o
     name.textContent = meta.label;
     name.style.setProperty("--translation-color", TRANSLATION_COLORS[id]);
 
-    // The mode popup replaces the click-to-cycle for a real translation
-    // chip's own body (see the handle branch above) -- but STR/TSK's tool
-    // switch and HEB/GRK's own show/hide toggle (see toggleTranslationChip)
-    // aren't part of that cycle at all, so their body click stays exactly
-    // as it always was, popup or not. A real translation's own body click
-    // still needs to do ONE thing though: while a study tool is showing,
-    // toggleTranslationChip's own activeStudyTool branch exits it and shows
-    // this translation instead, before ever reaching the cycle -- that's
-    // not the cycle being replaced, it's "switch away from the study tool,"
-    // so it stays wired up too, just gated to only when a tool is actually
-    // active (checked fresh at render time, which re-runs on every state
-    // change -- see onChange's own render() call -- so this re-evaluates
-    // live instead of going stale the moment the tool exits).
-    const clickCyclesOnBody = !onOpenModePopup
-      || STUDY_TOOL_IDS.includes(id)
-      || ORIGINAL_LANGUAGE_IDS.includes(id)
-      || Boolean(hasActiveStudyTool?.());
-    if (onToggleActive && clickCyclesOnBody) {
+    // Every chip type has something to do on a plain body click: a real
+    // translation toggles hidden/shown (or, while a study tool is showing,
+    // exits it), STR/TSK switches this panel's own tool, and HEB/GRK shows/
+    // hides itself -- see toggleTranslationChip for all three.
+    if (onToggleActive) {
       chip.addEventListener("click", () => onToggleActive(id));
     }
 
@@ -2201,7 +2163,6 @@ function setupDialogTranslationControl({
   getEmphasis,
   onToggleActive,
   onOpenModePopup,
-  hasActiveStudyTool,
   onChange,
   getOriginalLanguageTestament,
   showStudyTools,
@@ -2243,7 +2204,6 @@ function setupDialogTranslationControl({
         onChange?.();
       }),
       onOpenModePopup,
-      hasActiveStudyTool,
       onRemove: (id) => {
         setOrder(getOrder().filter((item) => item !== id));
         render();
@@ -2473,7 +2433,8 @@ function setupReadingTranslationPicker(toggle, menu, getPanelState, { afterPick 
     if (!panelState) return;
     if (id !== singleReadableTranslation(panelState)) {
       panelState.enabledTranslations = [id];
-      panelState.highlightedTranslations = [];
+      panelState.boldTranslations = [];
+      panelState.translationTextColors = {};
       panelState.dimmedTranslations = [];
       saveState();
       renderPanelBody(panelState);
@@ -3729,18 +3690,18 @@ function createPanelElement(panelState) {
     // reasons for the same "this chip's content isn't showing" look, so
     // either one alone is enough to trigger it.
     getEmphasis: (id) => (
-      panelState.highlightedTranslations.includes(id) ? "highlight"
-        : panelState.dimmedTranslations.includes(id) || (ORIGINAL_LANGUAGE_IDS.includes(id) && panelState.originalLanguageHidden) ? "dim"
+      panelState.dimmedTranslations.includes(id) || (ORIGINAL_LANGUAGE_IDS.includes(id) && panelState.originalLanguageHidden)
+        ? "dim"
         : "normal"
     ),
-    // STR/TSK still switches this panel into (or out of) that tool's own
-    // embedded content on a plain click, and HEB/GRK still show/hides
-    // itself the same way -- see toggleTranslationChip. A real translation's
-    // own normal/highlight/dim pick instead goes through the "..." button's
-    // mode popup below (see onOpenModePopup), not this cycle.
+    // Every chip's own body click still does exactly what it always did --
+    // STR/TSK switches this panel into (or out of) that tool's own embedded
+    // content, HEB/GRK shows/hides itself, and a real translation toggles
+    // hidden/shown -- see toggleTranslationChip. Bold/text color for a real
+    // translation instead go through the "..." button's own popup below
+    // (see onOpenModePopup), independent of any of that.
     onToggleActive: (id, options) => toggleTranslationChip(panelState, id, options),
     onOpenModePopup: (id, chipEl) => showChipModePopup(chipEl, panelState, id),
-    hasActiveStudyTool: () => Boolean(panelState.activeStudyTool),
     onChange: () => {
       saveState();
       // renderPanelBody guards panelTrack's own scroll position itself now
@@ -3973,7 +3934,8 @@ function addPanel({ suppressScroll = false } = {}) {
     verse: source?.verse ?? 1,
     width: source?.width ?? null,
     enabledTranslations: [],
-    highlightedTranslations: [],
+    boldTranslations: [],
+    translationTextColors: {},
     dimmedTranslations: [],
     originalLanguageHidden: false,
     activeStudyTool: null,
@@ -4496,10 +4458,10 @@ function hasNoPlainTextColumn(panelState) {
 // own pane, never a per-verse row), a dimmed/hidden real translation, or a
 // hidden original-language row (see buildTranslationLinesInto's own
 // matching filter) -- so there's no per-verse content left to carry a verse
-// number or row separator either. Reachable now that the chip mode popup
-// (see setTranslationEmphasis/setOriginalLanguageHidden) can set every
-// enabled chip to hidden directly, not just one at a time through the old
-// normal -> highlight -> dim cycle.
+// number or row separator either. Easy to reach now that a plain chip
+// click (see toggleTranslationChip) is a direct hidden/shown toggle for
+// every translation, not just one step in the old normal -> highlight ->
+// dim cycle.
 function panelHasNoTranslations(panelState) {
   return !panelState.enabledTranslations.some((id) => (
     !STUDY_TOOL_IDS.includes(id)
@@ -4882,20 +4844,27 @@ function rerenderPanelsPreservingVerseAnchor(book, chapter, verseNumber) {
 // current book: if the panel navigates from OT to NT (or back) while
 // Hebrew/Greek is active, swap it for the other rather than leaving a
 // mismatched language enabled. Shared by both columns (see
-// syncOriginalLanguageForTestament below), each with its own three arrays.
-function syncOriginalLanguageForTestamentSide(panelState, enabledKey, highlightedKey, dimmedKey) {
+// syncOriginalLanguageForTestament below). boldTranslations/
+// translationTextColors never actually carry a HEB/GRK entry in practice
+// (their own mode popup is disabled -- see renderTranslationChipList) but
+// are remapped too regardless, same defensive spirit as dimmedKey.
+function syncOriginalLanguageForTestamentSide(panelState, enabledKey, boldKey, dimmedKey) {
   const enabled = panelState[enabledKey];
   const active = activeOriginalLanguageId(enabled);
   if (!active) return;
   const desired = originalLanguageForTestament(testamentForBook(panelState.book));
   if (active === desired) return;
   enabled[enabled.indexOf(active)] = desired;
-  panelState[highlightedKey] = panelState[highlightedKey].map((id) => (id === active ? desired : id));
+  panelState[boldKey] = panelState[boldKey].map((id) => (id === active ? desired : id));
   panelState[dimmedKey] = panelState[dimmedKey].map((id) => (id === active ? desired : id));
+  if (Object.hasOwn(panelState.translationTextColors, active)) {
+    const { [active]: color, ...rest } = panelState.translationTextColors;
+    panelState.translationTextColors = { ...rest, [desired]: color };
+  }
 }
 
 function syncOriginalLanguageForTestament(panelState) {
-  syncOriginalLanguageForTestamentSide(panelState, "enabledTranslations", "highlightedTranslations", "dimmedTranslations");
+  syncOriginalLanguageForTestamentSide(panelState, "enabledTranslations", "boldTranslations", "dimmedTranslations");
   const elements = panelElements.get(panelState.id);
   elements?.translationControl.render();
 }
@@ -4953,15 +4922,17 @@ function noteKey(book, chapter, verse) {
 }
 
 // Builds one verse's translation-line rows into `pane`, using the panel's
-// own enabled/highlighted/dimmed lists. Hebrew/Greek is a full peer of any
-// other translation here: it takes whatever slot it holds in `list` and
-// renders a row of interlinear word blocks instead of plain text, but is
-// otherwise laid out identically -- unless the original-language toggle
-// (see toggleTranslationChip) is switched off, in which case its row is
-// skipped entirely, same as STR/TSK below: the toggle's whole point is
-// reading as if the chip weren't there, not just fading its text like a
-// real translation's own dim state does.
-function buildTranslationLinesInto(pane, panelState, verseNumber, texts, list, highlightedList, dimmedList, originalLanguageHidden) {
+// own enabled/bold/dimmed lists and text-color picks. Hebrew/Greek is a
+// full peer of any other translation here: it takes whatever slot it holds
+// in `list` and renders a row of interlinear word blocks instead of plain
+// text, but is otherwise laid out identically -- unless the original-
+// language toggle (see toggleTranslationChip) is switched off, in which
+// case its row is skipped entirely, same as STR/TSK below: the toggle's
+// whole point is reading as if the chip weren't there, not just fading its
+// text like a real translation's own dim state does. Bold/color (see
+// toggleTranslationBold/setTranslationTextColor) never apply to HEB/GRK's
+// own interlinear row -- there's no plain .translation-text there to style.
+function buildTranslationLinesInto(pane, panelState, verseNumber, texts, list, boldList, dimmedList, originalLanguageHidden, textColors) {
   // STR/TSK chips never carry per-verse text of their own -- they only
   // ever render via getStudyToolInstance (see renderPanelBody), so they're
   // excluded here even when enabled but not the active study tool. A
@@ -4975,7 +4946,7 @@ function buildTranslationLinesInto(pane, panelState, verseNumber, texts, list, h
   ));
   list.forEach((translation) => {
     if (translation === "NOTE") {
-      buildNoteTranslationLinesInto(pane, panelState, verseNumber, highlightedList);
+      buildNoteTranslationLinesInto(pane, panelState, verseNumber);
       return;
     }
     const isOriginalLanguage = ORIGINAL_LANGUAGE_IDS.includes(translation);
@@ -4984,7 +4955,12 @@ function buildTranslationLinesInto(pane, panelState, verseNumber, texts, list, h
     const hasContent = isOriginalLanguage ? Boolean(tokens?.length) : hasVerseText(translationText);
     const line = document.createElement("div");
     line.className = "translation-line";
-    line.classList.toggle("translation-line--highlight", highlightedList.includes(translation));
+    line.classList.toggle("translation-line--bold", boldList.includes(translation));
+    // "black" (the default -- see setTranslationTextColor) needs neither
+    // class: .translation-text's own base color already reads as that.
+    const textColor = textColors[translation] ?? "black";
+    line.classList.toggle("translation-line--color-own", textColor === "own");
+    line.classList.toggle("translation-line--color-gray", textColor === "gray");
     // Driven purely by this panel's own translation-name toggle (see the
     // "..." popup menu) -- no longer tied to how many translations are
     // actually enabled, so the label stays visible even with just one
@@ -5068,10 +5044,9 @@ function buildTranslationLinesInto(pane, panelState, verseNumber, texts, list, h
 // is always exactly one row, labeled "NOTE" itself rather than a real
 // translation's name, showing that verse's one note in place of Bible text
 // (blank, not skipped, when there isn't one yet -- see buildEditableNoteField).
-function buildNoteTranslationLinesInto(pane, panelState, verseNumber, highlightedList) {
+function buildNoteTranslationLinesInto(pane, panelState, verseNumber) {
   const line = document.createElement("div");
   line.className = "translation-line translation-line--note";
-  line.classList.toggle("translation-line--highlight", highlightedList.includes("NOTE"));
   line.classList.toggle("translation-line--name-hidden", !panelState.translationNamesShown);
   line.lang = translationLanguage("NOTE");
   line.style.setProperty("--translation-color", TRANSLATION_COLORS.NOTE);
@@ -5519,7 +5494,7 @@ function createEmbeddedTskTool(panelState) {
       count.textContent = ` (${refs.length})`;
       navButton.append(word, count);
       navButton.addEventListener("click", () => {
-        list.querySelector(`[data-anchor-id="${anchorId}"]`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+        scrollListItemIntoView(list, list.querySelector(`[data-anchor-id="${anchorId}"]`));
       });
       nav.append(navButton);
 
@@ -6234,8 +6209,8 @@ function renderPanelBody(panelState) {
 
       buildTranslationLinesInto(
         group, panelState, verseNumber, texts,
-        enabled, panelState.highlightedTranslations, panelState.dimmedTranslations,
-        panelState.originalLanguageHidden,
+        enabled, panelState.boldTranslations, panelState.dimmedTranslations,
+        panelState.originalLanguageHidden, panelState.translationTextColors,
       );
       fragment.append(group);
     }
@@ -7100,21 +7075,18 @@ function positionChipModePopup() {
   chipModePopup.style.top = `${top}px`;
 }
 
-// Opened by a translation chip's own "..." button (see renderTranslationChipList).
-// STR/TSK have no normal/highlight/hidden mode of their own at all -- their
-// button is still there for visual consistency across every chip, but
-// pressing it does nothing, same as the rest of that chip's own click.
-// HEB/GRK show only normal/hidden (no highlight option -- see
-// chipModeHighlightButton.hidden below); every other translation shows all
-// three, and every id's own "normal" swatch is the same plain --ink circle.
-// --chip-mode-highlight-color is read by .chip-mode-swatch--highlight (see
-// styles.css); irrelevant, so left unset, for HEB/GRK.
+// Opened by a real translation chip's own "..." button (see
+// renderTranslationChipList -- STR/TSK/HEB/GRK's own button is disabled
+// outright, so this is never reached for them). Syncs the B button's own
+// selected look to whatever this translation's current bold state already
+// is, since the popup is a shared singleton reused across every chip.
+// --chip-mode-own-color is read by .chip-mode-swatch--own (see styles.css).
 function showChipModePopup(chipEl, panelState, id) {
-  if (STUDY_TOOL_IDS.includes(id)) return;
-  const isOriginalLanguage = ORIGINAL_LANGUAGE_IDS.includes(id);
-  chipModeHighlightButton.hidden = isOriginalLanguage;
-  if (!isOriginalLanguage) chipModePopup.style.setProperty("--chip-mode-highlight-color", TRANSLATION_COLORS[id]);
   chipModeTarget = { panelState, id };
+  const isBold = panelState.boldTranslations.includes(id);
+  chipModeBoldButton.classList.toggle("selected", isBold);
+  chipModeBoldButton.setAttribute("aria-pressed", String(isBold));
+  chipModePopup.style.setProperty("--chip-mode-own-color", TRANSLATION_COLORS[id]);
   chipModeAnchorRect = chipEl.getBoundingClientRect();
   chipModePanelEl = chipEl.closest(".bible-panel");
   chipModePopup.hidden = false;
@@ -7128,24 +7100,37 @@ function hideChipModePopup() {
   chipModePanelEl = null;
 }
 
-// A picked option's own action: sets the target chip directly to that mode
-// (see setTranslationEmphasis/setOriginalLanguageHidden -- an explicit set,
-// never a toggle/cycle) and closes the popup immediately, same as picking a
-// highlight color in the highlight-manage popup re-colors in place without
-// needing a second confirm step.
-function applyChipMode(mode) {
+// The B button's own click (see toggleTranslationBold) -- an independent
+// toggle, not a mutually-exclusive pick like the three swatches beside it,
+// so this re-renders in place and leaves the popup open rather than
+// closing it, the same way the highlight-manage popup's own swatch stays
+// open after a re-color.
+function toggleChipModeBold() {
   if (!chipModeTarget) return;
   const { panelState, id } = chipModeTarget;
-  if (ORIGINAL_LANGUAGE_IDS.includes(id)) {
-    setOriginalLanguageHidden(panelState, id, mode === "hidden");
-  } else {
-    setTranslationEmphasis(panelState, id, mode === "highlight" ? "highlight" : mode === "hidden" ? "dim" : "normal");
-  }
+  toggleTranslationBold(panelState, id);
+  const isBold = panelState.boldTranslations.includes(id);
+  chipModeBoldButton.classList.toggle("selected", isBold);
+  chipModeBoldButton.setAttribute("aria-pressed", String(isBold));
+  saveState();
+  renderPanelBody(panelState);
+  refreshTskCrossColumnTranslations(panelState);
+}
+
+// A picked swatch's own action: sets the target chip directly to that text
+// color (see setTranslationTextColor -- an explicit set, never a toggle/
+// cycle) and closes the popup immediately, same as picking a highlight
+// color in the highlight-manage popup re-colors in place -- unlike the B
+// button above, a color pick is mutually exclusive with the other two, so
+// there's nothing left to keep the popup open for.
+function applyChipModeColor(color) {
+  if (!chipModeTarget) return;
+  const { panelState, id } = chipModeTarget;
+  setTranslationTextColor(panelState, id, color);
   hideChipModePopup();
   saveState();
   renderPanelBody(panelState);
   refreshTskCrossColumnTranslations(panelState);
-  panelElements.get(panelState.id)?.translationControl.render();
 }
 
 // One per noted verse (not per translation -- see noteKey), sized to match
@@ -9008,6 +8993,24 @@ async function renderConcordanceSection(panelState, word, concordance, container
 // header is the modal's own .concordance-mode-control row (see
 // renderConcordanceSection) -- null when embedded, which has no controls
 // row of its own to show early (see showHeaderOnly).
+// Scrolls `list` alone to bring one of its own descendants (`target`) to
+// its own top edge -- unlike target.scrollIntoView({block: "start"}), which
+// walks every scrollable ancestor in turn, not just the nearest one. Both
+// this results list and its surrounding .lookup-body count as "scrollable"
+// there (overflow: hidden still qualifies, not just auto/scroll), and
+// .lookup-body's own content already runs a few px taller than its fixed
+// height in these dialogs/panes -- scrollIntoView "fixing" that latent
+// overflow as a side effect nudges the whole body up along with the list,
+// clipping the word-info fields sitting above the list entirely off the
+// top. Used by the Englishman's Concordance nav below and both of TSK's
+// own anchor-word navs (createEmbeddedTskTool/renderTskReferenceList),
+// which share this exact same nested-scroll-container shape.
+function scrollListItemIntoView(list, target) {
+  if (!target) return;
+  const delta = target.getBoundingClientRect().top - list.getBoundingClientRect().top;
+  list.scrollTo({ top: list.scrollTop + delta, behavior: "smooth" });
+}
+
 // code is the Strong's number being looked up (word.strongs) -- occurrences
 // only carry the KJV/GAE rendering of each occurrence, not the original
 // Greek/Hebrew text itself, so each result row's own original-language line
@@ -9126,7 +9129,7 @@ async function renderConcordanceResults(container, occurrences, header, lang, is
     count.textContent = ` (${bookOccurrences.length})`;
     navButton.append(name, count);
     navButton.addEventListener("click", () => {
-      list.querySelector(`[data-group-id="${groupId}"]`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+      scrollListItemIntoView(list, list.querySelector(`[data-group-id="${groupId}"]`));
     });
     nav.append(navButton);
 
@@ -10199,7 +10202,7 @@ async function renderTskReferenceList() {
     count.textContent = ` (${refs.length})`;
     navButton.append(word, count);
     navButton.addEventListener("click", () => {
-      list.querySelector(`[data-anchor-id="${anchorId}"]`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+      scrollListItemIntoView(list, list.querySelector(`[data-anchor-id="${anchorId}"]`));
     });
     nav.append(navButton);
 
@@ -11342,8 +11345,9 @@ document.addEventListener("scroll", () => {
 chipModePopup.addEventListener("mousedown", (event) => {
   if (event.target === chipModePopup) event.preventDefault();
 });
+chipModeBoldButton.addEventListener("click", toggleChipModeBold);
 for (const option of chipModePopup.querySelectorAll(".chip-mode-option")) {
-  option.addEventListener("click", () => applyChipMode(option.dataset.mode));
+  option.addEventListener("click", () => applyChipModeColor(option.dataset.color));
 }
 document.addEventListener("pointerdown", (event) => {
   if (chipModePopup.hidden) return;

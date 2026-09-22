@@ -432,13 +432,15 @@ p {
    is the drag surface instead (see the panel-translation-list touch-action
    rule further down), so this button only needs to opt itself out of that
    (see its own pointerdown listener in app.js), not carry dragging itself.
-   Same box/font-size as .drag-handle above -- its own glyph (see app.js) is
-   literally that handle's own left column, so this reuses its chrome
-   verbatim rather than drawing a new icon at a different size. */
+   Same font-size as .drag-handle above -- its own glyph (see app.js) is
+   literally that handle's own left column -- but 18px wide (not 22px),
+   matching .chip-remove's own width exactly: three dots stacked vertically
+   need no more left-right room than the x does, and the old wider box was
+   what made the chip's own name text read as off-center between the two. */
 .chip-mode-toggle {
   display: grid;
   flex: 0 0 auto;
-  width: 22px;
+  width: 18px;
   height: 24px;
   padding: 0;
   place-items: center;
@@ -453,6 +455,23 @@ p {
 .chip-mode-toggle:hover {
   background: var(--hover-bg-strong);
   color: var(--ink);
+}
+
+/* STR/TSK/HEB/GRK have no bold/color of their own -- see
+   renderTranslationChipList's own hasModePopup check in app.js -- so their
+   dots are disabled outright (not just visually inert) rather than opening
+   nothing on a tap. Faded like every other disabled control in this app
+   (see .panel-reading-mode-toggle:disabled's own opacity) and with hover
+   explicitly cancelled, since a disabled button can still visually catch
+   :hover under the cursor even though it can never actually be clicked. */
+.chip-mode-toggle:disabled {
+  color: var(--muted-soft);
+  cursor: default;
+  opacity: 0.28;
+}
+
+.chip-mode-toggle:disabled:hover {
+  background: transparent;
 }
 
 /* The ⠇ glyph's own advance width is a full two-column braille cell, so
@@ -2184,8 +2203,6 @@ mark {
 .highlight-confirm-button svg {
   width: 23px;
   height: 23px;
-  stroke: #b5e4b5;
-  stroke-width: 7;
 }
 
 /* Identical to .verse-actions-note svg (the panel's own bottom-bar note
@@ -2887,17 +2904,14 @@ mark {
 .panel-options-highlight svg {
   width: 23px;
   height: 23px;
-  stroke: #b5e4b5;
-  stroke-width: 7;
-  stroke-linecap: round;
 }
 
-.panel-options-highlight .highlight-icon-pencil,
-.panel-options-highlight .highlight-icon-tip {
-  fill: white;
-  stroke: black;
-  stroke-width: 1.5;
-}
+/* Solid flat marker (barrel + chiseled tip) with a lighter diagonal band
+   across it, matching the reference highlighter artwork -- both pull
+   currentColor (see .highlight-icon-pencil/-tip/-band's own shared rule
+   further down), so unlike the old fixed black-on-white version this one
+   theme-adapts and stays legible on any button background automatically,
+   .highlight-confirm-button's own dark-green fill included. */
 
 /* Matches .word-dictionary's own size/nudge exactly. */
 .panel-options-dictionary {
@@ -5391,30 +5405,32 @@ body * {
   height: 18px;
 }
 
-/* A thick light-green bar (a highlighter stroke) with a thick, filled,
-   rounded pencil shape -- and its sharpened triangular tip, sitting
-   where the pencil meets the bar -- drawn above it. Overrides the
-   shared rule's currentColor/stroke-width for the bar;
-   .highlight-icon-pencil/.highlight-icon-tip below pull the pencil rect
-   and tip triangle back to a fixed black-on-white look (unlike every
-   other, single-tone currentColor verse-action icon, so they stay
-   legible against this button's own dark-green fill too) since they'd
-   otherwise inherit this thick green stroke, with no fill at all, from
-   their parent svg. The rect's own rx rounds all four corners. */
 .verse-actions-highlight svg {
   width: 23px;
   height: 23px;
-  stroke: #b5e4b5;
-  stroke-width: 7;
 }
 
-.verse-actions-highlight .highlight-icon-pencil,
-.highlight-confirm-button .highlight-icon-pencil,
-.verse-actions-highlight .highlight-icon-tip,
-.highlight-confirm-button .highlight-icon-tip {
-  fill: white;
-  stroke: black;
-  stroke-width: 1.5;
+/* Solid flat marker: the rounded pencil barrel and its sharpened
+   triangular tip both fill with currentColor, same as every other
+   single-tone verse-action/panel-options icon (see .panel-options-highlight
+   above for the fuller explanation) -- .verse-actions-highlight/
+   .panel-options-item's own color: var(--ink) and .highlight-confirm-
+   button's own color: white (via .button-primary) each already resolve
+   this correctly, light or dark theme, with no per-button override needed
+   here. The lighter diagonal band across the barrel (the chiseled tip's
+   own highlight facet, matching the reference artwork) is the same
+   currentColor at reduced opacity instead of a second fixed color -- that
+   blends toward whichever button's own background is actually behind it,
+   rather than assuming white every time. The rect's own rx rounds all
+   four corners. */
+.highlight-icon-pencil,
+.highlight-icon-tip {
+  fill: currentColor;
+}
+
+.highlight-icon-band {
+  fill: currentColor;
+  opacity: 0.32;
 }
 
 .selection-bars {
@@ -5597,8 +5613,6 @@ body * {
   .highlight-confirm-button svg {
     width: 28px;
     height: 28px;
-    stroke: #b5e4b5;
-    stroke-width: 7;
   }
 
   .word-dictionary {
@@ -7353,41 +7367,46 @@ body * {
   }
 }
 
-/* Panel version chip cycles normal -> highlight -> dim -> normal on click.
-   Highlight: tinted with a pale version of that version's own text color;
-   its border is a medium shade of the same color — darker than the pale
-   background, lighter than the version's full-strength text color. */
-.panel-translation-list .translation-chip.chip-active {
-  border-color: var(--translation-color-medium);
-  background: var(--translation-color-pale);
-}
-
-/* Dim: the chip itself looks normal again, but its own label text fades
-   toward a paler shade to read as de-emphasized. */
+/* A plain click toggles a panel chip hidden/shown (see toggleTranslationChip
+   in app.js) -- the chip itself carries no other mode of its own any more
+   (see the chip mode popup below for bold/text-color instead). Dim: the
+   chip's own label text fades toward a paler shade to read as
+   de-emphasized. */
 .panel-translation-list .translation-chip.chip-dimmed .translation-name {
   color: var(--translation-color-dim);
 }
 
-/* Highlighted version: its verse text renders in that version's own color,
-   instead of the default neutral ink, in either verse layout. A pair of
-   horizontally-offset text-shadows re-render the glyph fill itself to add
-   just a touch of extra weight without jumping to a full bold face — the
-   serif stack here has no true medium weight, so any font-weight above ~500
-   snaps straight to bold instead of easing into it. (This used to be a
-   -webkit-text-stroke outline, but on Windows/Chromium that outline path
-   can misalign with the anti-aliased fill on thin horizontal strokes,
-   making crossbars look cracked/doubled. Offsetting the fill sideways
-   instead only thickens vertical strokes, leaving horizontals untouched.) */
-.translation-line--highlight .translation-text {
-  color: var(--translation-color);
+/* Bold pick from the chip's own "..." popup (see toggleTranslationBold) --
+   independent of text color below. A pair of horizontally-offset
+   text-shadows re-render the glyph fill itself to add just a touch of
+   extra weight without jumping to a full bold face — the serif stack here
+   has no true medium weight, so any font-weight above ~500 snaps straight
+   to bold instead of easing into it. (This used to be a -webkit-text-
+   stroke outline, but on Windows/Chromium that outline path can misalign
+   with the anti-aliased fill on thin horizontal strokes, making crossbars
+   look cracked/doubled. Offsetting the fill sideways instead only thickens
+   vertical strokes, leaving horizontals untouched.) */
+.translation-line--bold .translation-text {
   text-shadow: 0.25px 0 currentColor, -0.25px 0 currentColor;
 }
 
+/* Text color pick from the same popup (see setTranslationTextColor) --
+   "black" (no class at all) is .translation-text's own base color already;
+   "own" renders in that version's own color instead of the default neutral
+   ink, and "gray" renders muted, in either verse layout. */
+.translation-line--color-own .translation-text {
+  color: var(--translation-color);
+}
+
 /* Same brightening as .translation-label/.translation-name (see their own
-   dark-theme rules) -- the highlighted body text uses this same
+   dark-theme rules) -- "own"-colored body text uses this same
    too-dark-on-dark-bg translation color. */
-[data-theme="dark"] .translation-line--highlight .translation-text {
+[data-theme="dark"] .translation-line--color-own .translation-text {
   filter: brightness(1.5) saturate(1.08);
+}
+
+.translation-line--color-gray .translation-text {
+  color: var(--muted);
 }
 
 /* Move-target picking mode (see enterMovePicking/exitMovePicking in app.js):
@@ -7881,12 +7900,45 @@ body * {
   color: #b23b3b;
 }
 
-/* .chip-mode-popup's own three options (see showChipModePopup in app.js) --
-   same 26px button / 18px swatch as .highlight-manage-colors' own compact
-   picker above, just a fixed highlight/normal/hidden row instead of a
-   six-color one, and never more than one popup's worth of these on screen
-   at a time (that popup is reused across every chip), so plain classes
-   instead of a per-translation modifier are enough here. */
+/* .chip-mode-popup's own B toggle (see toggleTranslationBold in app.js) --
+   same 26px box as the three swatch buttons beside it, but a rounded
+   square rather than a circle so it reads as a control, not a color pick.
+   "Selected" (bold is on for this chip) reuses the exact same green
+   border/background/ink convention as .panel-reading-mode-toggle.selected,
+   including its own dark-theme values (see that rule's own colors). */
+.chip-mode-bold {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface-strong);
+  color: var(--ink);
+  font-family: Georgia, "Noto Serif KR", serif;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.chip-mode-bold:hover {
+  border-color: var(--line-strong);
+  background: var(--hover-bg);
+}
+
+.chip-mode-bold.selected,
+.chip-mode-bold.selected:hover {
+  border-color: var(--accent-border-light);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* The popup's own three text-color swatches (see showChipModePopup/
+   applyChipModeColor in app.js) -- same 26px button / 18px swatch as
+   .highlight-manage-colors' own compact picker above, and never more than
+   one popup's worth of these on screen at a time (that popup is reused
+   across every chip), so plain classes instead of a per-translation
+   modifier are enough here. */
 .chip-mode-option {
   display: grid;
   place-items: center;
@@ -7909,56 +7961,25 @@ body * {
   border: 1px solid rgba(37, 35, 31, 0.18);
 }
 
-/* That translation's own highlight color (see showChipModePopup, which sets
-   this from TRANSLATION_COLORS) -- the same full-strength color
-   .translation-line--highlight renders its body text in. */
-.chip-mode-swatch--highlight {
-  background: var(--chip-mode-highlight-color, var(--ink));
+/* That translation's own color (see showChipModePopup, which sets this
+   from TRANSLATION_COLORS) -- the same full-strength color
+   .translation-line--color-own renders its body text in. */
+.chip-mode-swatch--own {
+  background: var(--chip-mode-own-color, var(--ink));
 }
 
-/* Same brightening as .translation-line--highlight's own dark-theme rule --
+/* Same brightening as .translation-line--color-own's own dark-theme rule --
    this swatch paints the same too-dark-on-dark-bg translation color. */
-[data-theme="dark"] .chip-mode-swatch--highlight {
+[data-theme="dark"] .chip-mode-swatch--own {
   filter: brightness(1.5) saturate(1.08);
 }
 
-/* Plain --ink normal swatch, same for every chip type including HEB/GRK
-   (see showChipModePopup -- their popup just hides the highlight option
-   above, leaving this and the hidden swatch below). */
-.chip-mode-swatch--normal {
+.chip-mode-swatch--black {
   background: var(--ink);
 }
 
-/* Hidden: an empty, dashed-outline circle with a small x inside -- same
-   "nothing here, deliberately" reading for both a real translation's own
-   dim state and HEB/GRK's own hide toggle, since both drop the row from
-   the panel entirely (see buildTranslationLinesInto). */
-.chip-mode-swatch--hidden {
-  position: relative;
-  border-style: dashed;
-  border-color: var(--muted-soft);
-  background: none;
-}
-
-.chip-mode-swatch--hidden::before,
-.chip-mode-swatch--hidden::after {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 8px;
-  height: 1.2px;
-  border-radius: 999px;
-  background: var(--muted-soft);
-  content: "";
-  transform-origin: center;
-}
-
-.chip-mode-swatch--hidden::before {
-  transform: translate(-50%, -50%) rotate(45deg);
-}
-
-.chip-mode-swatch--hidden::after {
-  transform: translate(-50%, -50%) rotate(-45deg);
+.chip-mode-swatch--gray {
+  background: var(--muted);
 }
 
 /* Floating read-only note viewer (see showNoteViewPopup in app.js) --
