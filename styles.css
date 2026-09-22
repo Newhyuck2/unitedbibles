@@ -7588,6 +7588,15 @@ body * {
   border-top: 1px solid var(--line);
 }
 
+/* The "..." popup's own translation-name toggle (see
+   toggleTranslationNamesShown in app.js) -- this row exists purely to
+   carry those same names in columns mode, so turning them off just hides
+   the whole row (divider and all) instead of leaving an empty gap with
+   nothing in it. */
+.bible-panel[data-verse-layout="columns"] .panel-column-header.panel-column-header--names-hidden {
+  display: none;
+}
+
 /* Matches .verse-group's own padding-left at this breakpoint (39px, not
    the wider layout's 31px) -- see the shared comment above. */
 @media (max-width: 820px), (max-width: 1366px) and (any-pointer: coarse) {

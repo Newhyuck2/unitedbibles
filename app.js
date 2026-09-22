@@ -6158,6 +6158,11 @@ function renderPanelBody(panelState) {
       && !panelState.dimmedTranslations.includes(translation)
     ));
     elements.panel.style.setProperty("--translation-count", String(Math.max(visibleTranslations.length, 1)));
+    // Same "..." popup toggle that hides each verse's own inline label in
+    // stacked mode (see translation-line--name-hidden) hides this whole
+    // row in columns mode instead -- it exists purely to carry those same
+    // names, so there's nothing left to leave behind once they're off.
+    elements.columnHeader.classList.toggle("panel-column-header--names-hidden", !panelState.translationNamesShown);
     elements.columnHeader.replaceChildren(
       ...visibleTranslations.map((translation) => {
         const heading = document.createElement("span");
