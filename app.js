@@ -7139,6 +7139,18 @@ function positionChipModePopup() {
   chipModePopup.style.top = `${top}px`;
 }
 
+// Same "selected = soft accent halo" look as .highlight-color-option's own
+// (see showHighlightManagePopup's sibling styles) -- without this, once a
+// color pick stopped closing the popup (see applyChipModeColor's own
+// comment), there was nothing left showing *which* of the three was
+// actually active for this chip.
+function syncChipModeColorSelection(panelState, id) {
+  const color = panelState.translationTextColors[id] ?? "black";
+  for (const option of chipModePopup.querySelectorAll(".chip-mode-option")) {
+    option.classList.toggle("selected", option.dataset.color === color);
+  }
+}
+
 // Opened by a real translation chip's own "..." button (see
 // renderTranslationChipList -- STR/TSK/HEB/GRK's own button is disabled
 // outright, so this is never reached for them). Syncs the B button's own
@@ -7150,6 +7162,7 @@ function showChipModePopup(chipEl, panelState, id) {
   const isBold = panelState.boldTranslations.includes(id);
   chipModeBoldButton.classList.toggle("selected", isBold);
   chipModeBoldButton.setAttribute("aria-pressed", String(isBold));
+  syncChipModeColorSelection(panelState, id);
   chipModePopup.style.setProperty("--chip-mode-own-color", TRANSLATION_COLORS[id]);
   chipModeAnchorRect = chipEl.getBoundingClientRect();
   chipModePanelEl = chipEl.closest(".bible-panel");
@@ -7191,6 +7204,7 @@ function applyChipModeColor(color) {
   if (!chipModeTarget) return;
   const { panelState, id } = chipModeTarget;
   setTranslationTextColor(panelState, id, color);
+  syncChipModeColorSelection(panelState, id);
   saveState();
   renderPanelBody(panelState);
   refreshTskCrossColumnTranslations(panelState);

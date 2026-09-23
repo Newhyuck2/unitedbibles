@@ -8198,6 +8198,14 @@ body * {
   background: var(--hover-bg-strong);
 }
 
+/* Same soft accent halo as .highlight-color-option.selected -- without
+   this, once a color pick stopped closing the popup immediately (see
+   applyChipModeColor in app.js), there was no way to tell which of the
+   three was actually applied to this chip just by looking. */
+.chip-mode-option.selected {
+  background: var(--accent-soft);
+}
+
 .chip-mode-swatch {
   width: 18px;
   height: 18px;
