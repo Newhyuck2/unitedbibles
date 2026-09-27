@@ -55,6 +55,10 @@ const ORIGINAL_LANGUAGE_META = {
   GRK: { id: "GRK", label: "GRK", name: "Greek Interlinear", testament: "new" },
 };
 const ORIGINAL_LANGUAGE_IDS = Object.keys(ORIGINAL_LANGUAGE_META);
+// The two lines of an interlinear word block (see buildInterlinearWordRow)
+// that HEB/GRK's own chip mode popup can hide -- the original-language word
+// itself between them always stays. See originalLanguageHiddenParts.
+const ORIGINAL_LANGUAGE_PARTS = ["translit", "gloss"];
 
 // STR/TSK are "study tool" slots, not translations: picking one shows that
 // tool's own content (Strong's dictionary, TSK cross-references) embedded in
@@ -239,20 +243,26 @@ const bookmarkManageRemoveButton = document.querySelector("#bookmark-manage-remo
 let bookmarkManageTarget = null;
 let bookmarkManageAnchorRect = null;
 let bookmarkManagePanelEl = null;
-// Small popup opened from a real translation chip's own "..." button (see
-// showChipModePopup -- STR/TSK/HEB/GRK's own button is disabled outright,
-// so this never opens for them) -- same floating-popup chrome as
+// Small popup opened from a real translation or HEB/GRK chip's own "..."
+// button (see showChipModePopup -- STR/TSK/NOTE's own button is disabled
+// outright, so this never opens for them) -- same floating-popup chrome as
 // highlightManagePopup/bookmarkManagePopup above, just anchored below the
 // chip instead, and offering a bold toggle plus a direct own-color/black/
-// gray text-color pick instead of a color/remove pair.
+// gray text-color pick instead of a color/remove pair. HEB/GRK also get
+// chipModeParts' own two pronunciation/gloss show-hide dots after those.
 const chipModePopup = document.querySelector("#chip-mode-popup");
 const chipModeBoldButton = document.querySelector("#chip-mode-bold");
+const chipModeParts = document.querySelector("#chip-mode-parts");
 // The panel/id a still-open chip mode popup is currently pointed at -- null
 // whenever it's hidden, since there's nothing for its own option buttons to
 // act on then.
 let chipModeTarget = null;
 let chipModeAnchorRect = null;
 let chipModePanelEl = null;
+// Nonzero while a pronunciation/gloss toggle's own re-render is still
+// settling (see toggleChipModePart) -- the chip mode popup's scroll-close
+// listener skips those scrolls, since the popup itself caused them.
+let chipModeScrollCloseSuppressed = 0;
 // ---- Note dialog -- same shape as the highlight dialog above (range
 // row, version picker, showModal/populate/close), minus the color picker
 // (see #note-dialog in index.html: a free-text textarea sits in that
@@ -439,6 +449,7 @@ function freshState() {
       translationTextColors: {},
       dimmedTranslations: [...DEFAULT_DIMMED_TRANSLATIONS],
       originalLanguageHidden: false,
+      originalLanguageHiddenParts: [],
       activeStudyTool: null,
       readingMode: false,
       translationNamesShown: true,
@@ -594,6 +605,12 @@ function sanitizeState() {
         ? panel.activeStudyTool
         : null;
       const originalLanguageHidden = Boolean(panel.originalLanguageHidden);
+      // Dropped along with the HEB/GRK chip itself, same as bold/text color
+      // above are for whatever's no longer enabled (see applyTranslationOrder).
+      const originalLanguageHiddenParts = activeOriginalLanguageId(enabledTranslations)
+          && Array.isArray(panel.originalLanguageHiddenParts)
+        ? ORIGINAL_LANGUAGE_PARTS.filter((part) => panel.originalLanguageHiddenParts.includes(part))
+        : [];
       const readingMode = Boolean(panel.readingMode);
       const linkGroupId = Number.isInteger(panel.linkGroupId) && panel.linkGroupId >= 0 ? panel.linkGroupId : null;
       // Defaults true (shown) for both a fresh panel and an older save from
@@ -614,6 +631,7 @@ function sanitizeState() {
         translationTextColors,
         dimmedTranslations,
         originalLanguageHidden,
+        originalLanguageHiddenParts,
         activeStudyTool,
         readingMode,
         translationNamesShown,
@@ -662,6 +680,7 @@ function saveState() {
         translationTextColors,
         dimmedTranslations,
         originalLanguageHidden,
+        originalLanguageHiddenParts,
         activeStudyTool,
         readingMode,
         translationNamesShown,
@@ -679,6 +698,7 @@ function saveState() {
         translationTextColors,
         dimmedTranslations,
         originalLanguageHidden,
+        originalLanguageHiddenParts,
         activeStudyTool,
         readingMode,
         translationNamesShown,
@@ -1478,11 +1498,12 @@ function toggleTranslationChip(panelState, id, { isNewlyAdded = false } = {}) {
     return;
   }
 
-  // HEB/GRK's own chip never shows a real translation's own bold/color
-  // popup (see showChipModePopup) -- the "selection mode" some earlier
-  // revisions of this gave the chip itself turned out to be about
-  // individual .interlinear-word blocks in the rendered text instead, not
-  // this chip (see .interlinear-word.selected/selectInterlinearWord).
+  // HEB/GRK's own chip body has no "selection mode" of its own -- the one
+  // some earlier revisions of this gave the chip itself turned out to be
+  // about individual .interlinear-word blocks in the rendered text instead,
+  // not this chip (see .interlinear-word.selected/selectInterlinearWord);
+  // its bold/color/pronunciation/gloss picks all live behind its own "..."
+  // button instead (see showChipModePopup), never this body click.
   // Clicking it still dims STR/TSK specifically (only those, not any other
   // real translation) and exits whichever study tool was active, every
   // time. It does have its own separate on/off toggle, though
@@ -1557,6 +1578,19 @@ function setTranslationTextColor(panelState, id, color) {
   panelState.translationTextColors = colors;
 }
 
+// HEB/GRK's own chip mode popup's two extra dots (see chipModeParts) -- each
+// an independent show/hide toggle for one line of every interlinear word
+// block (see ORIGINAL_LANGUAGE_PARTS and buildTranslationLinesInto's own
+// translit-/gloss-hidden classes). Per panel rather than per id, same as
+// originalLanguageHidden: only one of HEB/GRK is ever enabled at a time,
+// and it swaps for the other as the panel crosses testaments (see
+// syncOriginalLanguageForTestament) without this needing to follow it.
+function toggleOriginalLanguagePart(panelState, part) {
+  const hidden = new Set(panelState.originalLanguageHiddenParts ?? []);
+  if (hidden.has(part)) hidden.delete(part); else hidden.add(part);
+  panelState.originalLanguageHiddenParts = ORIGINAL_LANGUAGE_PARTS.filter((item) => hidden.has(item));
+}
+
 // Shared by both columns' setOrder (see createPanelElement): keeps the
 // active-study-tool dimming in sync whenever the enabled set itself
 // changes, not just on a chip click -- adding a new translation while a
@@ -1607,6 +1641,9 @@ function applyTranslationOrder(panelState, order) {
   panelState.translationTextColors = Object.fromEntries(
     Object.entries(panelState.translationTextColors).filter(([id]) => order.includes(id)),
   );
+  // Same for HEB/GRK's own pronunciation/gloss picks (see
+  // toggleOriginalLanguagePart) once neither is enabled anymore.
+  if (!activeOriginalLanguageId(order)) panelState.originalLanguageHiddenParts = [];
 }
 
 function renderTranslationChipList({ list, order, getEmphasis, onToggleActive, onOpenModePopup, onRemove, onMove }) {
@@ -1633,11 +1670,14 @@ function renderTranslationChipList({ list, order, getEmphasis, onToggleActive, o
     // passing the chip itself as setupTouchReorder's own handle below gives
     // touch the same), so this corner instead becomes a "..." button that
     // opens the bold/color popup (see showChipModePopup) for a real
-    // translation -- STR/TSK/HEB/GRK carry no bold/color of their own, so
-    // theirs is disabled outright (see isIndexableTranslationId), not just
-    // inert, matching the explicit "make it truly unclickable" request this
-    // came from. Every other caller (copy/search/TSK/highlight/note/
-    // bookmark dialogs, none of which carry the mode-popup concept at all)
+    // translation or HEB/GRK (whose bold/color style just the original-
+    // language word of each interlinear block, plus its own pronunciation/
+    // gloss show-hide dots -- see chipModeParts) -- STR/TSK/NOTE carry no
+    // bold/color of their own, so theirs is disabled outright (see
+    // isIndexableTranslationId), not just inert, matching the explicit
+    // "make it truly unclickable" request this came from. Every other
+    // caller (copy/search/TSK/highlight/note/bookmark dialogs, none of
+    // which carry the mode-popup concept at all)
     // shows the exact same dots -- per explicit request, purely for visual
     // consistency with the panel's own chips -- but keeps the plain
     // decorative handle and its own handle-gated touch-drag underneath
@@ -1656,7 +1696,7 @@ function renderTranslationChipList({ list, order, getEmphasis, onToggleActive, o
     glyph.textContent = "⠇";
     let handle;
     if (onOpenModePopup) {
-      const hasModePopup = isIndexableTranslationId(id);
+      const hasModePopup = isIndexableTranslationId(id) || ORIGINAL_LANGUAGE_IDS.includes(id);
       handle = document.createElement("button");
       handle.type = "button";
       handle.className = "chip-mode-toggle";
@@ -2444,6 +2484,7 @@ function setupReadingTranslationPicker(toggle, menu, getPanelState, { afterPick 
       panelState.enabledTranslations = [id];
       panelState.boldTranslations = [];
       panelState.translationTextColors = {};
+      panelState.originalLanguageHiddenParts = [];
       panelState.dimmedTranslations = [];
       saveState();
       renderPanelBody(panelState);
@@ -3961,6 +4002,7 @@ function addPanel({ suppressScroll = false } = {}) {
     translationTextColors: {},
     dimmedTranslations: [],
     originalLanguageHidden: false,
+    originalLanguageHiddenParts: [],
     activeStudyTool: null,
     readingMode: false,
     translationNamesShown: source?.translationNamesShown ?? true,
@@ -4869,9 +4911,11 @@ function rerenderPanelsPreservingVerseAnchor(book, chapter, verseNumber) {
 // Hebrew/Greek is active, swap it for the other rather than leaving a
 // mismatched language enabled. Shared by both columns (see
 // syncOriginalLanguageForTestament below). boldTranslations/
-// translationTextColors never actually carry a HEB/GRK entry in practice
-// (their own mode popup is disabled -- see renderTranslationChipList) but
-// are remapped too regardless, same defensive spirit as dimmedKey.
+// translationTextColors are remapped along with it, so a bold/color picked
+// from HEB/GRK's own mode popup (see showChipModePopup) carries straight
+// over to the other language rather than silently resetting.
+// originalLanguageHiddenParts needs no remap at all -- it's per panel, not
+// per id (see toggleOriginalLanguagePart).
 function syncOriginalLanguageForTestamentSide(panelState, enabledKey, boldKey, dimmedKey) {
   const enabled = panelState[enabledKey];
   const active = activeOriginalLanguageId(enabled);
@@ -4885,6 +4929,10 @@ function syncOriginalLanguageForTestamentSide(panelState, enabledKey, boldKey, d
     const { [active]: color, ...rest } = panelState.translationTextColors;
     panelState.translationTextColors = { ...rest, [desired]: color };
   }
+  // A chip mode popup still open on the id just swapped out (e.g. opened
+  // while the next chapter was still loading, so no scroll ever closed it)
+  // would otherwise keep writing its B/color picks to that stale id instead.
+  if (chipModeTarget?.panelState === panelState && chipModeTarget.id === active) hideChipModePopup();
 }
 
 function syncOriginalLanguageForTestament(panelState) {
@@ -4954,8 +5002,11 @@ function noteKey(book, chapter, verse) {
 // case its row is skipped entirely, same as STR/TSK below: the toggle's
 // whole point is reading as if the chip weren't there, not just fading its
 // text like a real translation's own dim state does. Bold/color (see
-// toggleTranslationBold/setTranslationTextColor) never apply to HEB/GRK's
-// own interlinear row -- there's no plain .translation-text there to style.
+// toggleTranslationBold/setTranslationTextColor) use the exact same line
+// classes on HEB/GRK's own interlinear row, but style only each word
+// block's .interlinear-original there (see styles.css), never its
+// pronunciation/gloss lines -- those two can each be hidden outright
+// instead (see toggleOriginalLanguagePart).
 function buildTranslationLinesInto(pane, panelState, verseNumber, texts, list, boldList, dimmedList, originalLanguageHidden, textColors) {
   // STR/TSK chips never carry per-verse text of their own -- they only
   // ever render via getStudyToolInstance (see renderPanelBody), so they're
@@ -4985,6 +5036,11 @@ function buildTranslationLinesInto(pane, panelState, verseNumber, texts, list, b
     const textColor = textColors[translation] ?? "black";
     line.classList.toggle("translation-line--color-own", textColor === "own");
     line.classList.toggle("translation-line--color-gray", textColor === "gray");
+    if (isOriginalLanguage) {
+      const hiddenParts = panelState.originalLanguageHiddenParts ?? [];
+      line.classList.toggle("translation-line--translit-hidden", hiddenParts.includes("translit"));
+      line.classList.toggle("translation-line--gloss-hidden", hiddenParts.includes("gloss"));
+    }
     // Driven purely by this panel's own translation-name toggle (see the
     // "..." popup menu) -- no longer tied to how many translations are
     // actually enabled, so the label stays visible even with just one
@@ -7151,18 +7207,35 @@ function syncChipModeColorSelection(panelState, id) {
   }
 }
 
-// Opened by a real translation chip's own "..." button (see
-// renderTranslationChipList -- STR/TSK/HEB/GRK's own button is disabled
+// HEB/GRK's own two extra dots (see chipModeParts): filled while that line
+// is showing, hollow (ring only) once it's hidden -- see
+// .chip-mode-part.selected in styles.css.
+function syncChipModePartSelection(panelState) {
+  const hiddenParts = panelState.originalLanguageHiddenParts ?? [];
+  for (const button of chipModeParts.querySelectorAll(".chip-mode-part")) {
+    const shown = !hiddenParts.includes(button.dataset.part);
+    button.classList.toggle("selected", shown);
+    button.setAttribute("aria-pressed", String(shown));
+  }
+}
+
+// Opened by a real translation or HEB/GRK chip's own "..." button (see
+// renderTranslationChipList -- STR/TSK/NOTE's own button is disabled
 // outright, so this is never reached for them). Syncs the B button's own
 // selected look to whatever this translation's current bold state already
 // is, since the popup is a shared singleton reused across every chip.
 // --chip-mode-own-color is read by .chip-mode-swatch--own (see styles.css).
+// chipModeParts is shown only for HEB/GRK -- set before positioning below,
+// since it changes how wide the popup is.
 function showChipModePopup(chipEl, panelState, id) {
   chipModeTarget = { panelState, id };
   const isBold = panelState.boldTranslations.includes(id);
   chipModeBoldButton.classList.toggle("selected", isBold);
   chipModeBoldButton.setAttribute("aria-pressed", String(isBold));
   syncChipModeColorSelection(panelState, id);
+  const isOriginalLanguage = ORIGINAL_LANGUAGE_IDS.includes(id);
+  chipModeParts.hidden = !isOriginalLanguage;
+  if (isOriginalLanguage) syncChipModePartSelection(panelState);
   chipModePopup.style.setProperty("--chip-mode-own-color", TRANSLATION_COLORS[id]);
   chipModeAnchorRect = chipEl.getBoundingClientRect();
   chipModePanelEl = chipEl.closest(".bible-panel");
@@ -7208,6 +7281,33 @@ function applyChipModeColor(color) {
   saveState();
   renderPanelBody(panelState);
   refreshTskCrossColumnTranslations(panelState);
+}
+
+// One of HEB/GRK's own pronunciation/gloss dots (see
+// toggleOriginalLanguagePart) -- leaves the popup open, same as the B
+// button and swatches above. No TSK refresh needed: its cross-reference
+// list never shows HEB/GRK at all (see embeddedDefaultTranslations).
+// Unlike B/color, this actually changes every verse's own height, so
+// renderPanelBody's anchor restore (and a linked group's row-height sync
+// one frame later -- see scheduleGroupRowHeightSync) scrolls .panel-content
+// whenever it isn't already at the very top; left alone, that scroll
+// would reach the popup's own scroll-close listener and shut it right
+// after the click. Suppressed for two frames -- scroll events for a
+// frame's own scrollTop changes are dispatched before that next frame's
+// rAF callbacks, so the second one only runs once both have gone by -- and
+// counted rather than a plain flag, so a quick second click can't have
+// the first one's release end its own window early.
+function toggleChipModePart(part) {
+  if (!chipModeTarget) return;
+  const { panelState } = chipModeTarget;
+  toggleOriginalLanguagePart(panelState, part);
+  syncChipModePartSelection(panelState);
+  saveState();
+  chipModeScrollCloseSuppressed += 1;
+  renderPanelBody(panelState);
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    chipModeScrollCloseSuppressed -= 1;
+  }));
 }
 
 // One per noted verse (not per translation -- see noteKey), sized to match
@@ -11463,6 +11563,9 @@ chipModeBoldButton.addEventListener("click", toggleChipModeBold);
 for (const option of chipModePopup.querySelectorAll(".chip-mode-option")) {
   option.addEventListener("click", () => applyChipModeColor(option.dataset.color));
 }
+for (const button of chipModeParts.querySelectorAll(".chip-mode-part")) {
+  button.addEventListener("click", () => toggleChipModePart(button.dataset.part));
+}
 document.addEventListener("pointerdown", (event) => {
   if (chipModePopup.hidden) return;
   if (chipModePopup.contains(event.target)) return;
@@ -11470,7 +11573,7 @@ document.addEventListener("pointerdown", (event) => {
   shieldOutsidePress(event);
 });
 document.addEventListener("scroll", () => {
-  if (!chipModePopup.hidden) hideChipModePopup();
+  if (!chipModePopup.hidden && !chipModeScrollCloseSuppressed) hideChipModePopup();
 }, true);
 closeNoteButton.addEventListener("click", closeNoteDialog);
 confirmNoteButton.addEventListener("click", applyNote);

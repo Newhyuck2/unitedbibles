@@ -490,7 +490,7 @@ p {
   color: var(--ink);
 }
 
-/* STR/TSK/HEB/GRK have no bold/color of their own -- see
+/* STR/TSK/NOTE have no bold/color of their own -- see
    renderTranslationChipList's own hasModePopup check in app.js -- so their
    dots are disabled outright (not just visually inert) rather than opening
    nothing on a tap. Per explicit request this stays visually identical to
@@ -924,6 +924,17 @@ input:focus {
   color: var(--emphasis-orange);
   font-size: calc(var(--verse-font-size) - 2px);
   overflow-wrap: anywhere;
+}
+
+/* Pronunciation/gloss lines hidden from HEB/GRK's own chip mode popup
+   dots (see toggleOriginalLanguagePart in app.js) -- dropped from layout
+   outright rather than just made invisible, so each word block (a column flex box sized by its own
+   content) shrinks to just what's left, while .interlinear-word's own
+   padding and .interlinear-word-row's own gap -- the spacing *between*
+   blocks -- stay exactly as they were. */
+.translation-line--translit-hidden .interlinear-translit,
+.translation-line--gloss-hidden .interlinear-gloss {
+  display: none;
 }
 
 .chapter-heading {
@@ -7502,26 +7513,33 @@ body * {
    with the anti-aliased fill on thin horizontal strokes, making crossbars
    look cracked/doubled. Offsetting the fill sideways instead only thickens
    vertical strokes, leaving horizontals untouched.) */
-.translation-line--bold .translation-text {
+.translation-line--bold .translation-text,
+.translation-line--bold .interlinear-original {
   text-shadow: 0.25px 0 currentColor, -0.25px 0 currentColor;
 }
 
 /* Text color pick from the same popup (see setTranslationTextColor) --
    "black" (no class at all) is .translation-text's own base color already;
    "own" renders in that version's own color instead of the default neutral
-   ink, and "gray" renders muted, in either verse layout. */
-.translation-line--color-own .translation-text {
+   ink, and "gray" renders muted, in either verse layout. On HEB/GRK's own
+   interlinear row (bold above too) only each word block's original-
+   language word takes the pick -- its pronunciation/gloss lines keep their
+   own fixed blue/orange (see .interlinear-translit/.interlinear-gloss). */
+.translation-line--color-own .translation-text,
+.translation-line--color-own .interlinear-original {
   color: var(--translation-color);
 }
 
 /* Same brightening as .translation-label/.translation-name (see their own
    dark-theme rules) -- "own"-colored body text uses this same
    too-dark-on-dark-bg translation color. */
-[data-theme="dark"] .translation-line--color-own .translation-text {
+[data-theme="dark"] .translation-line--color-own .translation-text,
+[data-theme="dark"] .translation-line--color-own .interlinear-original {
   filter: brightness(1.5) saturate(1.08);
 }
 
-.translation-line--color-gray .translation-text {
+.translation-line--color-gray .translation-text,
+.translation-line--color-gray .interlinear-original {
   color: var(--translation-gray-text);
 }
 
@@ -8232,6 +8250,55 @@ body * {
 
 .chip-mode-swatch--gray {
   background: var(--translation-gray-text);
+}
+
+/* HEB/GRK only (see showChipModePopup in app.js): one show/hide toggle
+   each for the interlinear row's own pronunciation and English gloss
+   lines (see toggleOriginalLanguagePart), right after the three swatches
+   above. A bit smaller than those so they read as a separate, lighter
+   control rather than a fourth/fifth text-color pick, and painted in the
+   exact same token as the line each one hides (.interlinear-translit/
+   .interlinear-gloss), in either theme. Filled (.selected) while that
+   line is showing; ring only once it's hidden -- the border is there in
+   both states so the dot's own size never shifts between them. */
+.chip-mode-parts {
+  display: flex;
+  align-items: center;
+}
+
+.chip-mode-part {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+}
+
+.chip-mode-part:hover {
+  background: var(--hover-bg-strong);
+}
+
+.chip-mode-part-dot {
+  width: 14px;
+  height: 14px;
+  border: 1.5px solid var(--chip-mode-part-color);
+  border-radius: 50%;
+  background: transparent;
+}
+
+.chip-mode-part.selected .chip-mode-part-dot {
+  background: var(--chip-mode-part-color);
+}
+
+.chip-mode-part--translit {
+  --chip-mode-part-color: var(--link-blue);
+}
+
+.chip-mode-part--gloss {
+  --chip-mode-part-color: var(--emphasis-orange);
 }
 
 /* Floating read-only note viewer (see showNoteViewPopup in app.js) --
