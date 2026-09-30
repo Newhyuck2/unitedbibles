@@ -937,6 +937,19 @@ input:focus {
   display: none;
 }
 
+/* A Hebrew row's dir="rtl" (see buildInterlinearWordRow) is for the
+   Hebrew word order, but its Latin-script pronunciation/gloss lines
+   inherit that direction too -- their edge punctuation then lands on the
+   wrong side ("'E.lo.Him" drawn as "E.lo.Him'", "[the] deep" as
+   "deep [the]"). Isolated left-to-right instead; text-align (physical
+   "right" for Hebrew blocks, see .interlinear-word[lang="he"]) is
+   unaffected. */
+.interlinear-word-row[dir="rtl"] .interlinear-translit,
+.interlinear-word-row[dir="rtl"] .interlinear-gloss {
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+
 .chapter-heading {
   padding: 24px 2px 18px;
 }

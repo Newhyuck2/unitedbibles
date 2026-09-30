@@ -9634,9 +9634,14 @@ function expandHebrewMorphology(code) {
 // dropping every morpheme's own language letter but the first (STEPBible's
 // own documented convention) -- expandStepBibleHebrewMorphology re-fills it
 // from the previous morpheme before decoding each one.
+// The rarer stems (Hebrew D/O/c/u, Aramaic i) cover only a handful of
+// words, all of them straight from STEPBible's own TEHMC code list.
 const HEBREW_STEM_LETTER_NAMES = {
-  H: { q: "Qal", N: "Niphal", p: "Piel", P: "Pual", h: "Hiphil", H: "Hophal", t: "Hithpael", v: "Hishtaphel" },
-  A: { a: "Aphel", e: "Shaphel", h: "Haphel", H: "Hophal", M: "Hitpaal", P: "Hitpeel", p: "Pael", Q: "Peil", q: "Peal", u: "Hitpael", v: "Ishtaphel" },
+  H: {
+    q: "Qal", N: "Niphal", p: "Piel", P: "Pual", h: "Hiphil", H: "Hophal", t: "Hithpael", v: "Hishtaphel",
+    D: "Nithpael", O: "Polal", c: "Tiphil", u: "Hothpaal",
+  },
+  A: { a: "Aphel", e: "Shaphel", h: "Haphel", H: "Hophal", i: "Hitpeel", M: "Hitpaal", P: "Hitpeel", p: "Pael", Q: "Peil", q: "Peal", u: "Hitpael", v: "Ishtaphel" },
 };
 // Finite-form letters only -- Participle/Participle-passive ('r'/'s') and
 // Infinitive ('a'=Absolute/'c'=Construct, disambiguated by there being no

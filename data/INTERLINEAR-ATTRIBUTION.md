@@ -1,11 +1,40 @@
 # Interlinear original-language data
 
-`interlinear-stepbible.db` is an offline SQLite database of the Hebrew/Aramaic Old Testament and Greek New Testament word-level interlinear data.
+`data/interlinear/<book>/<chapter>.json` holds the word-by-word Hebrew/Aramaic Old Testament and Greek New Testament interlinear shown by the app's HEB/GRK versions. Each token is `[original, transliteration, English gloss, Strong's code, morphology]`.
 
-For every token it preserves the original spelling (including attached punctuation), transliteration, English gloss, Strong's/extended Strong's code, morphology, and the upstream contextual fields. `verses` retains the upstream punctuated verse line.
+The original-language text (the first field) follows the text shown by Bible Hub's interlinear (https://biblehub.com/interlinear/). Transliteration, gloss, Strong's code and morphology come from STEP Bible wherever the word lines up.
 
-Source: [STEP Bible Data](https://github.com/STEPBible/STEPBible-Data), datasets **TAHOT** and **TAGNT**, revision recorded inside the database.
+## Old Testament (HEB)
 
-License: [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Attribution required: **STEP Bible (www.STEPBible.org), based on work at Tyndale House, Cambridge.**
+- **Hebrew/Aramaic text:** Westminster Leningrad Codex (WLC), taken from the Berean Standard Bible translation tables (`bsb_tables.tsv`, https://bereanbible.com). **Public domain.**
+  - Ketiv forms are shown as written, with their pointing.
+  - Paragraph markers (פ / ס) stay attached to the word they follow, as Bible Hub shows them.
+- **Transliteration, gloss, Strong's code, morphology:** STEP Bible Data, dataset **TAHOT** (https://github.com/STEPBible/STEPBible-Data). For Ketiv words, TAHOT's Ketiv (K=) fields are used.
+  - License: [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Attribution required: **STEP Bible (www.STEPBible.org), based on work at Tyndale House, Cambridge.**
 
-Rebuild with `python scripts/import_interlinear_stepbible.py` after cloning the upstream source into `data/_sources/stepbible`.
+## New Testament (GRK)
+
+- **Greek base text:** Eberhard Nestle, *Η ΚΑΙΝΗ ΔΙΑΘΗΚΗ* (British and Foreign Bible Society, 1904). This is the base text created by Diego Renato dos Santos (https://sites.google.com/site/nestle1904/), with morphology, lemmas and Strong's numbers by Ulrik Sandborg-Petersen, from https://github.com/biblicalhumanities/Nestle1904. The text is public domain and the morphology is **CC0**.
+- **Variant readings:** shown inline in Bible Hub's notation:
+  - {TR} Scrivener's Textus Receptus
+  - ⧼RP⧽ Robinson-Pierpont Byzantine
+  - (WH) Westcott-Hort
+  - 〈NE〉 Nestle only
+  - [NA] Nestle-Aland 27
+  - ‹SBL› SBLGNT
+  - `*` / `**` a Nestle word replaced by the reading NA and SBL agree on
+  - « » ⇔ a word-order variant
+
+  The readings are derived from the per-word edition tags in STEP Bible Data, dataset **TAGNT** (CC BY 4.0, attribution as above).
+- **Transliteration, gloss, Strong's code, morphology:** TAGNT. Where TAGNT has no matching word:
+  - glosses come from the Berean Interlinear Bible (public domain), via biblicalhumanities/Nestle1904;
+  - Strong's numbers and morphology come from the Nestle 1904 data.
+
+## Rebuilding
+
+Place the sources under `data/_sources/` (gitignored):
+- `stepbible/` — the TAHOT and TAGNT files
+- `berean/bsb_tables.tsv`
+- `nestle1904/` — `morph/Nestle1904.csv` and `glosses/berean-interlinear-glosses.xml`
+
+Then run `python scripts/build_interlinear_hebrew.py` and `python scripts/build_interlinear_greek.py`.
