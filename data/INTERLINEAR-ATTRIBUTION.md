@@ -30,6 +30,13 @@ The original-language text (the first field) follows the text shown by Bible Hub
   - glosses come from the Berean Interlinear Bible (public domain), via biblicalhumanities/Nestle1904;
   - Strong's numbers and morphology come from the Nestle 1904 data.
 
+Where Bible Hub's interlinear presents the Greek differently from these sources, the app follows Bible Hub's presentation, except for Bible Hub's own typos. This covers:
+- capitalization, spelling and accents from Bible Hub's copy of Nestle 1904
+- word division and compound marks (‿ ¦)
+- the variant marks and bracketed critical-edition words in about 90 verses
+
+The words themselves remain those of the public-domain editions above.
+
 ## Display font
 
 The ⧼ ⧽ variant brackets are drawn from `assets/fonts/interlinear-marks.woff`. This is a 2-glyph subset of Noto Sans Math by The Noto Project Authors, released under the SIL Open Font License 1.1 (see `assets/fonts/OFL-NotoSansMath.txt`).
