@@ -4404,6 +4404,29 @@ async function getTskChapter(bookIndex, chapter) {
   return data;
 }
 
+// Bible Hub's variant and compound marks inside a Greek word (⧼ ⧽ 〈 〉 ‹ › « »
+// ⇔ ‿ ¦ { } ( ) [ ] *) are often drawn from a fallback font whose line
+// metrics are taller than the Greek text's own -- ⧼⧽ from the bundled Noto
+// Sans Math subset, 〈〉/⇔ from whatever CJK or symbol font a phone has --
+// which made the original-word line taller and pushed the English gloss
+// below it down. Each run of them gets its own .interlinear-mark span
+// (line-height: 0 in styles.css), so it can't grow that line.
+const INTERLINEAR_MARK_RUN_RE = /([⧼⧽〈〉‹›«»⇔‿¦{}()[\]*]+)/;
+
+function fillInterlinearOriginal(element, text) {
+  for (const part of text.split(INTERLINEAR_MARK_RUN_RE)) {
+    if (!part) continue;
+    if (INTERLINEAR_MARK_RUN_RE.test(part)) {
+      const mark = document.createElement("span");
+      mark.className = "interlinear-mark";
+      mark.textContent = part;
+      element.append(mark);
+    } else {
+      element.append(part);
+    }
+  }
+}
+
 // Each token is a [original, transliteration, gloss, strongs] tuple (see
 // scripts/export_interlinear.py). Rendered as a row of word blocks, right-to-
 // left for Hebrew so words read in their natural order. Clicking a word
@@ -4427,7 +4450,7 @@ function buildInterlinearWordRow(tokens, lang, onWordClick, isSelected) {
 
     const originalEl = document.createElement("span");
     originalEl.className = "interlinear-original";
-    originalEl.textContent = original;
+    fillInterlinearOriginal(originalEl, original);
 
     const glossEl = document.createElement("span");
     glossEl.className = "interlinear-gloss";

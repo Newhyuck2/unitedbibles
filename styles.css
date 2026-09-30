@@ -926,6 +926,15 @@ input:focus {
   overflow-wrap: anywhere;
 }
 
+/* A variant/compound mark inside the original word (see
+   fillInterlinearOriginal in app.js): its glyph still draws in place, but
+   with no line height of its own it can't make the original-word line
+   taller than the text around it, whatever fallback font it comes from --
+   so the English gloss below stays where every other block has it. */
+.interlinear-mark {
+  line-height: 0;
+}
+
 /* Pronunciation/gloss lines hidden from HEB/GRK's own chip mode popup
    dots (see toggleOriginalLanguagePart in app.js) -- dropped from layout
    outright rather than just made invisible, so each word block (a column flex box sized by its own
