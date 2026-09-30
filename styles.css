@@ -4067,10 +4067,22 @@ mark {
   }
 }
 
+/* Bible Hub's own variant brackets ⧼…⧽ (the GRK interlinear's RP marks)
+   live in a math-symbols block many phones/tablets have no system font
+   for -- a 2-glyph subset of Noto Sans Math (OFL, see
+   assets/fonts/OFL-NotoSansMath.txt), fetched only for pages that actually
+   contain one (unicode-range). */
+@font-face {
+  font-family: "Interlinear Marks";
+  src: url("./assets/fonts/interlinear-marks.woff") format("woff");
+  unicode-range: U+29FC-29FD;
+  font-display: swap;
+}
+
 /* Final compact toolbar overrides */
 body,
 body * {
-  font-family: "Segoe UI", "Malgun Gothic", sans-serif !important;
+  font-family: "Interlinear Marks", "Segoe UI", "Malgun Gothic", sans-serif !important;
 }
 
 [lang="ko"] {

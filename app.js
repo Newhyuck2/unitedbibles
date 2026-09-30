@@ -344,6 +344,17 @@ const strongsNavEnglishWrap = document.querySelector("#strongs-nav-english-wrap"
 const strongsNavSuggestions = document.querySelector("#strongs-nav-suggestions");
 const strongsNavSearch = document.querySelector("#strongs-nav-search");
 const STRONGS_MAX_NUMBER = { H: 8674, G: 5624 };
+// STEPBible's interlinear tagging also uses its own "Extended Strong's"
+// codes past the classical 1890 numbering -- chiefly H9030-H9039, a
+// preposition carrying nothing but a pronoun suffix (בּוֹ "in it", לָהֶם "to
+// them"), which Strong's never gave a number of its own. Bible Hub shows no
+// Strong's number for such a word at all (just the word, its
+// pronunciation, meaning and parsing -- no dictionary entry, no
+// concordance), so neither does this app (see showNoStrongsNumberEntry).
+function isClassicalStrongsCode(code) {
+  const match = /^([HG])(\d{4})$/.exec(code ?? "");
+  return Boolean(match) && Number(match[2]) >= 1 && Number(match[2]) <= STRONGS_MAX_NUMBER[match[1]];
+}
 const tskDialog = document.querySelector("#tsk-dialog");
 const closeTskButton = document.querySelector("#close-tsk");
 const tskDialogBody = document.querySelector("#tsk-dialog-body");
@@ -4369,6 +4380,7 @@ function getStrongsData() {
 // The Englishman's Concordance is exported one file per Strong's code (see
 // scripts/export_englishmans.py), fetched lazily on first lookup.
 async function getEnglishmansEntry(code) {
+  if (!isClassicalStrongsCode(code)) return null;
   if (englishmansCache.has(code)) return englishmansCache.get(code);
   const response = await fetch(`./data/englishmans/${code}.json?v=${ASSET_VERSION}`, { cache: "no-store" });
   const data = response.ok ? await response.json() : null;
@@ -5731,10 +5743,10 @@ function createPanelStrongsNav(panelState, {
   // word's spelling, since only the number field was ever touched here.
   async function updateNav(word) {
     const lang = word.strongs ? word.strongs[0] : (word.lang === "he" ? "H" : "G");
-    const number = word.strongs ? Number(word.strongs.slice(1)) : null;
+    const number = isClassicalStrongsCode(word.strongs) ? Number(word.strongs.slice(1)) : null;
     setLangValue(lang);
     numberInput.value = number ?? "";
-    if (!word.strongs) {
+    if (number == null) {
       setEnglishCommitted("");
       return;
     }
@@ -6047,9 +6059,9 @@ function createEmbeddedStrongsTool(panelState) {
     // strongsHistory those history buttons page through.
     panelState.strNav?.notifyWordShown(word, { silent });
     body.replaceChildren();
-    if (!word.strongs) {
+    if (!isClassicalStrongsCode(word.strongs)) {
       biblehubLink.hidden = true;
-      showLookupEmpty(fieldsSlot, "No Strong's number for this word.");
+      showNoStrongsNumberEntry(fieldsSlot, word, biblehubLink);
       return;
     }
     showLookupEmpty(fieldsSlot, "Loading…");
@@ -6076,9 +6088,10 @@ function createEmbeddedStrongsTool(panelState) {
       appendOriginalWordField(fields, word.original, biblehubLink, { lang: word.lang });
       appendLookupField(fields, "Transliteration", word.transliteration);
       appendLookupField(fields, "In This Verse", word.gloss);
+      appendLookupField(fields, "Morphology", wordMorphologyDisplay(word));
       const note = document.createElement("p");
       note.className = "lookup-empty";
-      note.textContent = `No Strong's Concordance entry for ${word.strongs} -- it's outside the classical 1-${STRONGS_MAX_NUMBER[word.strongs[0]]} numbering this dictionary covers.`;
+      note.textContent = `No Strong's Concordance entry for ${word.strongs}.`;
       fields.append(note);
     } else {
       const empty = document.createElement("p");
@@ -8330,7 +8343,16 @@ document.addEventListener("keydown", (event) => {
 // includes an original-language id.
 async function getInterlinearVerseTextMap(bookIndex, chapter) {
   const data = await getInterlinearChapter(bookIndex, chapter);
-  return new Map(data.v.map(([verse, tokens]) => [verse, tokens.map((token) => token[0]).join(" ")]));
+  return new Map(data.v.map(([verse, tokens]) => [verse, joinInterlinearWords(tokens.map((token) => token[0]))]));
+}
+
+// Space-joined, except right after a maqaf (־): a maqaf-bound Hebrew pair
+// is one written unit ("אֶת־הָא֖וֹר"), exactly as Bible Hub's own Hebrew
+// text reads it -- only the interlinear's word blocks split it in two.
+function joinInterlinearWords(words) {
+  return words.reduce((text, word, index) => (
+    index === 0 ? word : `${text}${text.endsWith("\u05BE") ? "" : " "}${word}`
+  ), "");
 }
 
 // What actually gets copied: the dialog's own range row can only ever
@@ -8496,6 +8518,29 @@ function appendLookupField(container, label, value, { lang } = {}) {
 // separate row of its own -- its hidden/href state is already managed by
 // the caller (showEntry's own entry-loaded branch), so re-appending the
 // same link element here each time just moves it into the new field set.
+// What Bible Hub itself shows for a word it gives no Strong's number (see
+// isClassicalStrongsCode): the word, its pronunciation, its meaning here
+// and its parsing -- no dictionary fields, and (the caller returns before
+// renderConcordanceSection) no concordance either. A bare code typed or
+// linked with no word behind it just says so.
+function showNoStrongsNumberEntry(container, word, biblehubLink) {
+  if (!word.gloss && !word.transliteration) {
+    showLookupEmpty(container, "No Strong's number for this word.");
+    return;
+  }
+  const fields = document.createElement("div");
+  fields.className = "word-dictionary-fields";
+  appendOriginalWordField(fields, word.original, biblehubLink, { lang: word.lang });
+  appendLookupField(fields, "Transliteration", word.transliteration);
+  appendLookupField(fields, "In This Verse", word.gloss);
+  appendLookupField(fields, "Morphology", wordMorphologyDisplay(word));
+  const note = document.createElement("p");
+  note.className = "lookup-empty";
+  note.textContent = "No Strong's number for this word.";
+  fields.append(note);
+  container.replaceChildren(fields);
+}
+
 function appendOriginalWordField(container, value, biblehubLink, { lang } = {}) {
   if (!value) return;
   const block = document.createElement("div");
@@ -8698,10 +8743,10 @@ document.addEventListener("keydown", (event) => {
 // word's own spelling sitting in the transliteration field.
 async function updateStrongsNav(word) {
   const lang = word.strongs ? word.strongs[0] : (word.lang === "he" ? "H" : "G");
-  const number = word.strongs ? Number(word.strongs.slice(1)) : null;
+  const number = isClassicalStrongsCode(word.strongs) ? Number(word.strongs.slice(1)) : null;
   setStrongsLangValue(lang);
   strongsNavNumber.value = number ?? "";
-  if (!word.strongs) {
+  if (number == null) {
     setStrongsEnglishCommitted("");
     return;
   }
@@ -9062,10 +9107,10 @@ async function renderStrongsDialog(word, panelState, { record = true } = {}) {
   if (record) recordStrongsHistory(word);
   strongsDialogTitle.textContent = "Strong's Concordance";
   updateStrongsNav(word);
-  if (!word.strongs) {
+  if (!isClassicalStrongsCode(word.strongs)) {
     strongsBiblehubLink.hidden = true;
     setStrongsEnglishCommitted("");
-    showLookupEmpty(strongsDialogBody, "No Strong's number for this word.");
+    showNoStrongsNumberEntry(strongsDialogBody, word, strongsBiblehubLink);
     return;
   }
   showLookupEmpty(strongsDialogBody, "Loading…");
@@ -9112,9 +9157,10 @@ async function renderStrongsDialog(word, panelState, { record = true } = {}) {
     appendOriginalWordField(fields, word.original, strongsBiblehubLink, { lang: word.lang });
     appendLookupField(fields, "Transliteration", word.transliteration);
     appendLookupField(fields, "In This Verse", word.gloss);
+    appendLookupField(fields, "Morphology", wordMorphologyDisplay(word));
     const note = document.createElement("p");
     note.className = "lookup-empty";
-    note.textContent = `No Strong's Concordance entry for ${word.strongs} -- it's outside the classical 1-${STRONGS_MAX_NUMBER[word.strongs[0]]} numbering this dictionary covers.`;
+    note.textContent = `No Strong's Concordance entry for ${word.strongs}.`;
     fields.append(note);
   } else {
     const empty = document.createElement("p");
@@ -9781,9 +9827,22 @@ function expandMorphologyCode(code, lang) {
 // Reads "-" whenever there's no in-context grammar to show at all: the
 // dialog was opened by number/search/Word-Origin-link rather than by
 // clicking an interlinear word.
+// Bible Hub parses a Hebrew/Aramaic loanword in the Greek text like any
+// other word (Ταλιθὰ "Noun - Vocative Feminine Singular", σαβαχθάνι "Verb -
+// Aorist Indicative Active - 2nd Person Singular"), dropping TAGNT's
+// trailing -HEB/-ARAM tag -- unless that tag is all there is: ἀμήν (TAGNT
+// "INJ-HEB") is Bible Hub's plain "Heb", i.e. "Hebrew Word".
+const GREEK_LOANWORD_ONLY_NAMES = { HEB: "Hebrew Word", ARAM: "Aramaic Word" };
+
 function wordMorphologyDisplay(word) {
   if (!word.morphology) return "-";
-  return expandMorphologyCode(toBibleHubGreekCode(word.morphology), word.lang);
+  let code = word.morphology;
+  const loanword = word.lang === "grc" ? /^(?:(.*)-)?(HEB|ARAM)$/.exec(code) : null;
+  if (loanword) {
+    if (!loanword[1] || loanword[1] === "INJ") return GREEK_LOANWORD_ONLY_NAMES[loanword[2]];
+    code = loanword[1];
+  }
+  return expandMorphologyCode(toBibleHubGreekCode(code), word.lang);
 }
 
 

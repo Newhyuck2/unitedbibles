@@ -30,6 +30,10 @@ The original-language text (the first field) follows the text shown by Bible Hub
   - glosses come from the Berean Interlinear Bible (public domain), via biblicalhumanities/Nestle1904;
   - Strong's numbers and morphology come from the Nestle 1904 data.
 
+## Display font
+
+The ⧼ ⧽ variant brackets are drawn from `assets/fonts/interlinear-marks.woff`. This is a 2-glyph subset of Noto Sans Math by The Noto Project Authors, released under the SIL Open Font License 1.1 (see `assets/fonts/OFL-NotoSansMath.txt`).
+
 ## Rebuilding
 
 Place the sources under `data/_sources/` (gitignored):
