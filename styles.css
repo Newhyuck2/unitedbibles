@@ -3489,14 +3489,19 @@ mark {
 
 /* Fills the #strongs-dialog-body grid's second (1fr) row, and is itself an
    auto/1fr grid (mode toggle, then results) for the same reason -- see
-   that rule for why grid rows are used here instead of flex-grow. */
+   that rule for why grid rows are used here instead of flex-grow.
+   The 16px gap from the fields above is padding, not margin: height: 100%
+   already fills the whole row, so a margin on top of it pushed the box 16px
+   past the row's bottom, where #strongs-dialog-body's overflow: hidden cut
+   off the last verse row and the last book in the nav (border-box counts
+   the padding inside the 100% instead). */
 .word-concordance {
   display: grid;
   grid-template-rows: minmax(0, 1fr);
   grid-template-columns: minmax(0, 1fr);
   height: 100%;
   min-height: 0;
-  margin-top: 16px;
+  padding-top: 16px;
 }
 
 .concordance-mode-control {
@@ -6540,16 +6545,12 @@ body * {
   grid-template-rows: auto minmax(0, 1fr);
 }
 
-/* .word-concordance's own margin-top (base rule) separates it from the
-   dictionary fields above it in the modal's single shared-scroll body --
-   embedded, that gap instead has to come from inside .lookup-body's own
-   fixed height budget (see the .study-tool-pane .word-dictionary-shell
-   grid), where this margin just overflows .lookup-body by exactly its own
-   16px instead, forcing a scroll there that shouldn't exist. fieldsSlot
-   (a sibling row, not this margin) already provides the equivalent gap
-   embedded. */
+/* .word-concordance's own padding-top (base rule) separates it from the
+   dictionary fields above it in the modal's body -- embedded, fieldsSlot
+   (a sibling row) already provides the equivalent gap, so the padding
+   would only shrink the list's own fixed height budget by 16px here. */
 .study-tool-pane .word-concordance {
-  margin-top: 0;
+  padding-top: 0;
 }
 
 /* A little more breathing room than fieldsSlot's own bare minimum leaves,
