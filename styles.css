@@ -452,8 +452,9 @@ p {
   transform: translateX(2px);
 }
 
-/* Panel chip row only (see renderTranslationChipList's own onOpenModePopup
-   branch): replaces the ⠿ drag-handle with a "..." button that opens the
+/* Panel chip row, and the TSK/Bookmark list dialogs' (see
+   renderTranslationChipList's own onOpenModePopup branch): replaces the ⠿
+   drag-handle with a "..." button that opens the
    chip's mode popup (see .chip-mode-popup below) -- the chip's whole body
    is the drag surface instead (see the panel-translation-list touch-action
    rule further down), so this button only needs to opt itself out of that
@@ -1505,7 +1506,15 @@ input:focus {
   text-align: justify;
 }
 
-.search-match-line + .search-match-line {
+/* A translation hidden with its chip (see appendTranslationMatchLines in
+   app.js) keeps its line, just [hidden] -- display: grid above would
+   otherwise override that. The gap goes only between lines that actually
+   show, so a hidden first line leaves no gap above the next one. */
+.search-match-line[hidden] {
+  display: none;
+}
+
+.search-match-line:not([hidden]) ~ .search-match-line:not([hidden]) {
   margin-top: 7px;
 }
 
@@ -5270,7 +5279,12 @@ body * {
    native scrolling first the way the base rule above does for every other
    (handle-only-drag) translation-chip list. A many-translation panel row
    that overflows can no longer be swipe-scrolled from on top of a chip as a
-   result -- only from the row's own edges/gaps between chips. */
+   result -- only from the row's own edges/gaps between chips. The TSK and
+   Bookmark list dialogs' chips (whose "..." button works too now -- see
+   dialogTranslationStyleControls in app.js) keep the base pan-x instead,
+   so their row still swipe-scrolls from on top of a chip: a horizontal
+   swipe pans natively (cancelling the touch drag), and a drag that starts
+   vertically still reorders. */
 .panel-translation-list .translation-chip {
   touch-action: none;
 }
@@ -7534,7 +7548,9 @@ body * {
    (see the chip mode popup below for bold/text-color instead). Dim: the
    chip's own label text fades toward a paler shade to read as
    de-emphasized. */
-.panel-translation-list .translation-chip.chip-dimmed .translation-name {
+.panel-translation-list .translation-chip.chip-dimmed .translation-name,
+#tsk-translations .translation-chip.chip-dimmed .translation-name,
+#bookmark-list-translations .translation-chip.chip-dimmed .translation-name {
   color: var(--translation-color-dim);
 }
 
@@ -7549,7 +7565,8 @@ body * {
    look cracked/doubled. Offsetting the fill sideways instead only thickens
    vertical strokes, leaving horizontals untouched.) */
 .translation-line--bold .translation-text,
-.translation-line--bold .interlinear-original {
+.translation-line--bold .interlinear-original,
+.search-match-line--bold .search-match-text {
   text-shadow: 0.25px 0 currentColor, -0.25px 0 currentColor;
 }
 
@@ -7559,9 +7576,12 @@ body * {
    ink, and "gray" renders muted, in either verse layout. On HEB/GRK's own
    interlinear row (bold above too) only each word block's original-
    language word takes the pick -- its pronunciation/gloss lines keep their
-   own fixed blue/orange (see .interlinear-translit/.interlinear-gloss). */
+   own fixed blue/orange (see .interlinear-translit/.interlinear-gloss).
+   The .search-match-line variants are the TSK/Bookmark list dialogs' (and
+   embedded TSK pane's) result lines -- see appendTranslationMatchLines. */
 .translation-line--color-own .translation-text,
-.translation-line--color-own .interlinear-original {
+.translation-line--color-own .interlinear-original,
+.search-match-line--color-own .search-match-text {
   color: var(--translation-color);
 }
 
@@ -7569,12 +7589,23 @@ body * {
    dark-theme rules) -- "own"-colored body text uses this same
    too-dark-on-dark-bg translation color. */
 [data-theme="dark"] .translation-line--color-own .translation-text,
-[data-theme="dark"] .translation-line--color-own .interlinear-original {
+[data-theme="dark"] .translation-line--color-own .interlinear-original,
+[data-theme="dark"] .search-match-line--color-own .search-match-text {
   filter: brightness(1.5) saturate(1.08);
 }
 
+/* ...but not on highlighted text: the highlight's light pastel fill would
+   be brightened along with it (a filter covers the whole element), and the
+   plain translation color already reads well on that fill (see
+   .translation-text-highlight). A rule of its own, so a browser without
+   :has() drops only this exception, not the brightening above. */
+[data-theme="dark"] .translation-line--color-own .translation-text:has(> .translation-text-highlight) {
+  filter: none;
+}
+
 .translation-line--color-gray .translation-text,
-.translation-line--color-gray .interlinear-original {
+.translation-line--color-gray .interlinear-original,
+.search-match-line--color-gray .search-match-text {
   color: var(--translation-gray-text);
 }
 
@@ -8026,6 +8057,20 @@ body * {
   cursor: pointer;
   -webkit-box-decoration-break: clone;
   box-decoration-break: clone;
+}
+
+/* A text color picked on the chip's own "..." popup (see
+   .translation-line--color-own/-gray) keeps showing on a highlighted verse
+   instead of the fixed dark ink above. Both stay their light-theme values
+   in dark mode too, for the same reason as that ink: the fill under them is
+   always a light pastel (the dark theme's own gray is meant for the dark
+   page background, and would wash out here). */
+.translation-line--color-own .translation-text-highlight {
+  color: var(--translation-color);
+}
+
+.translation-line--color-gray .translation-text-highlight {
+  color: #918c84;
 }
 
 /* A verse's own note (see buildTranslationLinesInto in app.js) -- a small

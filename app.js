@@ -251,6 +251,9 @@ let bookmarkManagePanelEl = null;
 // gray text-color pick instead of a color/remove pair. HEB/GRK also get
 // chipModeParts' own two pronunciation/gloss show-hide dots after those.
 const chipModePopup = document.querySelector("#chip-mode-popup");
+// Where the popup lives for a panel's own chip; showChipModePopup moves it
+// into a modal dialog for a chip there, and back here afterwards.
+const chipModePopupHome = chipModePopup.parentElement;
 const chipModeBoldButton = document.querySelector("#chip-mode-bold");
 const chipModeParts = document.querySelector("#chip-mode-parts");
 // The panel/id a still-open chip mode popup is currently pointed at -- null
@@ -413,6 +416,10 @@ let searchTranslationControl = null;
 const tskViewState = { book: 0, chapter: 1, verse: 1, data: null, anchors: [] };
 let tskTranslationOrder = ["KJV"];
 let tskTranslationControl = null;
+// Seeded together with tskTranslationOrder (see openTskDialog/
+// openTskFromResult); createDialogTranslationStyle is hoisted, so it can be
+// called up here.
+const tskTranslationStyle = createDialogTranslationStyle();
 let tskBookCombo = null;
 let tskChapterCombo = null;
 let tskVerseCombo = null;
@@ -1589,6 +1596,117 @@ function setTranslationTextColor(panelState, id, color) {
   panelState.translationTextColors = colors;
 }
 
+// Which real translations a panel's reader has hidden with a chip click.
+// While a study tool is showing, dimmedTranslations instead holds "every
+// chip but the tool" (see toggleTranslationChip), so the reader's own
+// picks are the snapshot taken just before it (preStudyToolDimmed) -- which
+// a chip removed while the tool is showing stays in (applyTranslationOrder
+// only filters it once the tool exits), hence the enabled filter.
+function panelHiddenTranslations(panelState) {
+  const hidden = panelState.activeStudyTool ? (panelState.preStudyToolDimmed ?? []) : panelState.dimmedTranslations;
+  return hidden.filter((id) => isIndexableTranslationId(id) && panelState.enabledTranslations.includes(id));
+}
+
+// The TSK and Bookmark list dialogs' own bold/text-color/hidden picks --
+// the same three fields a panel keeps (so toggleTranslationBold/
+// setTranslationTextColor and the chip mode popup work on it unchanged),
+// seeded from a panel whenever the dialog takes that panel's translation
+// order (see seedDialogTranslationStyle), then changed from the dialog's
+// own chips without touching the panel's.
+function createDialogTranslationStyle() {
+  return { boldTranslations: [], translationTextColors: {}, dimmedTranslations: [] };
+}
+
+function seedDialogTranslationStyle(style, panelState) {
+  style.boldTranslations = panelState ? [...panelState.boldTranslations] : [];
+  style.translationTextColors = panelState ? { ...panelState.translationTextColors } : {};
+  style.dimmedTranslations = panelState ? panelHiddenTranslations(panelState) : [];
+}
+
+// Same pruning applyTranslationOrder does for a panel: a translation
+// removed from the dialog comes back plain if it's added again.
+function pruneDialogTranslationStyle(style, order) {
+  style.boldTranslations = style.boldTranslations.filter((id) => order.includes(id));
+  style.translationTextColors = Object.fromEntries(
+    Object.entries(style.translationTextColors).filter(([id]) => order.includes(id)),
+  );
+  style.dimmedTranslations = style.dimmedTranslations.filter((id) => order.includes(id));
+}
+
+function toggleDialogTranslationHidden(style, id) {
+  const hidden = new Set(style.dimmedTranslations);
+  if (hidden.has(id)) hidden.delete(id); else hidden.add(id);
+  style.dimmedTranslations = [...hidden];
+}
+
+// One result row's per-translation lines (TSK cross references, bookmarks,
+// the panel's own embedded TSK pane), with the same three treatments a
+// panel's verse lines get from its chips (see buildTranslationLinesInto):
+// a hidden translation's line doesn't show, and bold/text color use the
+// matching .search-match-line modifier classes. Every line is built and a
+// hidden one just carries [hidden], so a chip click or a style pick can
+// restyle the list in place (see restyleTranslationMatchLines) instead of
+// re-fetching and redrawing it, which would also lose its scroll position.
+function appendTranslationMatchLines(body, texts, order, style) {
+  if (!order.length) {
+    const empty = document.createElement("p");
+    empty.className = "empty-translation";
+    empty.textContent = "Select at least one translation.";
+    body.append(empty);
+    return;
+  }
+  for (const translation of order) {
+    const text = texts[translation];
+    const hasContent = hasVerseText(text);
+    const row = document.createElement("div");
+    row.className = "search-match-line";
+    row.dataset.translation = translation;
+    row.style.setProperty("--translation-color", TRANSLATION_COLORS[translation]);
+    const label = document.createElement("span");
+    label.className = "search-match-label";
+    label.lang = translationLanguage(translation);
+    label.textContent = translationMeta(translation).label;
+    const textEl = document.createElement("span");
+    textEl.className = "search-match-text";
+    textEl.lang = translationLanguage(translation);
+    textEl.textContent = hasContent ? text : "";
+    row.append(label, textEl);
+    applyTranslationMatchLineStyle(row, style);
+    body.append(row);
+  }
+}
+
+function applyTranslationMatchLineStyle(row, style) {
+  const translation = row.dataset.translation;
+  row.hidden = style.dimmedTranslations.includes(translation);
+  row.classList.toggle("search-match-line--bold", style.boldTranslations.includes(translation));
+  // "black" (the default -- see setTranslationTextColor) needs neither class.
+  const textColor = style.translationTextColors[translation] ?? "black";
+  row.classList.toggle("search-match-line--color-own", textColor === "own");
+  row.classList.toggle("search-match-line--color-gray", textColor === "gray");
+}
+
+function restyleTranslationMatchLines(container, style) {
+  for (const row of container.querySelectorAll(".search-match-line[data-translation]")) {
+    applyTranslationMatchLineStyle(row, style);
+  }
+}
+
+// The TSK and Bookmark list dialogs' own chip behavior, matching a panel's
+// (see createPanelElement): a chip body click hides/shows that translation,
+// and the "..." button opens the same bold/color popup -- both on the
+// dialog's own style (see createDialogTranslationStyle), restyling the
+// list already showing in `getContainer()` in place.
+function dialogTranslationStyleControls(style, getContainer) {
+  const restyle = () => restyleTranslationMatchLines(getContainer(), style);
+  return {
+    getEmphasis: (id) => (style.dimmedTranslations.includes(id) ? "dim" : "normal"),
+    onToggleActive: (id) => toggleDialogTranslationHidden(style, id),
+    onEmphasisChange: restyle,
+    onOpenModePopup: (id, chipEl) => showChipModePopup(chipEl, style, id, { onChange: restyle }),
+  };
+}
+
 // HEB/GRK's own chip mode popup's two extra dots (see chipModeParts) -- each
 // an independent show/hide toggle for one line of every interlinear word
 // block (see ORIGINAL_LANGUAGE_PARTS and buildTranslationLinesInto's own
@@ -1686,9 +1804,10 @@ function renderTranslationChipList({ list, order, getEmphasis, onToggleActive, o
     // gloss show-hide dots -- see chipModeParts) -- STR/TSK/NOTE carry no
     // bold/color of their own, so theirs is disabled outright (see
     // isIndexableTranslationId), not just inert, matching the explicit
-    // "make it truly unclickable" request this came from. Every other
-    // caller (copy/search/TSK/highlight/note/bookmark dialogs, none of
-    // which carry the mode-popup concept at all)
+    // "make it truly unclickable" request this came from. The TSK and
+    // Bookmark list dialogs pass it too, for their own copy of these picks
+    // (see dialogTranslationStyleControls). Every other caller (copy/search/
+    // highlight/note dialogs, which carry no mode-popup concept at all)
     // shows the exact same dots -- per explicit request, purely for visual
     // consistency with the panel's own chips -- but keeps the plain
     // decorative handle and its own handle-gated touch-drag underneath
@@ -2224,12 +2343,24 @@ function setupDialogTranslationControl({
   onToggleActive,
   onOpenModePopup,
   onChange,
+  // Called instead of onChange after a chip body click (onToggleActive),
+  // when given -- the TSK/Bookmark dialogs only restyle their list for a
+  // hide/show (see dialogTranslationStyleControls), not redraw it.
+  onEmphasisChange,
   getOriginalLanguageTestament,
   showStudyTools,
 }) {
   let suppressClickUntil = 0;
   let openedByTouchPress = false;
   const controls = picker.closest(".translation-controls");
+
+  // The chip x's own pointerdown never reaches the popup's outside-press
+  // closer (see renderTranslationChipList), so a popup open on the chip
+  // being removed would otherwise stay up, applying picks to a translation
+  // that's gone.
+  const closeChipModePopupFor = (id) => {
+    if (chipModeTarget?.id === id && list.contains(chipModeTarget.chipEl)) hideChipModePopup();
+  };
 
   const renderMenu = () => {
     renderDialogTranslationPickerMenu({
@@ -2261,10 +2392,11 @@ function setupDialogTranslationControl({
       onToggleActive: onToggleActive && ((id) => {
         onToggleActive(id);
         render();
-        onChange?.();
+        (onEmphasisChange ?? onChange)?.();
       }),
       onOpenModePopup,
       onRemove: (id) => {
+        closeChipModePopupFor(id);
         setOrder(getOrder().filter((item) => item !== id));
         render();
         onChange?.();
@@ -2297,6 +2429,7 @@ function setupDialogTranslationControl({
     const order = [...getOrder()];
     let added = false;
     if (order.includes(id)) {
+      closeChipModePopupFor(id);
       setOrder(order.filter((item) => item !== id));
     } else {
       if (ORIGINAL_LANGUAGE_IDS.includes(id)) {
@@ -5491,28 +5624,14 @@ function createEmbeddedTskTool(panelState) {
     const chapterData = chaptersByKey.get(`${bookId}:${chapter}`);
     const verseEntry = chapterData?.v.find(([v]) => v === verse);
     const texts = verseEntry ? verseEntry[1] : {};
-    for (const translation of translationOrder) {
-      const text = texts[translation];
-      const hasContent = hasVerseText(text);
-      const row = document.createElement("div");
-      row.className = "search-match-line";
-      row.style.setProperty("--translation-color", TRANSLATION_COLORS[translation]);
-      const label = document.createElement("span");
-      label.className = "search-match-label";
-      label.lang = translationLanguage(translation);
-      label.textContent = translationMeta(translation).label;
-      const textEl = document.createElement("span");
-      textEl.lang = translationLanguage(translation);
-      textEl.textContent = hasContent ? text : "";
-      row.append(label, textEl);
-      rowBody.append(row);
-    }
-    if (!translationOrder.length) {
-      const empty = document.createElement("p");
-      empty.className = "empty-translation";
-      empty.textContent = "Select at least one translation.";
-      rowBody.append(empty);
-    }
+    // This panel's own bold/text-color/hidden picks, read live -- the "..."
+    // popup's picks already refresh this pane (see toggleChipModeBold/
+    // applyChipModeColor's refreshTskCrossColumnTranslations calls).
+    appendTranslationMatchLines(rowBody, texts, translationOrder, {
+      boldTranslations: panelState.boldTranslations,
+      translationTextColors: panelState.translationTextColors,
+      dimmedTranslations: panelHiddenTranslations(panelState),
+    });
 
     const actions = document.createElement("div");
     actions.className = "search-result-actions";
@@ -7263,8 +7382,15 @@ function syncChipModePartSelection(panelState) {
 // --chip-mode-own-color is read by .chip-mode-swatch--own (see styles.css).
 // chipModeParts is shown only for HEB/GRK -- set before positioning below,
 // since it changes how wide the popup is.
-function showChipModePopup(chipEl, panelState, id) {
-  chipModeTarget = { panelState, id };
+//
+// panelState is whatever owns the picks -- a panel, or a TSK/Bookmark list
+// dialog's own style (see dialogTranslationStyleControls), which passes
+// onChange to restyle its own list instead of the panel re-render below.
+// A modal dialog makes everything outside it inert and paints above it, so
+// for a chip inside one the popup moves into that dialog while it's open
+// (and closes with it), then back to its own place for a panel chip.
+function showChipModePopup(chipEl, panelState, id, { onChange } = {}) {
+  chipModeTarget = { panelState, id, onChange, chipEl };
   const isBold = panelState.boldTranslations.includes(id);
   chipModeBoldButton.classList.toggle("selected", isBold);
   chipModeBoldButton.setAttribute("aria-pressed", String(isBold));
@@ -7273,8 +7399,12 @@ function showChipModePopup(chipEl, panelState, id) {
   chipModeParts.hidden = !isOriginalLanguage;
   if (isOriginalLanguage) syncChipModePartSelection(panelState);
   chipModePopup.style.setProperty("--chip-mode-own-color", TRANSLATION_COLORS[id]);
+  const dialog = chipEl.closest("dialog");
+  const host = dialog ?? chipModePopupHome;
+  if (chipModePopup.parentElement !== host) host.append(chipModePopup);
+  if (dialog) dialog.addEventListener("close", hideChipModePopup, { once: true });
   chipModeAnchorRect = chipEl.getBoundingClientRect();
-  chipModePanelEl = chipEl.closest(".bible-panel");
+  chipModePanelEl = chipEl.closest(".bible-panel") ?? dialog;
   chipModePopup.hidden = false;
   positionChipModePopup();
 }
@@ -7298,6 +7428,18 @@ function toggleChipModeBold() {
   const isBold = panelState.boldTranslations.includes(id);
   chipModeBoldButton.classList.toggle("selected", isBold);
   chipModeBoldButton.setAttribute("aria-pressed", String(isBold));
+  applyChipModeChange();
+}
+
+// After a pick: a dialog's own style just restyles that dialog's list (see
+// showChipModePopup's onChange); a panel's is saved and re-rendered, along
+// with its embedded TSK pane, which shows the same picks.
+function applyChipModeChange() {
+  const { panelState, onChange } = chipModeTarget;
+  if (onChange) {
+    onChange();
+    return;
+  }
   saveState();
   renderPanelBody(panelState);
   refreshTskCrossColumnTranslations(panelState);
@@ -7314,9 +7456,7 @@ function applyChipModeColor(color) {
   const { panelState, id } = chipModeTarget;
   setTranslationTextColor(panelState, id, color);
   syncChipModeColorSelection(panelState, id);
-  saveState();
-  renderPanelBody(panelState);
-  refreshTskCrossColumnTranslations(panelState);
+  applyChipModeChange();
 }
 
 // One of HEB/GRK's own pronunciation/gloss dots (see
@@ -10160,7 +10300,9 @@ function setupTskControls() {
     getOrder: () => tskTranslationOrder,
     setOrder: (order) => {
       tskTranslationOrder = order;
+      pruneDialogTranslationStyle(tskTranslationStyle, order);
     },
+    ...dialogTranslationStyleControls(tskTranslationStyle, () => tskDialogBody),
     onChange: () => {
       renderTskReferenceList();
     },
@@ -10263,7 +10405,9 @@ tskHistoryForwardButton.addEventListener("click", () => {
 // if it isn't already open.
 async function openTskFromResult(bookId, chapter, verse) {
   if (!tskDialog.open) {
-    tskTranslationOrder = enabledTranslationIds(activeOrFirstPanel()).filter(isIndexableTranslationId);
+    const panelState = activeOrFirstPanel();
+    tskTranslationOrder = enabledTranslationIds(panelState).filter(isIndexableTranslationId);
+    seedDialogTranslationStyle(tskTranslationStyle, panelState);
     tskTranslationControl?.render();
     tskDialog.showModal();
     syncDialogHeightToPanel(tskDialog);
@@ -10386,28 +10530,7 @@ function buildTskResultRow(bookId, chapter, verse, chaptersByKey) {
   const chapterData = chaptersByKey.get(`${bookId}:${chapter}`);
   const verseEntry = chapterData?.v.find(([v]) => v === verse);
   const texts = verseEntry ? verseEntry[1] : {};
-  for (const translation of tskTranslationOrder) {
-    const text = texts[translation];
-    const hasContent = hasVerseText(text);
-    const row = document.createElement("div");
-    row.className = "search-match-line";
-    row.style.setProperty("--translation-color", TRANSLATION_COLORS[translation]);
-    const label = document.createElement("span");
-    label.className = "search-match-label";
-    label.lang = translationLanguage(translation);
-    label.textContent = translationMeta(translation).label;
-    const textEl = document.createElement("span");
-    textEl.lang = translationLanguage(translation);
-    textEl.textContent = hasContent ? text : "";
-    row.append(label, textEl);
-    body.append(row);
-  }
-  if (!tskTranslationOrder.length) {
-    const empty = document.createElement("p");
-    empty.className = "empty-translation";
-    empty.textContent = "Select at least one translation.";
-    body.append(empty);
-  }
+  appendTranslationMatchLines(body, texts, tskTranslationOrder, tskTranslationStyle);
 
   const actions = document.createElement("div");
   actions.className = "search-result-actions";
@@ -10554,11 +10677,16 @@ async function openTskDialog(panelState) {
     // cross-reference results below, so default them to whatever this panel is
     // currently showing (Hebrew/Greek/STR/TSK excluded -- none have TSK-indexed text).
     tskTranslationOrder = enabledTranslationIds(panelState).filter(isIndexableTranslationId);
+    // Along with each version's bold/text-color/hidden pick there (see
+    // seedDialogTranslationStyle), so its text reads the same as in the panel.
+    seedDialogTranslationStyle(tskTranslationStyle, panelState);
   } else if (tskHistoryIndex < 0) {
     tskViewState.book = 0;
     tskViewState.chapter = 1;
     tskViewState.verse = 1;
-    tskTranslationOrder = enabledTranslationIds(activeOrFirstPanel()).filter(isIndexableTranslationId);
+    const sourcePanel = activeOrFirstPanel();
+    tskTranslationOrder = enabledTranslationIds(sourcePanel).filter(isIndexableTranslationId);
+    seedDialogTranslationStyle(tskTranslationStyle, sourcePanel);
   }
   tskTranslationControl?.render();
   tskDialog.showModal();
@@ -10871,6 +10999,8 @@ function buildHighlightResultRow(group, chaptersByKey) {
 
 let bookmarkListTranslationOrder = [];
 let bookmarkListTranslationControl;
+// Seeded together with the order below (see openBookmarkListDialog).
+const bookmarkListTranslationStyle = createDialogTranslationStyle();
 
 function setupBookmarkListControls() {
   bookmarkListTranslationControl = setupDialogTranslationControl({
@@ -10881,7 +11011,9 @@ function setupBookmarkListControls() {
     getOrder: () => bookmarkListTranslationOrder,
     setOrder: (order) => {
       bookmarkListTranslationOrder = order;
+      pruneDialogTranslationStyle(bookmarkListTranslationStyle, order);
     },
+    ...dialogTranslationStyleControls(bookmarkListTranslationStyle, () => bookmarkListBody),
     onChange: () => {
       renderBookmarkList();
     },
@@ -10891,7 +11023,9 @@ function setupBookmarkListControls() {
 
 async function openBookmarkListDialog() {
   if (!bookmarkListTranslationOrder.length) {
-    bookmarkListTranslationOrder = enabledTranslationIds(activeOrFirstPanel()).filter(isIndexableTranslationId);
+    const panelState = activeOrFirstPanel();
+    bookmarkListTranslationOrder = enabledTranslationIds(panelState).filter(isIndexableTranslationId);
+    seedDialogTranslationStyle(bookmarkListTranslationStyle, panelState);
     bookmarkListTranslationControl.render();
   }
   bookmarkListDialog.showModal();
@@ -10935,28 +11069,7 @@ function buildBookmarkResultRow(bookId, chapter, verse, chaptersByKey) {
   const chapterData = chaptersByKey.get(`${bookId}:${chapter}`);
   const verseEntry = chapterData?.v.find(([v]) => v === verse);
   const texts = verseEntry ? verseEntry[1] : {};
-  for (const translation of bookmarkListTranslationOrder) {
-    const text = texts[translation];
-    const hasContent = hasVerseText(text);
-    const row = document.createElement("div");
-    row.className = "search-match-line";
-    row.style.setProperty("--translation-color", TRANSLATION_COLORS[translation]);
-    const label = document.createElement("span");
-    label.className = "search-match-label";
-    label.lang = translationLanguage(translation);
-    label.textContent = translationMeta(translation).label;
-    const textEl = document.createElement("span");
-    textEl.lang = translationLanguage(translation);
-    textEl.textContent = hasContent ? text : "";
-    row.append(label, textEl);
-    body.append(row);
-  }
-  if (!bookmarkListTranslationOrder.length) {
-    const empty = document.createElement("p");
-    empty.className = "empty-translation";
-    empty.textContent = "Select at least one translation.";
-    body.append(empty);
-  }
+  appendTranslationMatchLines(body, texts, bookmarkListTranslationOrder, bookmarkListTranslationStyle);
 
   const copyButton = document.createElement("button");
   copyButton.type = "button";
