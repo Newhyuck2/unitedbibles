@@ -16,6 +16,7 @@ const TRANSLATION_COLORS = {
   TB: "#c1442d",
   HEB: "#9c6b1f",
   GRK: "#4a5aa8",
+  LXX: "#6b8e4e",
   STR: "#96591f",
   TSK: "#5a6b8a",
   NOTE: "#3d7a7a",
@@ -53,6 +54,15 @@ const DEFAULT_DIMMED_TRANSLATIONS = [];
 const ORIGINAL_LANGUAGE_META = {
   HEB: { id: "HEB", label: "HEB", name: "Hebrew Interlinear", testament: "old" },
   GRK: { id: "GRK", label: "GRK", name: "Greek Interlinear", testament: "new" },
+  // A second OT option alongside HEB (see the picker's own testament gating
+  // in renderDialogTranslationPickerMenu, which already loops over every id
+  // here rather than hard-coding two) -- picking either replaces whichever
+  // of the two was showing (see onToggle below), same as HEB/GRK already do
+  // across the OT/NT boundary. Crossing into the OT from the NT still lands
+  // on HEB by default every time (see originalLanguageForTestament, which
+  // deliberately isn't changed by this addition); LXX is something the
+  // reader opts into from the picker, not an automatic choice.
+  LXX: { id: "LXX", label: "LXX", name: "Septuagint Interlinear", testament: "old" },
 };
 const ORIGINAL_LANGUAGE_IDS = Object.keys(ORIGINAL_LANGUAGE_META);
 // The two lines of an interlinear word block (see buildInterlinearWordRow)
@@ -1396,7 +1406,7 @@ function translationMeta(id) {
 
 function translationLanguage(id) {
   if (id === "HEB") return "he";
-  if (id === "GRK") return "grc";
+  if (id === "GRK" || id === "LXX") return "grc";
   if (id === "CNV") return "zh";
   if (STUDY_TOOL_IDS.includes(id) || id === "NOTE") return "en";
   return ["ESV", "NIV", "KJV", "NASB", "NRSV", "NLT", "TB"].includes(id) ? "en" : "ko";
@@ -2419,12 +2429,13 @@ function setupDialogTranslationControl({
     });
   };
 
-  // Hebrew and Greek occupy a single shared "original language" slot: picking
-  // one always replaces the other rather than allowing both at once.
-  // Hebrew and Greek occupy a single shared "original language" slot: picking
-  // one always replaces the other rather than allowing both at once. Once
-  // added, though, it's a full peer of any other translation -- reorderable,
-  // participates in stacked/columns layout the same way.
+  // HEB/GRK/LXX occupy a single shared "original language" slot: picking
+  // one always replaces whichever other one was showing rather than
+  // allowing more than one at once (HEB and LXX are both options for the
+  // OT -- see ORIGINAL_LANGUAGE_META -- so this can't just hard-code one
+  // "other" id the way a plain HEB/GRK pair could). Once added, though,
+  // it's a full peer of any other translation -- reorderable, participates
+  // in stacked/columns layout the same way.
   const onToggle = (id) => {
     const order = [...getOrder()];
     let added = false;
@@ -2433,9 +2444,11 @@ function setupDialogTranslationControl({
       setOrder(order.filter((item) => item !== id));
     } else {
       if (ORIGINAL_LANGUAGE_IDS.includes(id)) {
-        const other = id === "HEB" ? "GRK" : "HEB";
-        const otherIndex = order.indexOf(other);
-        if (otherIndex >= 0) order.splice(otherIndex, 1);
+        for (const other of ORIGINAL_LANGUAGE_IDS) {
+          if (other === id) continue;
+          const otherIndex = order.indexOf(other);
+          if (otherIndex >= 0) order.splice(otherIndex, 1);
+        }
       }
       if (insertTranslationInOrder(order, id)) {
         setOrder(order);
@@ -4438,16 +4451,32 @@ async function getChapter(bookIndex, chapter) {
   return data;
 }
 
-function interlinearPath(bookIndex, chapter) {
-  return `./data/interlinear/${manifest.books[bookIndex].slug}/${chapter}.json?v=${ASSET_VERSION}`;
+// langId picks which interlinear dataset a book/chapter is read from -- HEB
+// and GRK each still own data/interlinear (one never overlaps the other's
+// book range, so there was never a reason to fold the id into that path).
+// LXX is a second, independent OT dataset (see scripts/build_interlinear_lxx.py)
+// that has to live under its own path instead, since an OT book/chapter now
+// has two different interlinears to choose between, not one.
+function interlinearPath(bookIndex, chapter, langId) {
+  const dir = langId === "LXX" ? "interlinear-lxx" : "interlinear";
+  return `./data/${dir}/${manifest.books[bookIndex].slug}/${chapter}.json?v=${ASSET_VERSION}`;
 }
 
 // Not every chapter has interlinear tokens exported yet, so a 404 is treated
-// as "no tokens for this chapter" rather than an error (see scripts/export_interlinear.py).
-async function getInterlinearChapter(bookIndex, chapter) {
-  const key = `${bookIndex}:${chapter}`;
+// as "no tokens for this chapter" rather than an error (see scripts/export_interlinear.py
+// for HEB/GRK, build_interlinear_lxx.py for LXX -- the latter also leaves a
+// chapter unexported wherever the Septuagint's own verse division doesn't
+// match this app's chapter/verse grid for it; see that script's own report).
+// langId defaults to this book's own canonical original language (HEB for
+// the OT, GRK for the NT) -- every caller that isn't reading a panel's own
+// current pick (e.g. the Englishman's Concordance, which always means the
+// canonical text a Strong's number belongs to, never whatever alternate a
+// reader happens to have chosen) relies on that default rather than passing
+// one explicitly.
+async function getInterlinearChapter(bookIndex, chapter, langId = originalLanguageForTestament(testamentForBook(bookIndex))) {
+  const key = `${langId}:${bookIndex}:${chapter}`;
   if (interlinearCache.has(key)) return interlinearCache.get(key);
-  const response = await fetch(interlinearPath(bookIndex, chapter), { cache: "no-store" });
+  const response = await fetch(interlinearPath(bookIndex, chapter, langId), { cache: "no-store" });
   const data = response.ok ? await response.json() : { v: [] };
   interlinearCache.set(key, data);
   if (interlinearCache.size > 40) interlinearCache.delete(interlinearCache.keys().next().value);
@@ -4464,27 +4493,36 @@ function ensureInterlinearData(panelState) {
     return;
   }
   const cache = panelState.interlinearVerses;
-  if (cache && cache.book === panelState.book && cache.chapter === panelState.chapter) return;
+  // lang included: the OT now has two possible sources (HEB/LXX), so a
+  // chip switch with the book/chapter unchanged still needs a fresh fetch
+  // (see interlinearTokensForVerse's matching check on the read side).
+  if (cache && cache.lang === activeId && cache.book === panelState.book && cache.chapter === panelState.chapter) return;
   const requestBook = panelState.book;
   const requestChapter = panelState.chapter;
-  panelState.interlinearVerses = { book: requestBook, chapter: requestChapter, loading: true, map: new Map() };
-  getInterlinearChapter(requestBook, requestChapter)
+  panelState.interlinearVerses = { lang: activeId, book: requestBook, chapter: requestChapter, loading: true, map: new Map() };
+  getInterlinearChapter(requestBook, requestChapter, activeId)
     .then((data) => {
       if (panelState.book !== requestBook || panelState.chapter !== requestChapter) return;
-      if (!activeOriginalLanguageId(panelState.enabledTranslations)) return;
-      panelState.interlinearVerses = { book: requestBook, chapter: requestChapter, loading: false, map: new Map(data.v) };
+      if (activeOriginalLanguageId(panelState.enabledTranslations) !== activeId) return;
+      panelState.interlinearVerses = { lang: activeId, book: requestBook, chapter: requestChapter, loading: false, map: new Map(data.v) };
       renderPanelBody(panelState);
     })
     .catch(() => {
       if (panelState.book !== requestBook || panelState.chapter !== requestChapter) return;
-      panelState.interlinearVerses = { book: requestBook, chapter: requestChapter, loading: false, map: new Map() };
+      panelState.interlinearVerses = { lang: activeId, book: requestBook, chapter: requestChapter, loading: false, map: new Map() };
       renderPanelBody(panelState);
     });
 }
 
 function interlinearTokensForVerse(panelState, verseNumber) {
   const cache = panelState.interlinearVerses;
-  if (!cache || cache.loading || cache.book !== panelState.book || cache.chapter !== panelState.chapter) return null;
+  // lang too, not just book/chapter: switching the OT's own chip from HEB to
+  // LXX (or back) without moving to a different chapter must still refetch
+  // -- otherwise the just-switched-away-from language's tokens would go on
+  // rendering under the newly-active chip's own label until that fetch
+  // resolves (see ensureInterlinearData, which keys its own cache the same way).
+  if (!cache || cache.loading || cache.lang !== activeOriginalLanguageId(panelState.enabledTranslations)
+    || cache.book !== panelState.book || cache.chapter !== panelState.chapter) return null;
   return cache.map.get(verseNumber) ?? null;
 }
 
@@ -4560,13 +4598,17 @@ function fillInterlinearOriginal(element, text) {
   }
 }
 
-// Each token is a [original, transliteration, gloss, strongs] tuple (see
-// scripts/export_interlinear.py). Rendered as a row of word blocks, right-to-
-// left for Hebrew so words read in their natural order. Clicking a word
-// stops the click from also reaching the verse-group (which would otherwise
-// start a verse-copy selection instead) and reports the word back via
-// onWordClick so the caller can enter word-lookup mode for it.
-function buildInterlinearWordRow(tokens, lang, onWordClick, isSelected) {
+// Each token is a [original, transliteration, gloss, strongs, morphology]
+// tuple (see scripts/export_interlinear.py for HEB/GRK, build_interlinear_lxx.py
+// for LXX). Rendered as a row of word blocks, right-to-left for Hebrew so
+// words read in their natural order. Clicking a word stops the click from
+// also reaching the verse-group (which would otherwise start a verse-copy
+// selection instead) and reports the word back via onWordClick so the
+// caller can enter word-lookup mode for it. translationId (which original-
+// language id these tokens came from) rides along on that reported word
+// only so wordMorphologyDisplay can tell LXX's own already-English
+// morphology field apart from HEB/GRK's compact codes -- see its comment.
+function buildInterlinearWordRow(tokens, lang, onWordClick, isSelected, translationId) {
   const row = document.createElement("div");
   row.className = "interlinear-word-row";
   row.dir = lang === "he" ? "rtl" : "ltr";
@@ -4592,7 +4634,7 @@ function buildInterlinearWordRow(tokens, lang, onWordClick, isSelected) {
     word.append(translitEl, originalEl, glossEl);
     word.addEventListener("click", (event) => {
       event.stopPropagation();
-      onWordClick?.(word, { original, transliteration, gloss, strongs, lang, morphology });
+      onWordClick?.(word, { original, transliteration, gloss, strongs, lang, morphology, translation: translationId });
     });
     row.append(word);
   }
@@ -5088,8 +5130,17 @@ function syncOriginalLanguageForTestamentSide(panelState, enabledKey, boldKey, d
   const enabled = panelState[enabledKey];
   const active = activeOriginalLanguageId(enabled);
   if (!active) return;
-  const desired = originalLanguageForTestament(testamentForBook(panelState.book));
-  if (active === desired) return;
+  const bookTestament = testamentForBook(panelState.book);
+  // Only a genuine testament crossing (the active id's own testament no
+  // longer matches the book's) forces a swap -- staying within one
+  // testament leaves whatever the reader picked there alone, so choosing
+  // LXX for the OT survives navigating to another OT book instead of
+  // snapping back to HEB on every render (this runs on every one, via
+  // renderPanelBody). Only crossing into/out of the OT still auto-picks
+  // that testament's own default (HEB for the OT, GRK for the NT -- see
+  // originalLanguageForTestament), same as before LXX existed.
+  if (ORIGINAL_LANGUAGE_META[active].testament === bookTestament) return;
+  const desired = originalLanguageForTestament(bookTestament);
   enabled[enabled.indexOf(active)] = desired;
   panelState[boldKey] = panelState[boldKey].map((id) => (id === active ? desired : id));
   panelState[dimmedKey] = panelState[dimmedKey].map((id) => (id === active ? desired : id));
@@ -5248,7 +5299,7 @@ function buildTranslationLinesInto(pane, panelState, verseNumber, texts, list, b
           panelState.selectedWord?.verse === verseNumber
           && panelState.selectedWord?.original === original
           && panelState.selectedWord?.strongs === strongs
-        )));
+        ), translation));
       }
     } else {
       const text = document.createElement("p");
@@ -8504,8 +8555,8 @@ document.addEventListener("keydown", (event) => {
 // joined) so the copy builders below can treat it exactly like any other
 // translation. Only called when the copy dialog's version list actually
 // includes an original-language id.
-async function getInterlinearVerseTextMap(bookIndex, chapter) {
-  const data = await getInterlinearChapter(bookIndex, chapter);
+async function getInterlinearVerseTextMap(bookIndex, chapter, langId) {
+  const data = await getInterlinearChapter(bookIndex, chapter, langId);
   return new Map(data.v.map(([verse, tokens]) => [verse, joinInterlinearWords(tokens.map((token) => token[0]))]));
 }
 
@@ -8645,7 +8696,7 @@ async function copySelectedVerses() {
   }
   const originalId = translations.find((id) => ORIGINAL_LANGUAGE_IDS.includes(id));
   const originalTextByVerse = originalId
-    ? await getInterlinearVerseTextMap(copyBook, copyChapter)
+    ? await getInterlinearVerseTextMap(copyBook, copyChapter, originalId)
     : null;
   const text = copyReadingModeOn
     ? buildReadingStyleCopyText(translations, copyReadingNumbering === "on", originalTextByVerse)
@@ -9999,6 +10050,17 @@ const GREEK_LOANWORD_ONLY_NAMES = { HEB: "Hebrew Word", ARAM: "Aramaic Word" };
 
 function wordMorphologyDisplay(word) {
   if (!word.morphology) return "-";
+  // LXX's own morphology field (see build_interlinear_lxx.py's format_morphology)
+  // is already a finished, readable string ("Noun - Dat Sing Fem") built
+  // from LXX-Rahlfs-1935's own CATSS-derived codes -- a different scheme
+  // from TAGNT's Robinson-style compact codes (e.g. "N-DFS") that
+  // toBibleHubGreekCode/expandMorphologyCode below actually parse, so
+  // running it through that pipeline would at best pass it through
+  // unrecognised and at worst mangle it (it's several words long, and
+  // expandMorphologyCode's own Greek branch joins whatever it's given on
+  // " / " as if each space-separated piece were its own code). Shown as-is
+  // instead.
+  if (word.translation === "LXX") return word.morphology;
   let code = word.morphology;
   const loanword = word.lang === "grc" ? /^(?:(.*)-)?(HEB|ARAM)$/.exec(code) : null;
   if (loanword) {
