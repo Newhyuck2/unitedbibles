@@ -1445,13 +1445,17 @@ function canonicalTranslationRank(id) {
   // strictly greater rank" search never finds one among ties, so a freshly
   // re-added one would always land at the very end instead of back in its
   // own STR -> TSK slot.
-  // HEB/GRK sit in their own slot between the real translations and
-  // STR/TSK, rather than tying with (and landing after) the study tools at
-  // the shared fallback rank below.
-  if (ORIGINAL_LANGUAGE_IDS.includes(id)) return TRANSLATION_CANONICAL_ORDER.length;
+  // HEB/GRK/LXX sit in their own slot between the real translations and
+  // STR/TSK, each at its own rank (ORIGINAL_LANGUAGE_IDS' own order) rather
+  // than tied with each other -- tied ranks would make insertTranslationInOrder's
+  // "insert before the first strictly greater rank" search skip right past
+  // whichever of them was already present, always appending the newly added
+  // one after it instead of in its own HEB/GRK/LXX-list position.
+  const originalIndex = ORIGINAL_LANGUAGE_IDS.indexOf(id);
+  if (originalIndex >= 0) return TRANSLATION_CANONICAL_ORDER.length + originalIndex;
   const studyRank = STUDY_TOOL_IDS.indexOf(id);
-  if (studyRank >= 0) return TRANSLATION_CANONICAL_ORDER.length + 1 + studyRank;
-  return TRANSLATION_CANONICAL_ORDER.length + 1 + STUDY_TOOL_IDS.length;
+  if (studyRank >= 0) return TRANSLATION_CANONICAL_ORDER.length + ORIGINAL_LANGUAGE_IDS.length + studyRank;
+  return TRANSLATION_CANONICAL_ORDER.length + ORIGINAL_LANGUAGE_IDS.length + STUDY_TOOL_IDS.length;
 }
 
 function insertTranslationInOrder(order, id) {
