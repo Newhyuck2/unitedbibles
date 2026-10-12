@@ -52,19 +52,29 @@ const DEFAULT_DIMMED_TRANSLATIONS = [];
 // tracks the testament of the panel's current book (see
 // syncOriginalLanguageForTestament).
 const ORIGINAL_LANGUAGE_META = {
-  HEB: { id: "HEB", label: "HEB", name: "Hebrew Interlinear", testament: "old" },
-  GRK: { id: "GRK", label: "GRK", name: "Greek Interlinear", testament: "new" },
-  // A second OT option alongside HEB (see the picker's own testament gating
-  // in renderDialogTranslationPickerMenu, which already loops over every id
-  // here rather than hard-coding two) -- picking either replaces whichever
-  // of the two was showing (see onToggle below), same as HEB/GRK already do
-  // across the OT/NT boundary. Crossing into the OT from the NT still lands
-  // on HEB by default every time (see originalLanguageForTestament, which
-  // deliberately isn't changed by this addition); LXX is something the
-  // reader opts into from the picker, not an automatic choice.
-  LXX: { id: "LXX", label: "LXX", name: "Septuagint Interlinear", testament: "old" },
+  HEB: { id: "HEB", label: "HEB", name: "Hebrew Interlinear", testament: "old", exclusive: true },
+  GRK: { id: "GRK", label: "GRK", name: "Greek Interlinear", testament: "new", exclusive: true },
+  // A second, independent OT option -- unlike HEB/GRK (exclusive: true),
+  // LXX is a full peer of any other translation: it can sit alongside HEB
+  // (even both at once), hides/shows with a plain click like a real
+  // translation (see toggleTranslationChip's own EXCLUSIVE_ORIGINAL_LANGUAGE_IDS
+  // check), and is never removed just because HEB was just added or vice
+  // versa (see onToggle below). It still only has OT data of its own (see
+  // the picker's testament gating, unaffected by exclusive) and still
+  // renders as an interlinear word row rather than plain text (see every
+  // *other* ORIGINAL_LANGUAGE_IDS check, which stays the full list of three).
+  // Crossing from the NT back into the OT still lands on HEB by default
+  // every time, same as before LXX existed (see originalLanguageForTestament,
+  // which only ever knows about the exclusive pair) -- LXX is something the
+  // reader opts into, never automatic.
+  LXX: { id: "LXX", label: "LXX", name: "Septuagint Interlinear", testament: "old", exclusive: false },
 };
 const ORIGINAL_LANGUAGE_IDS = Object.keys(ORIGINAL_LANGUAGE_META);
+// HEB/GRK only -- the one shared "original language" slot (see
+// activeOriginalLanguageId, originalLanguageHidden, syncOriginalLanguageForTestament):
+// exactly one of these two is ever enabled per panel, auto-tracking the
+// book's own testament. LXX sits outside this -- see its own comment above.
+const EXCLUSIVE_ORIGINAL_LANGUAGE_IDS = ORIGINAL_LANGUAGE_IDS.filter((id) => ORIGINAL_LANGUAGE_META[id].exclusive);
 // The two lines of an interlinear word block (see buildInterlinearWordRow)
 // that HEB/GRK's own chip mode popup can hide -- the original-language word
 // itself between them always stays. See originalLanguageHiddenParts.
@@ -1420,8 +1430,10 @@ function originalLanguageForTestament(testament) {
   return testament === "old" ? "HEB" : "GRK";
 }
 
+// The exclusive HEB/GRK pair's own current occupant -- never LXX, which
+// isn't part of that one-at-a-time slot (see EXCLUSIVE_ORIGINAL_LANGUAGE_IDS).
 function activeOriginalLanguageId(enabledTranslations) {
-  return enabledTranslations.find((id) => ORIGINAL_LANGUAGE_IDS.includes(id)) ?? null;
+  return enabledTranslations.find((id) => EXCLUSIVE_ORIGINAL_LANGUAGE_IDS.includes(id)) ?? null;
 }
 
 function canonicalTranslationRank(id) {
@@ -1546,7 +1558,12 @@ function toggleTranslationChip(panelState, id, { isNewlyAdded = false } = {}) {
   // (wasShowingStudyTool) both force it back to shown instead, so neither
   // "just added" nor "clicked to get back to reading" is a coin flip on
   // whether the text that click was reaching for actually shows up.
-  if (ORIGINAL_LANGUAGE_IDS.includes(id)) {
+  // EXCLUSIVE_ORIGINAL_LANGUAGE_IDS, not every original-language id: LXX
+  // falls through to the plain real-translation branch at the bottom
+  // instead, toggling panelState.dimmedTranslations like any other chip --
+  // fields.hidden is a single shared boolean built for exactly one active
+  // original language, which LXX alongside HEB would otherwise fight over.
+  if (EXCLUSIVE_ORIGINAL_LANGUAGE_IDS.includes(id)) {
     const wasShowingStudyTool = Boolean(activeStudyTool);
     panelState[fields.active] = null;
     if (wasShowingStudyTool) {
@@ -2443,8 +2460,11 @@ function setupDialogTranslationControl({
       closeChipModePopupFor(id);
       setOrder(order.filter((item) => item !== id));
     } else {
-      if (ORIGINAL_LANGUAGE_IDS.includes(id)) {
-        for (const other of ORIGINAL_LANGUAGE_IDS) {
+      // Only HEB/GRK's exclusive pair evicts "the other" -- adding LXX
+      // removes nothing (it's a full peer, see ORIGINAL_LANGUAGE_META), and
+      // adding HEB/GRK doesn't remove LXX either.
+      if (EXCLUSIVE_ORIGINAL_LANGUAGE_IDS.includes(id)) {
+        for (const other of EXCLUSIVE_ORIGINAL_LANGUAGE_IDS) {
           if (other === id) continue;
           const otherIndex = order.indexOf(other);
           if (otherIndex >= 0) order.splice(otherIndex, 1);
@@ -2459,14 +2479,17 @@ function setupDialogTranslationControl({
         // picking one activates it immediately, exactly as if its own chip
         // had just been clicked. HEB/GRK could just sit there added but
         // not yet "clicked," same as any other translation, but its own
-        // green active state (see the ORIGINAL_LANGUAGE_IDS branch in
-        // toggleTranslationChip) reading as "not yet showing" the instant
+        // green active state (see the EXCLUSIVE_ORIGINAL_LANGUAGE_IDS branch
+        // in toggleTranslationChip) reading as "not yet showing" the instant
         // it's added would be a confusing first impression, so it gets the
         // same immediate activation. isNewlyAdded tells that branch this
         // is that first activation, not a re-click -- otherwise its own
         // show/hide toggle would have a coin flip's chance of hiding the
-        // text again the instant it appears.
-        if (STUDY_TOOL_IDS.includes(id) || ORIGINAL_LANGUAGE_IDS.includes(id)) onToggleActive?.(id, { isNewlyAdded: true });
+        // text again the instant it appears. LXX needs none of this: a
+        // freshly added chip already starts outside dimmedTranslations (so
+        // it reads as shown from the moment it's inserted above), and
+        // calling this would instead immediately toggle it hidden.
+        if (STUDY_TOOL_IDS.includes(id) || EXCLUSIVE_ORIGINAL_LANGUAGE_IDS.includes(id)) onToggleActive?.(id, { isNewlyAdded: true });
       }
     }
     render();
@@ -3900,7 +3923,7 @@ function createPanelElement(panelState) {
     // reasons for the same "this chip's content isn't showing" look, so
     // either one alone is enough to trigger it.
     getEmphasis: (id) => (
-      panelState.dimmedTranslations.includes(id) || (ORIGINAL_LANGUAGE_IDS.includes(id) && panelState.originalLanguageHidden)
+      panelState.dimmedTranslations.includes(id) || (EXCLUSIVE_ORIGINAL_LANGUAGE_IDS.includes(id) && panelState.originalLanguageHidden)
         ? "dim"
         : "normal"
     ),
@@ -4486,43 +4509,50 @@ async function getInterlinearChapter(bookIndex, chapter, langId = originalLangua
 // Lazily fetches this panel's interlinear chapter data when Hebrew/Greek is
 // active, keyed to the panel's current book/chapter so a navigation or
 // language swap triggers a fresh fetch. Re-renders the panel once loaded.
+// Keyed by id, not a single slot: HEB/GRK still only ever have one of the
+// two enabled (see EXCLUSIVE_ORIGINAL_LANGUAGE_IDS), but LXX is independent
+// of that pair (see ORIGINAL_LANGUAGE_META's own comment) and can be
+// enabled alongside HEB, so each one enabled needs its own fetch/cache
+// entry rather than the panel sharing a single "the active original
+// language" slot the way it did before LXX could coexist with HEB.
 function ensureInterlinearData(panelState) {
-  const activeId = activeOriginalLanguageId(panelState.enabledTranslations);
-  if (!activeId) {
+  const activeIds = panelState.enabledTranslations.filter((id) => ORIGINAL_LANGUAGE_IDS.includes(id));
+  if (!activeIds.length) {
     panelState.interlinearVerses = null;
     return;
   }
-  const cache = panelState.interlinearVerses;
-  // lang included: the OT now has two possible sources (HEB/LXX), so a
-  // chip switch with the book/chapter unchanged still needs a fresh fetch
-  // (see interlinearTokensForVerse's matching check on the read side).
-  if (cache && cache.lang === activeId && cache.book === panelState.book && cache.chapter === panelState.chapter) return;
-  const requestBook = panelState.book;
-  const requestChapter = panelState.chapter;
-  panelState.interlinearVerses = { lang: activeId, book: requestBook, chapter: requestChapter, loading: true, map: new Map() };
-  getInterlinearChapter(requestBook, requestChapter, activeId)
-    .then((data) => {
-      if (panelState.book !== requestBook || panelState.chapter !== requestChapter) return;
-      if (activeOriginalLanguageId(panelState.enabledTranslations) !== activeId) return;
-      panelState.interlinearVerses = { lang: activeId, book: requestBook, chapter: requestChapter, loading: false, map: new Map(data.v) };
-      renderPanelBody(panelState);
-    })
-    .catch(() => {
-      if (panelState.book !== requestBook || panelState.chapter !== requestChapter) return;
-      panelState.interlinearVerses = { lang: activeId, book: requestBook, chapter: requestChapter, loading: false, map: new Map() };
-      renderPanelBody(panelState);
-    });
+  const cache = panelState.interlinearVerses ?? {};
+  panelState.interlinearVerses = cache;
+  // Drop whatever's no longer enabled -- harmless to leave (a stale entry
+  // is simply never read again), but keeps this from growing across a long
+  // session of adding/removing original-language chips.
+  for (const id of Object.keys(cache)) {
+    if (!activeIds.includes(id)) delete cache[id];
+  }
+  for (const id of activeIds) {
+    const entry = cache[id];
+    if (entry && entry.book === panelState.book && entry.chapter === panelState.chapter) continue;
+    const requestBook = panelState.book;
+    const requestChapter = panelState.chapter;
+    cache[id] = { book: requestBook, chapter: requestChapter, loading: true, map: new Map() };
+    getInterlinearChapter(requestBook, requestChapter, id)
+      .then((data) => {
+        if (panelState.book !== requestBook || panelState.chapter !== requestChapter) return;
+        if (!panelState.enabledTranslations.includes(id)) return;
+        panelState.interlinearVerses[id] = { book: requestBook, chapter: requestChapter, loading: false, map: new Map(data.v) };
+        renderPanelBody(panelState);
+      })
+      .catch(() => {
+        if (panelState.book !== requestBook || panelState.chapter !== requestChapter) return;
+        panelState.interlinearVerses[id] = { book: requestBook, chapter: requestChapter, loading: false, map: new Map() };
+        renderPanelBody(panelState);
+      });
+  }
 }
 
-function interlinearTokensForVerse(panelState, verseNumber) {
-  const cache = panelState.interlinearVerses;
-  // lang too, not just book/chapter: switching the OT's own chip from HEB to
-  // LXX (or back) without moving to a different chapter must still refetch
-  // -- otherwise the just-switched-away-from language's tokens would go on
-  // rendering under the newly-active chip's own label until that fetch
-  // resolves (see ensureInterlinearData, which keys its own cache the same way).
-  if (!cache || cache.loading || cache.lang !== activeOriginalLanguageId(panelState.enabledTranslations)
-    || cache.book !== panelState.book || cache.chapter !== panelState.chapter) return null;
+function interlinearTokensForVerse(panelState, verseNumber, translationId) {
+  const cache = panelState.interlinearVerses?.[translationId];
+  if (!cache || cache.loading || cache.book !== panelState.book || cache.chapter !== panelState.chapter) return null;
   return cache.map.get(verseNumber) ?? null;
 }
 
@@ -4741,7 +4771,7 @@ function hasNoPlainTextColumn(panelState) {
 function panelHasNoTranslations(panelState) {
   return !panelState.enabledTranslations.some((id) => (
     !STUDY_TOOL_IDS.includes(id)
-    && !(panelState.originalLanguageHidden && ORIGINAL_LANGUAGE_IDS.includes(id))
+    && !(panelState.originalLanguageHidden && EXCLUSIVE_ORIGINAL_LANGUAGE_IDS.includes(id))
     && !panelState.dimmedTranslations.includes(id)
   ));
 }
@@ -5235,7 +5265,7 @@ function buildTranslationLinesInto(pane, panelState, verseNumber, texts, list, b
   // at all, rather than rendering pale gray text as before.
   list = list.filter((translation) => (
     !STUDY_TOOL_IDS.includes(translation)
-    && !(originalLanguageHidden && ORIGINAL_LANGUAGE_IDS.includes(translation))
+    && !(originalLanguageHidden && EXCLUSIVE_ORIGINAL_LANGUAGE_IDS.includes(translation))
     && !dimmedList.includes(translation)
   ));
   list.forEach((translation) => {
@@ -5244,7 +5274,7 @@ function buildTranslationLinesInto(pane, panelState, verseNumber, texts, list, b
       return;
     }
     const isOriginalLanguage = ORIGINAL_LANGUAGE_IDS.includes(translation);
-    const tokens = isOriginalLanguage ? interlinearTokensForVerse(panelState, verseNumber) : null;
+    const tokens = isOriginalLanguage ? interlinearTokensForVerse(panelState, verseNumber, translation) : null;
     const translationText = isOriginalLanguage ? null : texts[translation];
     const hasContent = isOriginalLanguage ? Boolean(tokens?.length) : hasVerseText(translationText);
     const line = document.createElement("div");
@@ -6420,7 +6450,7 @@ function renderPanelBody(panelState) {
     // value) instead of each verse recomputing its own column count.
     const visibleTranslations = enabled.filter((translation) => (
       !STUDY_TOOL_IDS.includes(translation)
-      && !(panelState.originalLanguageHidden && ORIGINAL_LANGUAGE_IDS.includes(translation))
+      && !(panelState.originalLanguageHidden && EXCLUSIVE_ORIGINAL_LANGUAGE_IDS.includes(translation))
       && !panelState.dimmedTranslations.includes(translation)
     ));
     elements.panel.style.setProperty("--translation-count", String(Math.max(visibleTranslations.length, 1)));
@@ -6550,7 +6580,7 @@ function renderPanelBody(panelState) {
   // Greek tokens arrive) shifts whichever verse the anchor logic picked,
   // occasionally leaving some other verse at the top instead of verse 1.
   const pendingScrollVerse = panelState.scrollTargetVerse ?? null;
-  const interlinearLoadPending = Boolean(panelState.interlinearVerses?.loading);
+  const interlinearLoadPending = Object.values(panelState.interlinearVerses ?? {}).some((entry) => entry.loading);
   const anchor = pendingScrollVerse == null ? captureVerseAnchor(elements.content, panelState) : null;
   elements.content.replaceChildren(fragment);
   for (const icon of elements.content.querySelectorAll(".verse-note-icon--pending")) {
@@ -8594,7 +8624,7 @@ function copyEffectiveVerseNumbers() {
   return Array.from({ length: copyEndVerse - copyStartVerse + 1 }, (_, index) => copyStartVerse + index);
 }
 
-function buildCopyText(translations, order, originalTextByVerse) {
+function buildCopyText(translations, order, originalTextById) {
   const selectedVerses = copyEffectiveVerseNumbers();
   const selected = new Set(selectedVerses);
   const book = manifest.books[copyBook];
@@ -8604,7 +8634,7 @@ function buildCopyText(translations, order, originalTextByVerse) {
     translationLanguage(translation) === "en" ? book.en : book.ko;
   const range = formatVerseReference(copyChapter, selectedVerses);
   const textFor = (texts, verse, translation) =>
-    ORIGINAL_LANGUAGE_IDS.includes(translation) ? originalTextByVerse?.get(verse) : texts[translation];
+    ORIGINAL_LANGUAGE_IDS.includes(translation) ? originalTextById?.get(translation)?.get(verse) : texts[translation];
 
   if (order === "translation") {
     for (const translation of translations) {
@@ -8636,11 +8666,11 @@ function buildCopyText(translations, order, originalTextByVerse) {
 // Mirrors buildReadingCopyBody's own {verse, text} shape for a single
 // chapter, so the reading-mode-on branch of copySelectedVerses can reuse
 // that exact same prose-building function instead of a parallel one.
-function buildReadingStyleVersesForTranslation(translation, originalTextByVerse) {
+function buildReadingStyleVersesForTranslation(translation, originalTextById) {
   const selectedVerses = copyEffectiveVerseNumbers();
   const selected = new Set(selectedVerses);
   const textFor = (texts, verse) =>
-    ORIGINAL_LANGUAGE_IDS.includes(translation) ? originalTextByVerse?.get(verse) : texts[translation];
+    ORIGINAL_LANGUAGE_IDS.includes(translation) ? originalTextById?.get(translation)?.get(verse) : texts[translation];
   return copyChapterDataCache.v
     .filter(([verse]) => selected.has(verse))
     .map(([verse, texts]) => ({ verse, text: textFor(texts, verse) || "" }));
@@ -8651,7 +8681,7 @@ function buildReadingStyleVersesForTranslation(translation, originalTextByVerse)
 // continuous prose), reusing buildReadingCopyBody for the body itself --
 // per explicit request, copying this way with two-plus versions selected
 // always reads as "version by version", never interleaved.
-function buildReadingStyleCopyText(translations, numbering, originalTextByVerse) {
+function buildReadingStyleCopyText(translations, numbering, originalTextById) {
   const selectedVerses = copyEffectiveVerseNumbers();
   const book = manifest.books[copyBook];
   const bookNameFor = (translation) =>
@@ -8662,7 +8692,7 @@ function buildReadingStyleCopyText(translations, numbering, originalTextByVerse)
   const lines = [];
   for (const translation of translations) {
     lines.push(`${bookNameFor(translation)} ${range}, ${translationMeta(translation).label}`);
-    const chapters = [{ chapter: copyChapter, verses: buildReadingStyleVersesForTranslation(translation, originalTextByVerse) }];
+    const chapters = [{ chapter: copyChapter, verses: buildReadingStyleVersesForTranslation(translation, originalTextById) }];
     const body = buildReadingCopyBody(chapters, start, end, numbering);
     if (body) lines.push(body);
     lines.push("");
@@ -8694,13 +8724,18 @@ async function copySelectedVerses() {
     copyStatus.textContent = "Select a version.";
     return;
   }
-  const originalId = translations.find((id) => ORIGINAL_LANGUAGE_IDS.includes(id));
-  const originalTextByVerse = originalId
-    ? await getInterlinearVerseTextMap(copyBook, copyChapter, originalId)
+  // One map per original-language id actually selected, not just the
+  // first -- HEB and LXX (unlike the old HEB/GRK pair) can both be in
+  // `translations` at once now, each needing its own reconstructed text.
+  const originalIds = translations.filter((id) => ORIGINAL_LANGUAGE_IDS.includes(id));
+  const originalTextById = originalIds.length
+    ? new Map(await Promise.all(
+        originalIds.map(async (id) => [id, await getInterlinearVerseTextMap(copyBook, copyChapter, id)]),
+      ))
     : null;
   const text = copyReadingModeOn
-    ? buildReadingStyleCopyText(translations, copyReadingNumbering === "on", originalTextByVerse)
-    : buildCopyText(translations, copyOrder, originalTextByVerse);
+    ? buildReadingStyleCopyText(translations, copyReadingNumbering === "on", originalTextById)
+    : buildCopyText(translations, copyOrder, originalTextById);
   try {
     await writeClipboard(text);
     copyStatus.textContent = "Copied";
