@@ -5195,6 +5195,11 @@ function syncOriginalLanguageForTestamentSide(panelState, enabledKey, boldKey, d
   // OT-only translation reaching an NT book would need to be, rather than
   // left enabled and silently showing nothing.
   if (bookTestament !== "old" && enabled.includes("LXX")) {
+    // LXX alone (no HEB) never went through the swap above, so nothing's
+    // added GRK yet -- do that here instead, so crossing testaments with
+    // *either* OT original-language option showing always lands on GRK
+    // alone, never on nothing at all.
+    if (!active) insertTranslationInOrder(enabled, "GRK");
     panelState[enabledKey] = enabled.filter((id) => id !== "LXX");
     panelState[boldKey] = panelState[boldKey].filter((id) => id !== "LXX");
     panelState[dimmedKey] = panelState[dimmedKey].filter((id) => id !== "LXX");
