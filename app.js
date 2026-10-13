@@ -5162,30 +5162,48 @@ function rerenderPanelsPreservingVerseAnchor(book, chapter, verseNumber) {
 // per id (see toggleOriginalLanguagePart).
 function syncOriginalLanguageForTestamentSide(panelState, enabledKey, boldKey, dimmedKey) {
   const enabled = panelState[enabledKey];
-  const active = activeOriginalLanguageId(enabled);
-  if (!active) return;
   const bookTestament = testamentForBook(panelState.book);
-  // Only a genuine testament crossing (the active id's own testament no
-  // longer matches the book's) forces a swap -- staying within one
-  // testament leaves whatever the reader picked there alone, so choosing
-  // LXX for the OT survives navigating to another OT book instead of
-  // snapping back to HEB on every render (this runs on every one, via
-  // renderPanelBody). Only crossing into/out of the OT still auto-picks
-  // that testament's own default (HEB for the OT, GRK for the NT -- see
-  // originalLanguageForTestament), same as before LXX existed.
-  if (ORIGINAL_LANGUAGE_META[active].testament === bookTestament) return;
-  const desired = originalLanguageForTestament(bookTestament);
-  enabled[enabled.indexOf(active)] = desired;
-  panelState[boldKey] = panelState[boldKey].map((id) => (id === active ? desired : id));
-  panelState[dimmedKey] = panelState[dimmedKey].map((id) => (id === active ? desired : id));
-  if (Object.hasOwn(panelState.translationTextColors, active)) {
-    const { [active]: color, ...rest } = panelState.translationTextColors;
-    panelState.translationTextColors = { ...rest, [desired]: color };
+  const active = activeOriginalLanguageId(enabled);
+  if (active) {
+    // Only a genuine testament crossing (the active id's own testament no
+    // longer matches the book's) forces a swap -- staying within one
+    // testament leaves whatever the reader picked there alone, so choosing
+    // LXX for the OT survives navigating to another OT book instead of
+    // snapping back to HEB on every render (this runs on every one, via
+    // renderPanelBody). Only crossing into/out of the OT still auto-picks
+    // that testament's own default (HEB for the OT, GRK for the NT -- see
+    // originalLanguageForTestament), same as before LXX existed.
+    if (ORIGINAL_LANGUAGE_META[active].testament !== bookTestament) {
+      const desired = originalLanguageForTestament(bookTestament);
+      enabled[enabled.indexOf(active)] = desired;
+      panelState[boldKey] = panelState[boldKey].map((id) => (id === active ? desired : id));
+      panelState[dimmedKey] = panelState[dimmedKey].map((id) => (id === active ? desired : id));
+      if (Object.hasOwn(panelState.translationTextColors, active)) {
+        const { [active]: color, ...rest } = panelState.translationTextColors;
+        panelState.translationTextColors = { ...rest, [desired]: color };
+      }
+      // A chip mode popup still open on the id just swapped out (e.g. opened
+      // while the next chapter was still loading, so no scroll ever closed
+      // it) would otherwise keep writing its B/color picks to that stale id.
+      if (chipModeTarget?.panelState === panelState && chipModeTarget.id === active) hideChipModePopup();
+    }
   }
-  // A chip mode popup still open on the id just swapped out (e.g. opened
-  // while the next chapter was still loading, so no scroll ever closed it)
-  // would otherwise keep writing its B/color picks to that stale id instead.
-  if (chipModeTarget?.panelState === panelState && chipModeTarget.id === active) hideChipModePopup();
+  // LXX is a full peer, not part of the exclusive HEB/GRK slot above (see
+  // ORIGINAL_LANGUAGE_META), so crossing testaments doesn't swap it to
+  // anything -- it only ever has OT data, so it's removed outright once the
+  // book's own testament is no longer "old", the same way any other
+  // OT-only translation reaching an NT book would need to be, rather than
+  // left enabled and silently showing nothing.
+  if (bookTestament !== "old" && enabled.includes("LXX")) {
+    panelState[enabledKey] = enabled.filter((id) => id !== "LXX");
+    panelState[boldKey] = panelState[boldKey].filter((id) => id !== "LXX");
+    panelState[dimmedKey] = panelState[dimmedKey].filter((id) => id !== "LXX");
+    if (Object.hasOwn(panelState.translationTextColors, "LXX")) {
+      const { LXX: _color, ...rest } = panelState.translationTextColors;
+      panelState.translationTextColors = rest;
+    }
+    if (chipModeTarget?.panelState === panelState && chipModeTarget.id === "LXX") hideChipModePopup();
+  }
 }
 
 function syncOriginalLanguageForTestament(panelState) {
