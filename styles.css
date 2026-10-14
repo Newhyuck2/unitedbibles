@@ -431,34 +431,38 @@ p {
   .translation-list-scrollbar--visible {
     display: block;
     position: relative;
-    height: 10px;
-    margin: 0 3px 0;
+    height: 16px;
+    margin: 4px 3px 0;
     /* This bar IS the drag surface (see setupHorizontalDragScrollbar in
-       app.js) -- no native gesture of its own to leave room for. */
+       app.js) -- no native gesture of its own to leave room for. The box
+       is taller than the visible line below needs, on purpose: that slack
+       sits above the line (see the ::before/-thumb bottom anchor below),
+       between it and the translation chips, so a thumb that lands a
+       little high still starts a drag instead of tapping a chip -- the
+       4px margin above adds a further, completely dead buffer before that. */
     touch-action: none;
   }
 
   /* Visible thickness (track and thumb alike): thick enough to read clearly
-     as a scrollbar on touch, with just enough spare room in the 10px box
-     above for a finger to land slightly off-center. */
+     as a scrollbar on touch. Anchored to the box's own bottom edge (not
+     centered) so the row above keeps the tight fit established above, and
+     all of the box's extra height becomes headroom facing the chips. */
   .translation-list-scrollbar--visible::before {
     content: "";
     position: absolute;
-    top: 50%;
+    bottom: 2px;
     left: 0;
     right: 0;
     height: 5px;
-    transform: translateY(-50%);
     background: var(--scrollbar-track-warm);
     border-radius: 2px;
   }
 
   .translation-list-scrollbar-thumb {
     position: absolute;
-    top: 50%;
+    bottom: 2px;
     height: 5px;
     min-width: 24px;
-    transform: translateY(-50%);
     background: var(--scrollbar-thumb-warm);
     border-radius: 2px;
   }
