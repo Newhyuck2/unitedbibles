@@ -1947,6 +1947,7 @@ function renderTranslationChipList({ list, order, getEmphasis, onToggleActive, o
   // 0/0 on a still-hidden <dialog>, which would misjudge overflow.
   requestAnimationFrame(() => {
     list.classList.toggle("translation-list--overflowing", list.scrollWidth > list.clientWidth + 1);
+    horizontalScrollbarSyncs.get(list)?.();
   });
 }
 
@@ -2047,6 +2048,75 @@ function setupTouchReorder({ item, handle, container, itemClass, id, getOrder, o
     item.addEventListener("pointerup", finish);
     item.addEventListener("pointercancel", finish);
   });
+}
+
+// Registered by setupHorizontalDragScrollbar, keyed by the scrolling list
+// itself -- renderTranslationChipList's own rAF callback looks a list up
+// here and re-syncs it after every re-render, with no-op for any list that
+// never had one set up (every caller except the panel's own chip row).
+const horizontalScrollbarSyncs = new WeakMap();
+
+// A substitute scroll affordance for .panel-translation-list, needed only
+// because every one of its chips is touch-action: none (see
+// setupTouchReorder above and that rule in styles.css) so that a touch-drag
+// on a chip always reorders, never scrolls the row -- there's no direction
+// split (like a plain vertical list reordering on a vertical drag while a
+// horizontal swipe still pans) available here, since reordering a
+// *horizontal* row of chips needs a horizontal drag too. `track` is the
+// full-width drag surface (not just `thumb`): a whole track is a much
+// easier target for a fingertip than a thumb that can narrow to a sliver
+// once there are many chips, and dragging anywhere on it jumps the scroll
+// position to directly under the finger, matching a typical mobile slider.
+function setupHorizontalDragScrollbar({ list, track, thumb }) {
+  if (!list || !track || !thumb) return;
+
+  const sync = () => {
+    const overflowing = list.scrollWidth > list.clientWidth + 1;
+    track.classList.toggle("translation-list-scrollbar--visible", overflowing);
+    if (!overflowing) return;
+    const trackWidth = track.clientWidth;
+    const thumbWidth = Math.min(trackWidth, Math.max(24, Math.round((trackWidth * list.clientWidth) / list.scrollWidth)));
+    const maxScrollLeft = list.scrollWidth - list.clientWidth;
+    const maxThumbLeft = Math.max(0, trackWidth - thumbWidth);
+    const ratio = maxScrollLeft > 0 ? list.scrollLeft / maxScrollLeft : 0;
+    thumb.style.width = `${thumbWidth}px`;
+    thumb.style.left = `${Math.round(maxThumbLeft * ratio)}px`;
+  };
+
+  list.addEventListener("scroll", sync);
+  window.addEventListener("resize", sync);
+
+  track.addEventListener("pointerdown", (event) => {
+    const pointerId = event.pointerId;
+    track.setPointerCapture(pointerId);
+    const scrollTo = (clientX) => {
+      const rect = track.getBoundingClientRect();
+      const thumbWidth = thumb.offsetWidth;
+      const maxThumbLeft = Math.max(1, rect.width - thumbWidth);
+      const x = Math.min(Math.max(clientX - rect.left - thumbWidth / 2, 0), maxThumbLeft);
+      const maxScrollLeft = list.scrollWidth - list.clientWidth;
+      list.scrollLeft = maxScrollLeft * (x / maxThumbLeft);
+    };
+    scrollTo(event.clientX);
+    const move = (moveEvent) => {
+      if (moveEvent.pointerId !== pointerId) return;
+      moveEvent.preventDefault();
+      scrollTo(moveEvent.clientX);
+    };
+    const finish = (finishEvent) => {
+      if (finishEvent.pointerId !== pointerId) return;
+      if (track.hasPointerCapture(pointerId)) track.releasePointerCapture(pointerId);
+      track.removeEventListener("pointermove", move);
+      track.removeEventListener("pointerup", finish);
+      track.removeEventListener("pointercancel", finish);
+    };
+    track.addEventListener("pointermove", move, { passive: false });
+    track.addEventListener("pointerup", finish);
+    track.addEventListener("pointercancel", finish);
+  });
+
+  horizontalScrollbarSyncs.set(list, sync);
+  sync();
 }
 
 // Native-select feel for touch: a press that starts on `opener` opens the
@@ -3774,6 +3844,8 @@ function createPanelElement(panelState) {
   const translationPickerToggleEl = fragment.querySelector(".panel-translation-picker-toggle");
   const translationPickerMenuEl = fragment.querySelector(".panel-translation-picker-menu");
   const translationListEl = fragment.querySelector(".panel-translation-list");
+  const translationListScrollbarEl = fragment.querySelector(".translation-list-scrollbar");
+  const translationListScrollbarThumbEl = fragment.querySelector(".translation-list-scrollbar-thumb");
   const verseLayoutStackedEl = fragment.querySelector(".panel-verse-layout-stacked");
   const verseLayoutColumnsEl = fragment.querySelector(".panel-verse-layout-columns");
   const columnHeaderEl = fragment.querySelector(".panel-column-header");
@@ -3912,6 +3984,11 @@ function createPanelElement(panelState) {
     () => panelState,
     { afterPick: () => translationControl.render() },
   );
+  setupHorizontalDragScrollbar({
+    list: translationListEl,
+    track: translationListScrollbarEl,
+    thumb: translationListScrollbarThumbEl,
+  });
   const translationControl = setupDialogTranslationControl({
     picker: translationPickerEl,
     toggle: translationPickerToggleEl,

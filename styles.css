@@ -386,6 +386,84 @@ p {
   border-radius: 8px;
 }
 
+/* Only the panel's own chip row needs this wrapper (see its own comment in
+   index.html) -- every chip in it is touch-action: none (see
+   .panel-translation-list .translation-chip below), so a touch-drag
+   anywhere on a chip always starts a reorder, never the row's own native
+   horizontal scroll, once the row overflows. .translation-list-scrollbar
+   is this wrapper's own substitute scroll affordance for that case --
+   hidden outside the mobile/coarse-pointer breakpoint below, where a mouse
+   or trackpad can still scroll the row directly (wheel/drag on its own
+   native thin scrollbar, untouched by any of this). */
+.panel-translation-list-wrap {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-width: 0;
+  order: 1;
+}
+
+.panel-translation-list-wrap .translation-list {
+  order: unset;
+  /* .dialog-translation-controls .translation-list's own align-self:
+     flex-start (further down) was written for the row this list used to
+     sit in directly -- flex-start there meant "don't stretch to the row's
+     own height," leaving width alone. Nested in this wrap's own column
+     flex context instead, align-self governs the CROSS axis, which is now
+     width, not height -- flex-start there instead means "don't stretch to
+     the wrap's own width," sizing the list to its own unshrunk content
+     width and silently breaking the whole row's layout (chips spilling
+     past the panel's own edge, clipped by .panel-translation-controls'
+     overflow: hidden, with nothing left for this wrap's own min-width: 0
+     to actually shrink). An explicit width re-establishes it.
+     */
+  width: 100%;
+}
+
+.translation-list-scrollbar {
+  display: none;
+}
+
+/* Shown only here -- on a mouse/trackpad, the row's own native thin
+   scrollbar (scrollbar-width: thin above) already works fine, so this
+   extra affordance would just be visual noise there. */
+@media (max-width: 820px), (max-width: 1366px) and (any-pointer: coarse) {
+  .translation-list-scrollbar--visible {
+    display: block;
+    position: relative;
+    height: 14px;
+    margin: 1px 3px 0;
+    /* This bar IS the drag surface (see setupHorizontalDragScrollbar in
+       app.js) -- no native gesture of its own to leave room for. */
+    touch-action: none;
+  }
+
+  /* A slim visible track centered in the taller 14px box above, which
+     exists purely to give a finger more room to land on than a 4px-tall
+     track alone would. */
+  .translation-list-scrollbar--visible::before {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 0;
+    right: 0;
+    height: 4px;
+    transform: translateY(-50%);
+    background: var(--scrollbar-track-warm);
+    border-radius: 2px;
+  }
+
+  .translation-list-scrollbar-thumb {
+    position: absolute;
+    top: 50%;
+    height: 4px;
+    min-width: 24px;
+    transform: translateY(-50%);
+    background: var(--scrollbar-thumb-warm);
+    border-radius: 2px;
+  }
+}
+
 .translation-chip {
   display: flex;
   flex: 0 0 auto;
@@ -6178,7 +6256,7 @@ body * {
    there's nothing else left in the bar to size around. */
 .bible-panel.reading-mode-active .panel-selectors,
 .bible-panel.reading-mode-active .panel-translation-picker,
-.bible-panel.reading-mode-active .panel-translation-list {
+.bible-panel.reading-mode-active .panel-translation-list-wrap {
   display: none;
 }
 
