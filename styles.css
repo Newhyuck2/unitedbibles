@@ -438,8 +438,10 @@ p {
     touch-action: none;
   }
 
-  /* A slim visible track centered in the taller 14px box above, which
-     exists purely to give a finger more room to land on than a 4px-tall
+  /* Visible thickness (track and thumb alike) matches .panel-resize-handle's
+     own visible indicator (::after, width: 2px) -- the only other draggable
+     bar in the app -- so both read as the same kind of control. The 14px
+     box above just gives a finger more room to land on than a 2px-tall
      track alone would. */
   .translation-list-scrollbar--visible::before {
     content: "";
@@ -447,7 +449,7 @@ p {
     top: 50%;
     left: 0;
     right: 0;
-    height: 4px;
+    height: 2px;
     transform: translateY(-50%);
     background: var(--scrollbar-track-warm);
     border-radius: 2px;
@@ -456,11 +458,25 @@ p {
   .translation-list-scrollbar-thumb {
     position: absolute;
     top: 50%;
-    height: 4px;
+    height: 2px;
     min-width: 24px;
     transform: translateY(-50%);
     background: var(--scrollbar-thumb-warm);
     border-radius: 2px;
+  }
+
+  /* This row now has its own drag-to-scroll bar above, so the native
+     scrollbar (.dialog-translation-controls .translation-list, customized
+     for mouse/trackpad use further below) would otherwise paint a second,
+     non-draggable-on-touch bar right underneath it. The extra .translation-list
+     class here matches that rule's own specificity so this override wins
+     regardless of the two rules' order in the file. */
+  .panel-translation-controls .translation-list.panel-translation-list {
+    scrollbar-width: none;
+  }
+
+  .panel-translation-controls .translation-list.panel-translation-list::-webkit-scrollbar {
+    display: none;
   }
 }
 

@@ -2089,6 +2089,15 @@ function setupHorizontalDragScrollbar({ list, track, thumb }) {
   track.addEventListener("pointerdown", (event) => {
     const pointerId = event.pointerId;
     track.setPointerCapture(pointerId);
+    // Each drag step below sets scrollLeft directly to an exact position, with
+    // no momentum of its own. Left alone, .translation-list's scroll-snap-type
+    // (see .translation-chip's scroll-snap-align) treats every one of those as
+    // a settled scroll and immediately yanks it to the nearest chip edge,
+    // fighting the next step and making the drag feel like it's stuttering.
+    // Suspending snap for the drag's duration lets it track the finger/pointer
+    // smoothly; it's restored on release so a plain swipe still snaps.
+    const previousScrollSnapType = list.style.scrollSnapType;
+    list.style.scrollSnapType = "none";
     const scrollTo = (clientX) => {
       const rect = track.getBoundingClientRect();
       const thumbWidth = thumb.offsetWidth;
@@ -2109,6 +2118,7 @@ function setupHorizontalDragScrollbar({ list, track, thumb }) {
       track.removeEventListener("pointermove", move);
       track.removeEventListener("pointerup", finish);
       track.removeEventListener("pointercancel", finish);
+      list.style.scrollSnapType = previousScrollSnapType;
     };
     track.addEventListener("pointermove", move, { passive: false });
     track.addEventListener("pointerup", finish);
