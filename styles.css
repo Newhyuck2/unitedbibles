@@ -431,25 +431,23 @@ p {
   .translation-list-scrollbar--visible {
     display: block;
     position: relative;
-    height: 14px;
-    margin: 1px 3px 0;
+    height: 10px;
+    margin: 0 3px 0;
     /* This bar IS the drag surface (see setupHorizontalDragScrollbar in
        app.js) -- no native gesture of its own to leave room for. */
     touch-action: none;
   }
 
-  /* Visible thickness (track and thumb alike) matches .panel-resize-handle's
-     own visible indicator (::after, width: 2px) -- the only other draggable
-     bar in the app -- so both read as the same kind of control. The 14px
-     box above just gives a finger more room to land on than a 2px-tall
-     track alone would. */
+  /* Visible thickness (track and thumb alike): thick enough to read clearly
+     as a scrollbar on touch, with just enough spare room in the 10px box
+     above for a finger to land slightly off-center. */
   .translation-list-scrollbar--visible::before {
     content: "";
     position: absolute;
     top: 50%;
     left: 0;
     right: 0;
-    height: 2px;
+    height: 5px;
     transform: translateY(-50%);
     background: var(--scrollbar-track-warm);
     border-radius: 2px;
@@ -458,7 +456,7 @@ p {
   .translation-list-scrollbar-thumb {
     position: absolute;
     top: 50%;
-    height: 2px;
+    height: 5px;
     min-width: 24px;
     transform: translateY(-50%);
     background: var(--scrollbar-thumb-warm);
@@ -477,6 +475,20 @@ p {
 
   .panel-translation-controls .translation-list.panel-translation-list::-webkit-scrollbar {
     display: none;
+  }
+
+  /* .translation-list--overflowing (below) grows the row and pads its
+     bottom to leave room for the *native* scrollbar -- still needed by the
+     other dialogs sharing that class, but dead weight here now that the
+     panel's own native scrollbar is hidden just above and this bar (a
+     separate sibling box, not inside the row) handles scrolling instead.
+     Four classes outweighs that rule's three so this wins regardless of
+     file order. */
+  .panel-translation-controls .translation-list.panel-translation-list.translation-list--overflowing {
+    height: 32px;
+    min-height: 32px;
+    max-height: 32px;
+    padding-bottom: 0;
   }
 }
 
