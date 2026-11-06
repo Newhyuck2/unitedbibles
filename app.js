@@ -3504,6 +3504,11 @@ function setupCombobox({ input, menu, items, selectedValue, matches, onSelect, s
       render();
     },
     setValue(value) {
+      // Re-asserting the value already selected (a panel re-rendering as its
+      // chapter or interlinear data finishes loading, say) must not dismiss
+      // a menu the reader has open -- or wipe a filter they've typed into it:
+      // only an actual change of selection has anything to close it for.
+      if (value === selected && !menu.hidden) return;
       selected = value;
       choose(selectedItem(), false);
     },
@@ -4237,18 +4242,49 @@ function activeOrFirstPanel() {
   return state.panels.find((panel) => panel.id === activePanelId) ?? state.panels[0];
 }
 
-function addPanel({ suppressScroll = false } = {}) {
+// The translation-related fields a freshly added panel starts with: a copy of
+// `source`'s own, so a reader laying the same set of versions out across
+// several panels doesn't have to rebuild it by hand in every new one. That
+// covers everything the chip row shows or styles -- which versions are
+// enabled and in what order, each one's bold/text color/hidden picks, and
+// HEB/GRK's own hidden-parts picks. Arrays and objects are copied rather
+// than shared, since each panel reassigns its own (see toggleTranslationBold,
+// setTranslationTextColor).
+//
+// An active study tool (STR/TSK) is the one thing deliberately left behind --
+// its chip carries over, but the new panel opens on verse text rather than a
+// second copy of that tool's pane. While one is showing in `source`,
+// dimmedTranslations holds "every chip but the tool" instead of the reader's
+// own hidden picks (see toggleTranslationChip) -- those live in
+// preStudyToolDimmed until the tool exits, so that's what gets copied, with
+// the study chips dimmed the way restorePreStudyToolEmphasis leaves them.
+function inheritedTranslationSettings(source) {
+  const hidden = source?.activeStudyTool
+    ? [...(source.preStudyToolDimmed ?? []), ...STUDY_TOOL_IDS]
+    : source?.dimmedTranslations ?? [];
+  return {
+    enabledTranslations: [...(source?.enabledTranslations ?? [])],
+    boldTranslations: [...(source?.boldTranslations ?? [])],
+    translationTextColors: { ...source?.translationTextColors },
+    dimmedTranslations: [...hidden],
+    originalLanguageHidden: Boolean(source?.originalLanguageHidden),
+    originalLanguageHiddenParts: [...(source?.originalLanguageHiddenParts ?? [])],
+  };
+}
+
+function addPanel({ suppressScroll = false, openBookPicker = true } = {}) {
   if (panelMutationInProgress) return;
   const previousCount = state.panels.length;
   const viewportStart = panelIndexAtViewportStart();
   // Always the rightmost panel specifically (not whichever happens to be
   // active) -- per explicit request, a freshly added panel always starts
   // from the same book/chapter/verse as whatever was already at the far
-  // right. "Rightmost" means rightmost *visible* one, though: a linked
-  // group collapsed down to a single visible member via its own hide/show
-  // toggle (see applyLinkedPartnersVisibility) still keeps its other
-  // members sitting in this same array, just not on screen -- plain array
-  // order alone could land on one of those hidden panels instead of
+  // right, and (see inheritedTranslationSettings) with the same versions
+  // and styling too. "Rightmost" means rightmost *visible* one, though: a
+  // linked group collapsed down to a single visible member via its own
+  // hide/show toggle (see applyLinkedPartnersVisibility) still keeps its
+  // other members sitting in this same array, just not on screen -- plain
+  // array order alone could land on one of those hidden panels instead of
   // whatever the reader can actually see.
   let source = null;
   for (let i = state.panels.length - 1; i >= 0; i -= 1) {
@@ -4258,41 +4294,52 @@ function addPanel({ suppressScroll = false } = {}) {
     }
   }
   source ??= state.panels.at(-1);
-  // Translations/study-tool deliberately do NOT carry over (per explicit
-  // request) -- a freshly added panel always starts with no version
-  // selected at all, prompting the reader to add one themselves (see the
-  // translationControl.open() call below) rather than silently cloning
-  // whatever the source panel happened to already be showing.
   const panelState = {
     book: source?.book ?? 0,
     chapter: source?.chapter ?? 1,
     verse: source?.verse ?? 1,
     width: source?.width ?? null,
-    enabledTranslations: [],
-    boldTranslations: [],
-    translationTextColors: {},
-    dimmedTranslations: [],
-    originalLanguageHidden: false,
-    originalLanguageHiddenParts: [],
+    ...inheritedTranslationSettings(source),
     activeStudyTool: null,
     readingMode: false,
     translationNamesShown: source?.translationNamesShown ?? true,
     verseLayout: source?.verseLayout === "columns" ? "columns" : "stacked",
   };
+  // Run through the same clean-up a chip edit gets, so the copy obeys the
+  // invariants a hand-built chip row does too -- dropping style picks for
+  // anything not actually enabled, and activating a study tool when it's
+  // the only thing left to show (see applyTranslationOrder).
+  applyTranslationOrder(panelState, panelState.enabledTranslations);
   state.panels.push(panelState);
   saveState();
   const twoPanelTouchMode = isTwoPanelTouchMode();
   const panel = createPanelElement(panelState);
-  // No version selected yet -- open the add-version picker once the new
-  // panel is actually done scrolling into place (matches moveToNewPanel/
-  // linkToNewPanel, which both create their new panel through here too --
-  // moveToNewPanel suppresses this function's own reveal-scroll to run its
-  // own instead, via suppressScroll below). Opening the picker any earlier
-  // positions it against wherever the panel happened to be sitting
-  // mid-scroll (or before that scroll even starts), not its final spot --
-  // reading as the picker opening detached from the panel it belongs to
-  // instead of inside it.
-  const openPicker = () => panelElements.get(panelState.id)?.translationControl.open();
+  // The new panel already has the source's versions, so the one thing left
+  // for the reader to choose is which book to read in it -- open that
+  // picker once the new panel is actually done scrolling into place.
+  // moveToNewPanel/linkToNewPanel, which both create their new panel
+  // through here too, pass openBookPicker: false instead (the passage
+  // they're about to show in it is already decided), and moveToNewPanel
+  // also suppresses this function's own reveal-scroll to run its own, via
+  // suppressScroll below. Opening the picker any earlier positions it
+  // against wherever the panel happened to be sitting mid-scroll (or before
+  // that scroll even starts), not its final spot -- reading as the picker
+  // opening detached from the panel it belongs to instead of inside it.
+  const openPicker = () => {
+    if (!openBookPicker) return;
+    const elements = panelElements.get(panelState.id);
+    // STR swaps this selector row out for its own nav (see renderPanelBody's
+    // str-nav-active toggle), leaving no book combo on screen to open --
+    // only reachable here when the copied chips leave STR as the sole thing
+    // to show (see applyTranslationOrder above).
+    if (!elements || panelState.activeStudyTool === "STR") return;
+    // Same two ways a real press opens it (see setupCombobox's own
+    // pointerdown/focus handlers): touch layouts open the menu without
+    // focusing the input, so no on-screen keyboard rises over it; anything
+    // else focuses the input too, so typing filters the list right away.
+    const touchLike = mobileLayout.matches && coarsePointer.matches;
+    elements.bookCombo.open(touchLike, !touchLike);
+  };
   if (twoPanelTouchMode) {
     panel.animate(
       [
@@ -7873,7 +7920,7 @@ function moveToPanel(targetPanelState) {
 
 function moveToNewPanel() {
   if (!pendingMoveReference) return;
-  moveToPanel(addPanel({ suppressScroll: true }));
+  moveToPanel(addPanel({ suppressScroll: true, openBookPicker: false }));
 }
 
 document.addEventListener("keydown", (event) => {
@@ -8648,7 +8695,7 @@ function linkToPanel(targetPanelState) {
 
 function linkToNewPanel() {
   if (!pendingLinkSource) return;
-  linkToPanel(addPanel());
+  linkToPanel(addPanel({ openBookPicker: false }));
 }
 
 // Leaves panelState's own group -- if that drops the group to a single
