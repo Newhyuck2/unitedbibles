@@ -7655,7 +7655,8 @@ body * {
 
 /* A plain click toggles a panel chip hidden/shown (see toggleTranslationChip
    in app.js) -- the chip itself carries no other mode of its own any more
-   (see the chip mode popup below for bold/text-color instead). Dim: the
+   (see the chip mode popup below for bold/italic/underline/text-color
+   instead). Dim: the
    chip's own label text fades toward a paler shade to read as
    de-emphasized. */
 .panel-translation-list .translation-chip.chip-dimmed .translation-name,
@@ -7666,7 +7667,7 @@ body * {
   color: var(--translation-color-dim);
 }
 
-/* Bold pick from the chip's own "..." popup (see toggleTranslationBold) --
+/* Bold pick from the chip's own "..." popup (see toggleTranslationTextStyle) --
    independent of text color below. A pair of horizontally-offset
    text-shadows re-render the glyph fill itself to add just a touch of
    extra weight without jumping to a full bold face — the serif stack here
@@ -7680,6 +7681,24 @@ body * {
 .translation-line--bold .interlinear-original,
 .search-match-line--bold .search-match-text {
   text-shadow: 0.25px 0 currentColor, -0.25px 0 currentColor;
+}
+
+/* Italic and underline picks from the same popup (see
+   toggleTranslationTextStyle) -- independent of bold above and of each
+   other, so any mix of the three can be on at once. Both are inherited by
+   (or painted through) the highlight mark nested inside .translation-text,
+   so a highlighted verse takes them too. Korean/Chinese/Hebrew faces have
+   no italic of their own; the browser slants those synthetically. */
+.translation-line--italic .translation-text,
+.translation-line--italic .interlinear-original,
+.search-match-line--italic .search-match-text {
+  font-style: italic;
+}
+
+.translation-line--underline .translation-text,
+.translation-line--underline .interlinear-original,
+.search-match-line--underline .search-match-text {
+  text-decoration: underline;
 }
 
 /* Text color pick from the same popup (see setTranslationTextColor) --
@@ -8345,19 +8364,19 @@ body * {
   color: #b23b3b;
 }
 
-/* .chip-mode-popup's own B toggle (see toggleTranslationBold in app.js) --
-   same 26px box as the three swatch buttons beside it, but a rounded
-   square rather than a circle so it reads as a control, not a color pick,
-   and borderless like those three (a plain hover/selected fill instead --
-   see below) rather than the bordered .panel-reading-mode-toggle look this
-   used to share. line-height: 1 keeps the glyph's own line box from adding
-   invisible height around it that place-items: center would otherwise
-   center *that* box, not the visible "B", within -- and the small
-   padding-bottom corrects for this serif bold capital's own ink sitting
+/* .chip-mode-popup's own B/I/U toggles (see toggleTranslationTextStyle in
+   app.js) -- same 26px box as the three swatch buttons beside them, but a
+   rounded square rather than a circle so they read as controls, not color
+   picks, and borderless like those three (a plain hover/selected fill
+   instead -- see below) rather than the bordered .panel-reading-mode-toggle
+   look they used to share. line-height: 1 keeps the glyph's own line box
+   from adding invisible height around it that place-items: center would
+   otherwise center *that* box, not the visible letter, within -- and the
+   small padding-bottom corrects for this serif capital's own ink sitting
    a couple px below its line box's true middle (measured directly against
    this button's own edges, not assumed), which line-height: 1 alone
    doesn't fix. */
-.chip-mode-bold {
+.chip-mode-style {
   display: grid;
   place-items: center;
   width: 26px;
@@ -8373,18 +8392,35 @@ body * {
   color: var(--muted);
   font-family: Georgia, "Noto Serif KR", serif;
   font-size: 15px;
-  font-weight: 800;
+  font-weight: 400;
   line-height: 1;
 }
 
-.chip-mode-bold:hover {
+.chip-mode-style:hover {
   background: var(--hover-bg-strong);
 }
 
-.chip-mode-bold.selected,
-.chip-mode-bold.selected:hover {
+.chip-mode-style.selected,
+.chip-mode-style.selected:hover {
   background: var(--accent-soft);
   color: var(--accent);
+}
+
+/* Each letter is drawn the way it styles the text: B alone is heavy (800),
+   so the other two stay at regular weight to tell them apart at a glance --
+   I slanted, U underlined. */
+.chip-mode-bold {
+  font-weight: 800;
+}
+
+.chip-mode-italic {
+  font-style: italic;
+}
+
+.chip-mode-underline {
+  text-decoration: underline;
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 2px;
 }
 
 /* The popup's own three text-color swatches (see showChipModePopup/

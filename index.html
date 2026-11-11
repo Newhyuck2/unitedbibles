@@ -23,7 +23,7 @@
     <meta name="twitter:title" content="United Bibles" />
     <meta name="twitter:description" content="A compact multi-panel Bible reader" />
     <meta name="twitter:image" content="https://unitedbibles.org/icons/icon-512.png" />
-    <meta name="asset-version" content="20261001-23" />
+    <meta name="asset-version" content="20261001-24" />
     <meta name="theme-color" content="#284f43" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" /> 
@@ -32,7 +32,7 @@
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" type="image/png" href="./icons/icon-192.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="./icons/icon-180.png" />
-    <link rel="stylesheet" href="./styles.css?v=20261001-23" />
+    <link rel="stylesheet" href="./styles.css?v=20261001-24" />
     <!-- Applies the saved theme before first paint so a dark-theme visitor
          never sees a light-theme flash while app.js's module script (and
          its manifest.json fetch) is still loading. Reads the same
@@ -1647,7 +1647,13 @@
     </div>
 
     <div class="chip-mode-popup" id="chip-mode-popup" hidden role="menu" aria-label="Translation text style">
-      <button type="button" class="chip-mode-bold" id="chip-mode-bold" aria-label="Bold" aria-pressed="false">B</button>
+      <!-- Independent text-style toggles (see TEXT_STYLE_FIELDS in app.js),
+           wired up by their data-style. Only B is drawn heavy; I is slanted
+           and U underlined, both at regular weight, so the three never read
+           alike. -->
+      <button type="button" class="chip-mode-style chip-mode-underline" id="chip-mode-underline" data-style="underline" aria-label="Underline" aria-pressed="false">U</button>
+      <button type="button" class="chip-mode-style chip-mode-italic" id="chip-mode-italic" data-style="italic" aria-label="Italic" aria-pressed="false">I</button>
+      <button type="button" class="chip-mode-style chip-mode-bold" id="chip-mode-bold" data-style="bold" aria-label="Bold" aria-pressed="false">B</button>
       <button type="button" class="chip-mode-option" data-color="own" role="menuitemradio" aria-label="Own color">
         <span class="chip-mode-swatch chip-mode-swatch--own"></span>
       </button>
@@ -1685,6 +1691,6 @@
     </div>
 
     <noscript>JavaScript is required to display the Bible text.</noscript>
-    <script type="module" src="./app.js?v=20261001-23"></script>
+    <script type="module" src="./app.js?v=20261001-24"></script>
   </body>
 </html>

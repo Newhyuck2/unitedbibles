@@ -44,6 +44,18 @@ const TRANSLATION_CANONICAL_ORDER = TRANSLATION_GROUPS.flatMap((group) => group.
 const DEFAULT_ENABLED_TRANSLATIONS = ["NIV", "GAE"];
 const DEFAULT_BOLD_TRANSLATIONS = [];
 const DEFAULT_DIMMED_TRANSLATIONS = [];
+// The chip mode popup's three independent text-style toggles (B/I/U -- see
+// showChipModePopup), by the key each popup button carries in data-style.
+// Each is kept as the list of translation ids that have it switched on, on a
+// panel and on a dialog's own style object alike (see
+// createDialogTranslationStyle) -- so wherever all three have to be saved,
+// pruned, copied or remapped together, loop over these field names instead
+// of spelling each one out.
+const TEXT_STYLE_FIELDS = {
+  bold: "boldTranslations",
+  italic: "italicTranslations",
+  underline: "underlineTranslations",
+};
 
 // Hebrew/Greek interlinear "translations" are synthetic: they are not part of
 // manifest.translations (no exported text data exists for them yet), so they
@@ -267,14 +279,16 @@ let bookmarkManagePanelEl = null;
 // button (see showChipModePopup -- STR/TSK/NOTE's own button is disabled
 // outright, so this never opens for them) -- same floating-popup chrome as
 // highlightManagePopup/bookmarkManagePopup above, just anchored below the
-// chip instead, and offering a bold toggle plus a direct own-color/black/
-// gray text-color pick instead of a color/remove pair. HEB/GRK also get
-// chipModeParts' own two pronunciation/gloss show-hide dots after those.
+// chip instead, and offering underline/italic/bold toggles plus a direct
+// own-color/black/gray text-color pick instead of a color/remove pair.
+// HEB/GRK also get chipModeParts' own two pronunciation/gloss show-hide dots
+// after those.
 const chipModePopup = document.querySelector("#chip-mode-popup");
 // Where the popup lives for a panel's own chip; showChipModePopup moves it
 // into a modal dialog for a chip there, and back here afterwards.
 const chipModePopupHome = chipModePopup.parentElement;
-const chipModeBoldButton = document.querySelector("#chip-mode-bold");
+// The U/I/B buttons -- each names its TEXT_STYLE_FIELDS key in data-style.
+const chipModeStyleButtons = [...chipModePopup.querySelectorAll(".chip-mode-style")];
 const chipModeParts = document.querySelector("#chip-mode-parts");
 // The panel/id a still-open chip mode popup is currently pointed at -- null
 // whenever it's hidden, since there's nothing for its own option buttons to
@@ -429,7 +443,8 @@ let copyTranslationOrder = [];
 // The copy dialog's chips can be dimmed like a panel's (see
 // createDialogTranslationStyle), and a dimmed chip stays in the row but is
 // left out of the copy itself (see copySelectedVerses). Only
-// dimmedTranslations is used here -- the dialog has no bold/text-color picks.
+// dimmedTranslations is used here -- the dialog has no bold/italic/underline/
+// text-color picks.
 // Always changes together with copyTranslationOrder; see setCopyTranslations.
 const copyTranslationStyle = createDialogTranslationStyle();
 let copyTranslationControl = null;
@@ -495,6 +510,8 @@ function freshState() {
       verse: 1,
       enabledTranslations: [...DEFAULT_ENABLED_TRANSLATIONS],
       boldTranslations: [...DEFAULT_BOLD_TRANSLATIONS],
+      italicTranslations: [],
+      underlineTranslations: [],
       translationTextColors: {},
       dimmedTranslations: [...DEFAULT_DIMMED_TRANSLATIONS],
       originalLanguageHidden: false,
@@ -629,14 +646,18 @@ function sanitizeState() {
         (Array.isArray(panel.enabledTranslations) ? panel.enabledTranslations : legacyEnabled ?? DEFAULT_ENABLED_TRANSLATIONS)
           .filter((id) => validTranslations.has(id)),
       )];
-      // Bold and text color are independent per-translation style picks (see
-      // toggleTranslationBold/setTranslationTextColor) -- unlike the old
-      // highlight/dim cycle they replaced, a translation can freely be both
-      // bold AND hidden at once, so neither filters against the other here.
-      const boldTranslations = [...new Set(
-        (Array.isArray(panel.boldTranslations) ? panel.boldTranslations : DEFAULT_BOLD_TRANSLATIONS)
-          .filter((id) => enabledTranslations.includes(id)),
+      // Bold, italic, underline and text color are independent per-translation
+      // style picks (see toggleTranslationTextStyle/setTranslationTextColor) --
+      // unlike the old highlight/dim cycle they replaced, a translation can
+      // freely be bold AND hidden at once, so none of them filters against
+      // another here. A save from before italic/underline existed simply has
+      // neither field, which reads as "none picked".
+      const enabledStyleList = (saved, fallback = []) => [...new Set(
+        (Array.isArray(saved) ? saved : fallback).filter((id) => enabledTranslations.includes(id)),
       )];
+      const boldTranslations = enabledStyleList(panel.boldTranslations, DEFAULT_BOLD_TRANSLATIONS);
+      const italicTranslations = enabledStyleList(panel.italicTranslations);
+      const underlineTranslations = enabledStyleList(panel.underlineTranslations);
       const rawTextColors = panel.translationTextColors && typeof panel.translationTextColors === "object"
           && !Array.isArray(panel.translationTextColors)
         ? panel.translationTextColors
@@ -654,7 +675,7 @@ function sanitizeState() {
         ? panel.activeStudyTool
         : null;
       const originalLanguageHidden = Boolean(panel.originalLanguageHidden);
-      // Dropped along with the HEB/GRK chip itself, same as bold/text color
+      // Dropped along with the HEB/GRK chip itself, same as the style picks
       // above are for whatever's no longer enabled (see applyTranslationOrder).
       const originalLanguageHiddenParts = activeOriginalLanguageId(enabledTranslations)
           && Array.isArray(panel.originalLanguageHiddenParts)
@@ -677,6 +698,8 @@ function sanitizeState() {
         width: Number.isFinite(width) ? Math.max(1, Math.min(width, 5000)) : null,
         enabledTranslations,
         boldTranslations,
+        italicTranslations,
+        underlineTranslations,
         translationTextColors,
         dimmedTranslations,
         originalLanguageHidden,
@@ -726,6 +749,8 @@ function saveState() {
         width,
         enabledTranslations,
         boldTranslations,
+        italicTranslations,
+        underlineTranslations,
         translationTextColors,
         dimmedTranslations,
         originalLanguageHidden,
@@ -744,6 +769,8 @@ function saveState() {
         width,
         enabledTranslations,
         boldTranslations,
+        italicTranslations,
+        underlineTranslations,
         translationTextColors,
         dimmedTranslations,
         originalLanguageHidden,
@@ -1492,9 +1519,10 @@ function moveTranslationInOrder(order, from, to) {
 // shape -- it doubles as "hidden" for a real translation now, not just
 // STR/TSK's own auto-dim) from just before a study tool took over -- see
 // toggleTranslationChip's own entering branch and restorePreStudyToolEmphasis
-// below. Bold/text-color (see toggleTranslationBold/setTranslationTextColor)
-// are independent style picks a study tool coming or going never touches at
-// all, so they carry no matching snapshot field here.
+// below. Bold/italic/underline/text-color (see toggleTranslationTextStyle/
+// setTranslationTextColor) are independent style picks a study tool coming
+// or going never touches at all, so they carry no matching snapshot field
+// here.
 function studyToolFieldNames() {
   return { active: "activeStudyTool", enabled: "enabledTranslations",
       dimmed: "dimmedTranslations",
@@ -1557,7 +1585,7 @@ function toggleTranslationChip(panelState, id, { isNewlyAdded = false } = {}) {
   // some earlier revisions of this gave the chip itself turned out to be
   // about individual .interlinear-word blocks in the rendered text instead,
   // not this chip (see .interlinear-word.selected/selectInterlinearWord);
-  // its bold/color/pronunciation/gloss picks all live behind its own "..."
+  // its style/color/pronunciation/gloss picks all live behind its own "..."
   // button instead (see showChipModePopup), never this body click.
   // Clicking it still dims STR/TSK specifically (only those, not any other
   // real translation) and exits whichever study tool was active, every
@@ -1604,9 +1632,10 @@ function toggleTranslationChip(panelState, id, { isNewlyAdded = false } = {}) {
 
   // Plain click on a real translation chip: toggle it hidden/shown (see
   // buildTranslationLinesInto's own dimmedList filter and .chip-dimmed in
-  // styles.css for the chip's own matching fade). Bold and text color (see
-  // toggleTranslationBold/setTranslationTextColor, driven by the chip's own
-  // "..." popup instead) are independent style picks this never touches.
+  // styles.css for the chip's own matching fade). Bold, italic, underline and
+  // text color (see toggleTranslationTextStyle/setTranslationTextColor, driven
+  // by the chip's own "..." popup instead) are independent style picks this
+  // never touches.
   const dimmed = new Set(panelState[fields.dimmed]);
   if (dimmed.has(id)) dimmed.delete(id); else dimmed.add(id);
   // Whichever one just became "what's showing" still reads as such against
@@ -1616,14 +1645,16 @@ function toggleTranslationChip(panelState, id, { isNewlyAdded = false } = {}) {
   panelState[fields.dimmed] = [...dimmed];
 }
 
-// The chip mode popup's own B button (see showChipModePopup) -- a plain
-// independent toggle, never touched by a study tool coming or going and
-// never tied to hidden/shown, so unlike the old highlight/dim cycle it
-// replaces, a translation can freely be both bold and hidden at once.
-function toggleTranslationBold(panelState, id) {
-  const bold = new Set(panelState.boldTranslations);
-  if (bold.has(id)) bold.delete(id); else bold.add(id);
-  panelState.boldTranslations = [...bold];
+// The chip mode popup's own B/I/U buttons (see showChipModePopup) -- plain
+// independent toggles, never touched by a study tool coming or going and
+// never tied to hidden/shown, so unlike the old highlight/dim cycle they
+// replace, a translation can freely be bold and hidden at once -- or bold,
+// italic and underlined all together. `style` is a TEXT_STYLE_FIELDS key.
+function toggleTranslationTextStyle(panelState, id, style) {
+  const field = TEXT_STYLE_FIELDS[style];
+  const picked = new Set(panelState[field]);
+  if (picked.has(id)) picked.delete(id); else picked.add(id);
+  panelState[field] = [...picked];
 }
 
 // The chip mode popup's own three color swatches -- "black" is the
@@ -1649,18 +1680,26 @@ function panelHiddenTranslations(panelState) {
   return hidden.filter((id) => isIndexableTranslationId(id) && panelState.enabledTranslations.includes(id));
 }
 
-// The TSK and Bookmark list dialogs' own bold/text-color/hidden picks --
-// the same three fields a panel keeps (so toggleTranslationBold/
-// setTranslationTextColor and the chip mode popup work on it unchanged),
-// seeded from a panel whenever the dialog takes that panel's translation
-// order (see seedDialogTranslationStyle), then changed from the dialog's
-// own chips without touching the panel's.
+// The TSK and Bookmark list dialogs' own bold/italic/underline/text-color/
+// hidden picks -- the same fields a panel keeps (so
+// toggleTranslationTextStyle/setTranslationTextColor and the chip mode
+// popup work on it unchanged), seeded from a panel whenever the dialog takes
+// that panel's translation order (see seedDialogTranslationStyle), then
+// changed from the dialog's own chips without touching the panel's.
 function createDialogTranslationStyle() {
-  return { boldTranslations: [], translationTextColors: {}, dimmedTranslations: [] };
+  return {
+    boldTranslations: [],
+    italicTranslations: [],
+    underlineTranslations: [],
+    translationTextColors: {},
+    dimmedTranslations: [],
+  };
 }
 
 function seedDialogTranslationStyle(style, panelState) {
-  style.boldTranslations = panelState ? [...panelState.boldTranslations] : [];
+  for (const field of Object.values(TEXT_STYLE_FIELDS)) {
+    style[field] = panelState ? [...panelState[field]] : [];
+  }
   style.translationTextColors = panelState ? { ...panelState.translationTextColors } : {};
   style.dimmedTranslations = panelState ? panelHiddenTranslations(panelState) : [];
 }
@@ -1668,7 +1707,9 @@ function seedDialogTranslationStyle(style, panelState) {
 // Same pruning applyTranslationOrder does for a panel: a translation
 // removed from the dialog comes back plain if it's added again.
 function pruneDialogTranslationStyle(style, order) {
-  style.boldTranslations = style.boldTranslations.filter((id) => order.includes(id));
+  for (const field of Object.values(TEXT_STYLE_FIELDS)) {
+    style[field] = style[field].filter((id) => order.includes(id));
+  }
   style.translationTextColors = Object.fromEntries(
     Object.entries(style.translationTextColors).filter(([id]) => order.includes(id)),
   );
@@ -1682,11 +1723,11 @@ function toggleDialogTranslationHidden(style, id) {
 }
 
 // One result row's per-translation lines (TSK cross references, bookmarks,
-// the panel's own embedded TSK pane), with the same three treatments a
-// panel's verse lines get from its chips (see buildTranslationLinesInto):
-// a hidden translation's line doesn't show, and bold/text color use the
-// matching .search-match-line modifier classes. Every line is built and a
-// hidden one just carries [hidden], so a chip click or a style pick can
+// the panel's own embedded TSK pane), with the same treatments a panel's
+// verse lines get from its chips (see buildTranslationLinesInto): a hidden
+// translation's line doesn't show, and bold/italic/underline/text color use
+// the matching .search-match-line modifier classes. Every line is built and
+// a hidden one just carries [hidden], so a chip click or a style pick can
 // restyle the list in place (see restyleTranslationMatchLines) instead of
 // re-fetching and redrawing it, which would also lose its scroll position.
 function appendTranslationMatchLines(body, texts, order, style) {
@@ -1722,6 +1763,8 @@ function applyTranslationMatchLineStyle(row, style) {
   const translation = row.dataset.translation;
   row.hidden = style.dimmedTranslations.includes(translation);
   row.classList.toggle("search-match-line--bold", style.boldTranslations.includes(translation));
+  row.classList.toggle("search-match-line--italic", style.italicTranslations.includes(translation));
+  row.classList.toggle("search-match-line--underline", style.underlineTranslations.includes(translation));
   // "black" (the default -- see setTranslationTextColor) needs neither class.
   const textColor = style.translationTextColors[translation] ?? "black";
   row.classList.toggle("search-match-line--color-own", textColor === "own");
@@ -1748,7 +1791,7 @@ function dialogTranslationHideControls(style) {
 
 // The TSK and Bookmark list dialogs' own chip behavior, matching a panel's
 // (see createPanelElement): a chip body click hides/shows that translation,
-// and the "..." button opens the same bold/color popup -- both on the
+// and the "..." button opens the same style/color popup -- both on the
 // dialog's own style (see createDialogTranslationStyle), restyling the
 // list already showing in `getContainer()` in place.
 function dialogTranslationStyleControls(style, getContainer) {
@@ -1816,10 +1859,13 @@ function applyTranslationOrder(panelState, order) {
       panelState[fields.dimmed] = panelState[fields.dimmed].filter((otherId) => order.includes(otherId));
     }
   }
-  // Bold/text-color are independent style picks a study tool never touches
-  // (see toggleTranslationBold/setTranslationTextColor above) -- only
-  // dropped here for whatever's no longer enabled at all.
-  panelState.boldTranslations = panelState.boldTranslations.filter((id) => order.includes(id));
+  // Bold/italic/underline/text-color are independent style picks a study
+  // tool never touches (see toggleTranslationTextStyle/
+  // setTranslationTextColor above) -- only dropped here for whatever's no
+  // longer enabled at all.
+  for (const field of Object.values(TEXT_STYLE_FIELDS)) {
+    panelState[field] = panelState[field].filter((id) => order.includes(id));
+  }
   panelState.translationTextColors = Object.fromEntries(
     Object.entries(panelState.translationTextColors).filter(([id]) => order.includes(id)),
   );
@@ -1851,8 +1897,8 @@ function renderTranslationChipList({ list, order, getEmphasis, onToggleActive, o
     // surface (native HTML5 drag needs no dedicated handle at all, and
     // passing the chip itself as setupTouchReorder's own handle below gives
     // touch the same), so this corner instead becomes a "..." button that
-    // opens the bold/color popup (see showChipModePopup) for a real
-    // translation or HEB/GRK (whose bold/color style just the original-
+    // opens the style/color popup (see showChipModePopup) for a real
+    // translation or HEB/GRK (whose style/color apply to just the original-
     // language word of each interlinear block, plus its own pronunciation/
     // gloss show-hide dots -- see chipModeParts) -- STR/TSK/NOTE carry no
     // bold/color of their own, so theirs is disabled outright (see
@@ -2768,7 +2814,7 @@ function setupReadingTranslationPicker(toggle, menu, getPanelState, { afterPick 
     if (!panelState) return;
     if (id !== singleReadableTranslation(panelState)) {
       panelState.enabledTranslations = [id];
-      panelState.boldTranslations = [];
+      for (const field of Object.values(TEXT_STYLE_FIELDS)) panelState[field] = [];
       panelState.translationTextColors = {};
       panelState.originalLanguageHiddenParts = [];
       panelState.dimmedTranslations = [];
@@ -4048,9 +4094,9 @@ function createPanelElement(panelState) {
     // Every chip's own body click still does exactly what it always did --
     // STR/TSK switches this panel into (or out of) that tool's own embedded
     // content, HEB/GRK shows/hides itself, and a real translation toggles
-    // hidden/shown -- see toggleTranslationChip. Bold/text color for a real
-    // translation instead go through the "..." button's own popup below
-    // (see onOpenModePopup), independent of any of that.
+    // hidden/shown -- see toggleTranslationChip. Bold/italic/underline/text
+    // color for a real translation instead go through the "..." button's own
+    // popup below (see onOpenModePopup), independent of any of that.
     onToggleActive: (id, options) => toggleTranslationChip(panelState, id, options),
     onOpenModePopup: (id, chipEl) => showChipModePopup(chipEl, panelState, id),
     onChange: () => {
@@ -4268,10 +4314,10 @@ function activeOrFirstPanel() {
 // `source`'s own, so a reader laying the same set of versions out across
 // several panels doesn't have to rebuild it by hand in every new one. That
 // covers everything the chip row shows or styles -- which versions are
-// enabled and in what order, each one's bold/text color/hidden picks, and
-// HEB/GRK's own hidden-parts picks. Arrays and objects are copied rather
-// than shared, since each panel reassigns its own (see toggleTranslationBold,
-// setTranslationTextColor).
+// enabled and in what order, each one's bold/italic/underline/text color/
+// hidden picks, and HEB/GRK's own hidden-parts picks. Arrays and objects are
+// copied rather than shared, since each panel reassigns its own (see
+// toggleTranslationTextStyle, setTranslationTextColor).
 //
 // An active study tool (STR/TSK) is the one thing deliberately left behind --
 // its chip carries over, but the new panel opens on verse text rather than a
@@ -4287,6 +4333,8 @@ function inheritedTranslationSettings(source) {
   return {
     enabledTranslations: [...(source?.enabledTranslations ?? [])],
     boldTranslations: [...(source?.boldTranslations ?? [])],
+    italicTranslations: [...(source?.italicTranslations ?? [])],
+    underlineTranslations: [...(source?.underlineTranslations ?? [])],
     translationTextColors: { ...source?.translationTextColors },
     dimmedTranslations: [...hidden],
     originalLanguageHidden: Boolean(source?.originalLanguageHidden),
@@ -5310,13 +5358,13 @@ function rerenderPanelsPreservingVerseAnchor(book, chapter, verseNumber) {
 // current book: if the panel navigates from OT to NT (or back) while
 // Hebrew/Greek is active, swap it for the other rather than leaving a
 // mismatched language enabled. Shared by both columns (see
-// syncOriginalLanguageForTestament below). boldTranslations/
-// translationTextColors are remapped along with it, so a bold/color picked
-// from HEB/GRK's own mode popup (see showChipModePopup) carries straight
-// over to the other language rather than silently resetting.
-// originalLanguageHiddenParts needs no remap at all -- it's per panel, not
-// per id (see toggleOriginalLanguagePart).
-function syncOriginalLanguageForTestamentSide(panelState, enabledKey, boldKey, dimmedKey) {
+// syncOriginalLanguageForTestament below). The bold/italic/underline lists
+// (styleKeys) and translationTextColors are remapped along with it, so a
+// style or color picked from HEB/GRK's own mode popup (see
+// showChipModePopup) carries straight over to the other language rather than
+// silently resetting. originalLanguageHiddenParts needs no remap at all --
+// it's per panel, not per id (see toggleOriginalLanguagePart).
+function syncOriginalLanguageForTestamentSide(panelState, enabledKey, styleKeys, dimmedKey) {
   const enabled = panelState[enabledKey];
   const bookTestament = testamentForBook(panelState.book);
   const active = activeOriginalLanguageId(enabled);
@@ -5332,15 +5380,16 @@ function syncOriginalLanguageForTestamentSide(panelState, enabledKey, boldKey, d
     if (ORIGINAL_LANGUAGE_META[active].testament !== bookTestament) {
       const desired = originalLanguageForTestament(bookTestament);
       enabled[enabled.indexOf(active)] = desired;
-      panelState[boldKey] = panelState[boldKey].map((id) => (id === active ? desired : id));
-      panelState[dimmedKey] = panelState[dimmedKey].map((id) => (id === active ? desired : id));
+      for (const key of [...styleKeys, dimmedKey]) {
+        panelState[key] = panelState[key].map((id) => (id === active ? desired : id));
+      }
       if (Object.hasOwn(panelState.translationTextColors, active)) {
         const { [active]: color, ...rest } = panelState.translationTextColors;
         panelState.translationTextColors = { ...rest, [desired]: color };
       }
       // A chip mode popup still open on the id just swapped out (e.g. opened
       // while the next chapter was still loading, so no scroll ever closed
-      // it) would otherwise keep writing its B/color picks to that stale id.
+      // it) would otherwise keep writing its style/color picks to that stale id.
       if (chipModeTarget?.panelState === panelState && chipModeTarget.id === active) hideChipModePopup();
     }
   }
@@ -5357,8 +5406,9 @@ function syncOriginalLanguageForTestamentSide(panelState, enabledKey, boldKey, d
     // alone, never on nothing at all.
     if (!active) insertTranslationInOrder(enabled, "GRK");
     panelState[enabledKey] = enabled.filter((id) => id !== "LXX");
-    panelState[boldKey] = panelState[boldKey].filter((id) => id !== "LXX");
-    panelState[dimmedKey] = panelState[dimmedKey].filter((id) => id !== "LXX");
+    for (const key of [...styleKeys, dimmedKey]) {
+      panelState[key] = panelState[key].filter((id) => id !== "LXX");
+    }
     if (Object.hasOwn(panelState.translationTextColors, "LXX")) {
       const { LXX: _color, ...rest } = panelState.translationTextColors;
       panelState.translationTextColors = rest;
@@ -5368,7 +5418,9 @@ function syncOriginalLanguageForTestamentSide(panelState, enabledKey, boldKey, d
 }
 
 function syncOriginalLanguageForTestament(panelState) {
-  syncOriginalLanguageForTestamentSide(panelState, "enabledTranslations", "boldTranslations", "dimmedTranslations");
+  syncOriginalLanguageForTestamentSide(
+    panelState, "enabledTranslations", Object.values(TEXT_STYLE_FIELDS), "dimmedTranslations",
+  );
   const elements = panelElements.get(panelState.id);
   elements?.translationControl.render();
 }
@@ -5426,17 +5478,18 @@ function noteKey(book, chapter, verse) {
 }
 
 // Builds one verse's translation-line rows into `pane`, using the panel's
-// own enabled/bold/dimmed lists and text-color picks. Hebrew/Greek is a
-// full peer of any other translation here: it takes whatever slot it holds
-// in `list` and renders a row of interlinear word blocks instead of plain
-// text, but is otherwise laid out identically -- unless the original-
-// language toggle (see toggleTranslationChip) is switched off, in which
-// case its row is skipped entirely, same as STR/TSK below: the toggle's
-// whole point is reading as if the chip weren't there, not just fading its
-// text like a real translation's own dim state does. Bold/color (see
-// toggleTranslationBold/setTranslationTextColor) use the exact same line
-// classes on HEB/GRK's own interlinear row, but style only each word
-// block's .interlinear-original there (see styles.css), never its
+// own enabled/dimmed lists, text-style (bold/italic/underline) lists and
+// text-color picks. Hebrew/Greek is a full peer of any other translation
+// here: it takes whatever slot it holds in `list` and renders a row of
+// interlinear word blocks instead of plain text, but is otherwise laid out
+// identically -- unless the original-language toggle (see
+// toggleTranslationChip) is switched off, in which case its row is skipped
+// entirely, same as STR/TSK below: the toggle's whole point is reading as
+// if the chip weren't there, not just fading its text like a real
+// translation's own dim state does. Bold/italic/underline/
+// color (see toggleTranslationTextStyle/setTranslationTextColor) use the
+// exact same line classes on HEB/GRK's own interlinear row, but style only
+// each word block's .interlinear-original there (see styles.css), never its
 // pronunciation/gloss lines -- those two can each be hidden outright
 // instead (see toggleOriginalLanguagePart).
 function buildTranslationLinesInto(pane, panelState, verseNumber, texts, list, boldList, dimmedList, originalLanguageHidden, textColors) {
@@ -5463,6 +5516,8 @@ function buildTranslationLinesInto(pane, panelState, verseNumber, texts, list, b
     const line = document.createElement("div");
     line.className = "translation-line";
     line.classList.toggle("translation-line--bold", boldList.includes(translation));
+    line.classList.toggle("translation-line--italic", panelState.italicTranslations.includes(translation));
+    line.classList.toggle("translation-line--underline", panelState.underlineTranslations.includes(translation));
     // "black" (the default -- see setTranslationTextColor) needs neither
     // class: .translation-text's own base color already reads as that.
     const textColor = textColors[translation] ?? "black";
@@ -5888,11 +5943,13 @@ function createEmbeddedTskTool(panelState) {
     const chapterData = chaptersByKey.get(`${bookId}:${chapter}`);
     const verseEntry = chapterData?.v.find(([v]) => v === verse);
     const texts = verseEntry ? verseEntry[1] : {};
-    // This panel's own bold/text-color/hidden picks, read live -- the "..."
-    // popup's picks already refresh this pane (see toggleChipModeBold/
-    // applyChipModeColor's refreshTskCrossColumnTranslations calls).
+    // This panel's own bold/italic/underline/text-color/hidden picks, read
+    // live -- the "..." popup's picks already refresh this pane (see
+    // applyChipModeChange's refreshTskCrossColumnTranslations call).
     appendTranslationMatchLines(rowBody, texts, translationOrder, {
       boldTranslations: panelState.boldTranslations,
+      italicTranslations: panelState.italicTranslations,
+      underlineTranslations: panelState.underlineTranslations,
       translationTextColors: panelState.translationTextColors,
       dimmedTranslations: panelHiddenTranslations(panelState),
     });
@@ -7630,6 +7687,18 @@ function positionChipModePopup() {
   chipModePopup.style.top = `${top}px`;
 }
 
+// The U/I/B buttons' own selected look (soft accent fill, see
+// .chip-mode-style.selected in styles.css) for whichever of the three this
+// translation currently has on -- they're independent toggles, so any mix
+// can be lit at once.
+function syncChipModeStyleSelection(panelState, id) {
+  for (const button of chipModeStyleButtons) {
+    const on = panelState[TEXT_STYLE_FIELDS[button.dataset.style]].includes(id);
+    button.classList.toggle("selected", on);
+    button.setAttribute("aria-pressed", String(on));
+  }
+}
+
 // Same "selected = soft accent halo" look as .highlight-color-option's own
 // (see showHighlightManagePopup's sibling styles) -- without this, once a
 // color pick stopped closing the popup (see applyChipModeColor's own
@@ -7656,9 +7725,9 @@ function syncChipModePartSelection(panelState) {
 
 // Opened by a real translation or HEB/GRK chip's own "..." button (see
 // renderTranslationChipList -- STR/TSK/NOTE's own button is disabled
-// outright, so this is never reached for them). Syncs the B button's own
-// selected look to whatever this translation's current bold state already
-// is, since the popup is a shared singleton reused across every chip.
+// outright, so this is never reached for them). Syncs the U/I/B buttons' own
+// selected look to whichever of those this translation already has on, since
+// the popup is a shared singleton reused across every chip.
 // --chip-mode-own-color is read by .chip-mode-swatch--own (see styles.css).
 // chipModeParts is shown only for HEB/GRK -- set before positioning below,
 // since it changes how wide the popup is.
@@ -7671,9 +7740,7 @@ function syncChipModePartSelection(panelState) {
 // (and closes with it), then back to its own place for a panel chip.
 function showChipModePopup(chipEl, panelState, id, { onChange } = {}) {
   chipModeTarget = { panelState, id, onChange, chipEl };
-  const isBold = panelState.boldTranslations.includes(id);
-  chipModeBoldButton.classList.toggle("selected", isBold);
-  chipModeBoldButton.setAttribute("aria-pressed", String(isBold));
+  syncChipModeStyleSelection(panelState, id);
   syncChipModeColorSelection(panelState, id);
   const isOriginalLanguage = ORIGINAL_LANGUAGE_IDS.includes(id);
   chipModeParts.hidden = !isOriginalLanguage;
@@ -7696,18 +7763,16 @@ function hideChipModePopup() {
   chipModePanelEl = null;
 }
 
-// The B button's own click (see toggleTranslationBold) -- an independent
-// toggle, not a mutually-exclusive pick like the three swatches beside it,
-// so this re-renders in place and leaves the popup open rather than
-// closing it, the same way the highlight-manage popup's own swatch stays
-// open after a re-color.
-function toggleChipModeBold() {
+// A U/I/B button's own click (see toggleTranslationTextStyle) -- an
+// independent toggle, not a mutually-exclusive pick like the three swatches
+// beside them, so this re-renders in place and leaves the popup open rather
+// than closing it, the same way the highlight-manage popup's own swatch
+// stays open after a re-color.
+function toggleChipModeStyle(style) {
   if (!chipModeTarget) return;
   const { panelState, id } = chipModeTarget;
-  toggleTranslationBold(panelState, id);
-  const isBold = panelState.boldTranslations.includes(id);
-  chipModeBoldButton.classList.toggle("selected", isBold);
-  chipModeBoldButton.setAttribute("aria-pressed", String(isBold));
+  toggleTranslationTextStyle(panelState, id, style);
+  syncChipModeStyleSelection(panelState, id);
   applyChipModeChange();
 }
 
@@ -7743,10 +7808,10 @@ function applyChipModeColor(color) {
 // toggleOriginalLanguagePart) -- leaves the popup open, same as the B
 // button and swatches above. No TSK refresh needed: its cross-reference
 // list never shows HEB/GRK at all (see embeddedDefaultTranslations).
-// Unlike B/color, this actually changes every verse's own height, so
-// renderPanelBody's anchor restore (and a linked group's row-height sync
-// one frame later -- see scheduleGroupRowHeightSync) scrolls .panel-content
-// whenever it isn't already at the very top; left alone, that scroll
+// Unlike the style/color picks, this actually changes every verse's own
+// height, so renderPanelBody's anchor restore (and a linked group's
+// row-height sync one frame later -- see scheduleGroupRowHeightSync) scrolls
+// .panel-content whenever it isn't already at the very top; left alone, that scroll
 // would reach the popup's own scroll-close listener and shut it right
 // after the click. Suppressed for two frames -- scroll events for a
 // frame's own scrollTop changes are dispatched before that next frame's
@@ -10977,8 +11042,9 @@ async function openTskDialog(panelState) {
     // cross-reference results below, so default them to whatever this panel is
     // currently showing (Hebrew/Greek/STR/TSK excluded -- none have TSK-indexed text).
     tskTranslationOrder = enabledTranslationIds(panelState).filter(isIndexableTranslationId);
-    // Along with each version's bold/text-color/hidden pick there (see
-    // seedDialogTranslationStyle), so its text reads the same as in the panel.
+    // Along with each version's bold/italic/underline/text-color/hidden pick
+    // there (see seedDialogTranslationStyle), so its text reads the same as in
+    // the panel.
     seedDialogTranslationStyle(tskTranslationStyle, panelState);
   } else if (tskHistoryIndex < 0) {
     tskViewState.book = 0;
@@ -11854,8 +11920,8 @@ async function init() {
       },
       // A chip body click fades/unfades it, same as a panel's own chips do --
       // a faded one is skipped by the copy (see copySelectedVerses). Not
-      // dialogTranslationStyleControls: its "..." popup picks (bold/text
-      // color) mean nothing to a copy.
+      // dialogTranslationStyleControls: its "..." popup picks (bold/italic/
+      // underline/text color) mean nothing to a copy.
       ...dialogTranslationHideControls(copyTranslationStyle),
       // No getOriginalLanguageTestament here -- unlike each reading panel's
       // own picker, the copy dialog's "add version" popup never offers the
@@ -12075,7 +12141,9 @@ document.addEventListener("scroll", () => {
 chipModePopup.addEventListener("mousedown", (event) => {
   if (event.target === chipModePopup) event.preventDefault();
 });
-chipModeBoldButton.addEventListener("click", toggleChipModeBold);
+for (const button of chipModeStyleButtons) {
+  button.addEventListener("click", () => toggleChipModeStyle(button.dataset.style));
+}
 for (const option of chipModePopup.querySelectorAll(".chip-mode-option")) {
   option.addEventListener("click", () => applyChipModeColor(option.dataset.color));
 }
