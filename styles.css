@@ -8408,12 +8408,23 @@ body * {
 
 /* Each letter is drawn the way it styles the text: B alone is heavy (800),
    so the other two stay at regular weight to tell them apart at a glance --
-   I slanted, U underlined. */
+   I slanted, U underlined.
+
+   The I is also set in a serif face: in the page's sans-serif a capital I is
+   just a bare vertical stroke (slanted, a lone dash), while a serif one
+   keeps the small top and bottom bars that make it read as the letter "I".
+   The Georgia declaration on .chip-mode-style above never takes effect --
+   the global `body *` font rule near the top of this file is !important --
+   so this one needs its own !important, and the doubled class keeps it
+   ahead of that rule and of the :lang() ones beside it no matter where they
+   sit in the file. The stack ends in generic serif so a device without
+   Georgia/Times (most phones) still lands on a serifed face. */
 .chip-mode-bold {
   font-weight: 800;
 }
 
-.chip-mode-italic {
+.chip-mode-style.chip-mode-italic {
+  font-family: Georgia, "Times New Roman", "Noto Serif", serif !important;
   font-style: italic;
 }
 

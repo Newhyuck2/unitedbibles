@@ -279,7 +279,7 @@ let bookmarkManagePanelEl = null;
 // button (see showChipModePopup -- STR/TSK/NOTE's own button is disabled
 // outright, so this never opens for them) -- same floating-popup chrome as
 // highlightManagePopup/bookmarkManagePopup above, just anchored below the
-// chip instead, and offering underline/italic/bold toggles plus a direct
+// chip instead, and offering bold/italic/underline toggles plus a direct
 // own-color/black/gray text-color pick instead of a color/remove pair.
 // HEB/GRK also get chipModeParts' own two pronunciation/gloss show-hide dots
 // after those.
@@ -287,7 +287,7 @@ const chipModePopup = document.querySelector("#chip-mode-popup");
 // Where the popup lives for a panel's own chip; showChipModePopup moves it
 // into a modal dialog for a chip there, and back here afterwards.
 const chipModePopupHome = chipModePopup.parentElement;
-// The U/I/B buttons -- each names its TEXT_STYLE_FIELDS key in data-style.
+// The B/I/U buttons -- each names its TEXT_STYLE_FIELDS key in data-style.
 const chipModeStyleButtons = [...chipModePopup.querySelectorAll(".chip-mode-style")];
 const chipModeParts = document.querySelector("#chip-mode-parts");
 // The panel/id a still-open chip mode popup is currently pointed at -- null
@@ -7687,7 +7687,7 @@ function positionChipModePopup() {
   chipModePopup.style.top = `${top}px`;
 }
 
-// The U/I/B buttons' own selected look (soft accent fill, see
+// The B/I/U buttons' own selected look (soft accent fill, see
 // .chip-mode-style.selected in styles.css) for whichever of the three this
 // translation currently has on -- they're independent toggles, so any mix
 // can be lit at once.
@@ -7725,7 +7725,7 @@ function syncChipModePartSelection(panelState) {
 
 // Opened by a real translation or HEB/GRK chip's own "..." button (see
 // renderTranslationChipList -- STR/TSK/NOTE's own button is disabled
-// outright, so this is never reached for them). Syncs the U/I/B buttons' own
+// outright, so this is never reached for them). Syncs the B/I/U buttons' own
 // selected look to whichever of those this translation already has on, since
 // the popup is a shared singleton reused across every chip.
 // --chip-mode-own-color is read by .chip-mode-swatch--own (see styles.css).
@@ -7763,7 +7763,7 @@ function hideChipModePopup() {
   chipModePanelEl = null;
 }
 
-// A U/I/B button's own click (see toggleTranslationTextStyle) -- an
+// A B/I/U button's own click (see toggleTranslationTextStyle) -- an
 // independent toggle, not a mutually-exclusive pick like the three swatches
 // beside them, so this re-renders in place and leaves the popup open rather
 // than closing it, the same way the highlight-manage popup's own swatch
