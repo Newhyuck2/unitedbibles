@@ -426,6 +426,12 @@ let panelIdCounter = 0;
 let searchRequestId = 0;
 let copyPanelState = null;
 let copyTranslationOrder = [];
+// The copy dialog's chips can be dimmed like a panel's (see
+// createDialogTranslationStyle), and a dimmed chip stays in the row but is
+// left out of the copy itself (see copySelectedVerses). Only
+// dimmedTranslations is used here -- the dialog has no bold/text-color picks.
+// Always changes together with copyTranslationOrder; see setCopyTranslations.
+const copyTranslationStyle = createDialogTranslationStyle();
 let copyTranslationControl = null;
 let searchTranslationOrder = [];
 let searchTranslationControl = null;
@@ -6997,6 +7003,14 @@ function setupCopyRangeControls() {
   });
 }
 
+// Replaces the versions the copy dialog offers. `dimmed` is which of them
+// start out faded (and so uncopied), and defaults to none: every opening
+// has to say, or the last opening's dimming would carry into the next one.
+function setCopyTranslations(order, dimmed = []) {
+  copyTranslationOrder = order;
+  copyTranslationStyle.dimmedTranslations = dimmed.filter((id) => order.includes(id));
+}
+
 // Shared tail of openCopyDialog/openCopyDialogForVerse below -- both have
 // already set copyBook/copyChapter/copyChapterDataCache/copyStartVerse/
 // copyEndVerse/copyTranslationOrder by this point, just from different
@@ -7040,10 +7054,11 @@ function openCopyDialog(panelState) {
   // order. Hebrew/Greek copies the same way as any modern version now (see
   // buildCopyVerseText), but defaults to unselected here -- unless it's the
   // only thing enabled in the panel, in which case there's nothing else to
-  // default to.
+  // default to. Whatever the panel has hidden (chip faded) starts out faded
+  // here too, and so isn't copied unless its chip is clicked back on.
   const enabled = enabledTranslationIds(panelState);
   const modernEnabled = enabled.filter(isIndexableTranslationId);
-  copyTranslationOrder = modernEnabled.length ? modernEnabled : enabled;
+  setCopyTranslations(modernEnabled.length ? modernEnabled : enabled, panelHiddenTranslations(panelState));
   populateCopyDialogAndShow();
 }
 
@@ -7068,7 +7083,7 @@ async function openCopyDialogForVerse(bookId, chapter, verse, translations) {
   copySelectedVerseNumbers = [verse];
   copySelectedVerseNumbersBook = copyBook;
   copySelectedVerseNumbersChapter = copyChapter;
-  copyTranslationOrder = [...translations];
+  setCopyTranslations([...translations]);
   populateCopyDialogAndShow();
 }
 
@@ -8880,7 +8895,8 @@ async function writeClipboard(text) {
 
 async function copySelectedVerses() {
   if (!copyPanelState) return;
-  const translations = [...copyTranslationOrder];
+  // A dimmed chip stays in the row but isn't copied.
+  const translations = copyTranslationOrder.filter((id) => !copyTranslationStyle.dimmedTranslations.includes(id));
   if (!translations.length) {
     copyStatus.textContent = "Select a version.";
     return;
@@ -10483,8 +10499,9 @@ async function copyConcordanceResult(bookId, chapter, verse) {
   openCopyDialog(panelState);
   // The concordance is itself KJV-based, so default the copy dialog to
   // just KJV rather than whatever versions the active panel happens to
-  // have enabled.
-  copyTranslationOrder = ["KJV"];
+  // have enabled -- and with nothing dimmed, even if the panel has its own
+  // KJV hidden.
+  setCopyTranslations(["KJV"]);
   copyTranslationControl?.render();
 }
 
@@ -11803,7 +11820,14 @@ async function init() {
       getOrder: () => copyTranslationOrder,
       setOrder: (order) => {
         copyTranslationOrder = order;
+        pruneDialogTranslationStyle(copyTranslationStyle, order);
       },
+      // A chip body click fades/unfades it, same as a panel's own chips do --
+      // a faded one is skipped by the copy (see copySelectedVerses). Not
+      // dialogTranslationStyleControls: its "..." popup picks (bold/text
+      // color) mean nothing to a copy.
+      getEmphasis: (id) => (copyTranslationStyle.dimmedTranslations.includes(id) ? "dim" : "normal"),
+      onToggleActive: (id) => toggleDialogTranslationHidden(copyTranslationStyle, id),
       // No getOriginalLanguageTestament here -- unlike each reading panel's
       // own picker, the copy dialog's "add version" popup never offers the
       // Hebrew/Greek interlinear "translations" at all (copying plain text

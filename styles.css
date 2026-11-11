@@ -7660,7 +7660,8 @@ body * {
    de-emphasized. */
 .panel-translation-list .translation-chip.chip-dimmed .translation-name,
 #tsk-translations .translation-chip.chip-dimmed .translation-name,
-#bookmark-list-translations .translation-chip.chip-dimmed .translation-name {
+#bookmark-list-translations .translation-chip.chip-dimmed .translation-name,
+#copy-translations .translation-chip.chip-dimmed .translation-name {
   color: var(--translation-color-dim);
 }
 
