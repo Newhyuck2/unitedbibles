@@ -434,6 +434,11 @@ let copyTranslationOrder = [];
 const copyTranslationStyle = createDialogTranslationStyle();
 let copyTranslationControl = null;
 let searchTranslationOrder = [];
+// Like copyTranslationStyle: the search dialog's chips can be dimmed, and a
+// dimmed one stays in the row but isn't searched (see runSearch). Seeded from
+// the active panel's own hidden picks each time the dialog opens (see
+// openSearch); only dimmedTranslations is used.
+const searchTranslationStyle = createDialogTranslationStyle();
 let searchTranslationControl = null;
 // The TSK dialog browses independently of any reading panel, like a small
 // panel of its own -- book/chapter/verse combos, a translation picker, and
@@ -1729,6 +1734,18 @@ function restyleTranslationMatchLines(container, style) {
   }
 }
 
+// Just the hide/show half of a panel's chip behavior (see
+// createPanelElement), on the dialog's own style: a chip body click fades or
+// unfades that translation. For the copy and search dialogs, where a faded
+// chip means "left out of the copy / the search" and there is no result
+// line to restyle in place.
+function dialogTranslationHideControls(style) {
+  return {
+    getEmphasis: (id) => (style.dimmedTranslations.includes(id) ? "dim" : "normal"),
+    onToggleActive: (id) => toggleDialogTranslationHidden(style, id),
+  };
+}
+
 // The TSK and Bookmark list dialogs' own chip behavior, matching a panel's
 // (see createPanelElement): a chip body click hides/shows that translation,
 // and the "..." button opens the same bold/color popup -- both on the
@@ -1737,8 +1754,7 @@ function restyleTranslationMatchLines(container, style) {
 function dialogTranslationStyleControls(style, getContainer) {
   const restyle = () => restyleTranslationMatchLines(getContainer(), style);
   return {
-    getEmphasis: (id) => (style.dimmedTranslations.includes(id) ? "dim" : "normal"),
-    onToggleActive: (id) => toggleDialogTranslationHidden(style, id),
+    ...dialogTranslationHideControls(style),
     onEmphasisChange: restyle,
     onOpenModePopup: (id, chipEl) => showChipModePopup(chipEl, style, id, { onChange: restyle }),
   };
@@ -5906,7 +5922,9 @@ function createEmbeddedTskTool(panelState) {
     copyButton.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="11" height="11" rx="2"></rect><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"></path></svg>`;
     copyButton.addEventListener("click", async (event) => {
       event.stopPropagation();
-      await openCopyDialogForVerse(bookId, chapter, verse, translationOrder);
+      // Read live, like the lines above: this pane's versions are the
+      // panel's own, so whatever the panel has hidden opens faded there too.
+      await openCopyDialogForVerse(bookId, chapter, verse, translationOrder, panelHiddenTranslations(panelState));
     });
     const linkButton = document.createElement("button");
     linkButton.type = "button";
@@ -7070,7 +7088,12 @@ function openCopyDialog(panelState) {
 // still points at the active panel (copySelectedVerses' own guard requires
 // a truthy value, and clearing a panel with nothing selected is a no-op)
 // but that panel's book/chapter/selection are left exactly as they were.
-async function openCopyDialogForVerse(bookId, chapter, verse, translations) {
+// `dimmed` is whichever of `translations` the window it was opened from has
+// hidden (the TSK, search and bookmark dialogs' dimmed chips, a panel's
+// hidden picks for its embedded TSK pane) -- they open faded here too and
+// aren't copied unless clicked back on. Callers whose window has no chip row
+// to hide from (the highlight list) leave it off.
+async function openCopyDialogForVerse(bookId, chapter, verse, translations, dimmed = []) {
   const data = await getChapter(bookId, chapter);
   copyPanelState = activeOrFirstPanel();
   copyStatus.textContent = "";
@@ -7083,7 +7106,7 @@ async function openCopyDialogForVerse(bookId, chapter, verse, translations) {
   copySelectedVerseNumbers = [verse];
   copySelectedVerseNumbersBook = copyBook;
   copySelectedVerseNumbersChapter = copyChapter;
-  setCopyTranslations([...translations]);
+  setCopyTranslations([...translations], dimmed);
   populateCopyDialogAndShow();
 }
 
@@ -10497,11 +10520,13 @@ async function copyConcordanceResult(bookId, chapter, verse) {
   panelState.selectedVerses = new Set([verse]);
   updatePanelSelection(panelState);
   openCopyDialog(panelState);
-  // The concordance is itself KJV-based, so default the copy dialog to
-  // just KJV rather than whatever versions the active panel happens to
-  // have enabled -- and with nothing dimmed, even if the panel has its own
-  // KJV hidden.
-  setCopyTranslations(["KJV"]);
+  // The concordance is tagged against KJV (its English phrases) and GAE (its
+  // Korean ones) only -- the two lines its result rows show, see
+  // buildConcordanceResultRow -- so default the copy dialog to just those
+  // two, KJV first, rather than whatever versions the active panel happens
+  // to have enabled. Nothing starts dimmed, even if that panel has either
+  // one hidden.
+  setCopyTranslations(["KJV", "GAE"]);
   copyTranslationControl?.render();
 }
 
@@ -10931,7 +10956,7 @@ function openTskResult(bookId, chapter, verse) {
 // Matches copySearchResult exactly: open the copy dialog for this
 // reference verse, without moving any panel or closing this one.
 async function copyTskResult(bookId, chapter, verse) {
-  await openCopyDialogForVerse(bookId, chapter, verse, tskTranslationOrder);
+  await openCopyDialogForVerse(bookId, chapter, verse, tskTranslationOrder, tskTranslationStyle.dimmedTranslations);
 }
 
 // Called two ways: from a panel's own link icon (panelState given -- jump
@@ -11358,7 +11383,7 @@ function buildBookmarkResultRow(bookId, chapter, verse, chaptersByKey) {
   `;
   copyButton.addEventListener("click", (event) => {
     event.stopPropagation();
-    openCopyDialogForVerse(bookId, chapter, verse, bookmarkListTranslationOrder);
+    openCopyDialogForVerse(bookId, chapter, verse, bookmarkListTranslationOrder, bookmarkListTranslationStyle.dimmedTranslations);
   });
   actions.append(
     copyButton,
@@ -11500,6 +11525,9 @@ function openSearch() {
   // has one enabled.
   const activePanel = state.panels.find((panel) => panel.id === activePanelId);
   searchTranslationOrder = enabledTranslationIds(activePanel).filter(isIndexableTranslationId);
+  // Whatever that panel has hidden (chip faded) starts out faded here too,
+  // and so isn't searched unless its chip is clicked back on.
+  searchTranslationStyle.dimmedTranslations = activePanel ? panelHiddenTranslations(activePanel) : [];
   searchTranslationControl?.render();
   searchDialog.showModal();
   syncDialogHeightToPanel(searchDialog);
@@ -11512,7 +11540,9 @@ function closeSearch() {
 }
 
 function runSearch(query) {
-  const translations = [...searchTranslationOrder];
+  // A dimmed chip stays in the row but isn't searched, so verses that only
+  // match in a dimmed version don't show up (and don't count) either.
+  const translations = searchTranslationOrder.filter((id) => !searchTranslationStyle.dimmedTranslations.includes(id));
   searchBookList.replaceChildren();
   searchResults.replaceChildren();
   if (!translations.length) {
@@ -11783,7 +11813,7 @@ function openSearchResult(result) {
 }
 
 async function copySearchResult(result) {
-  await openCopyDialogForVerse(result.book, result.chapter, result.verse, searchTranslationOrder);
+  await openCopyDialogForVerse(result.book, result.chapter, result.verse, searchTranslationOrder, searchTranslationStyle.dimmedTranslations);
 }
 
 function escapeHtml(value) {
@@ -11826,8 +11856,7 @@ async function init() {
       // a faded one is skipped by the copy (see copySelectedVerses). Not
       // dialogTranslationStyleControls: its "..." popup picks (bold/text
       // color) mean nothing to a copy.
-      getEmphasis: (id) => (copyTranslationStyle.dimmedTranslations.includes(id) ? "dim" : "normal"),
-      onToggleActive: (id) => toggleDialogTranslationHidden(copyTranslationStyle, id),
+      ...dialogTranslationHideControls(copyTranslationStyle),
       // No getOriginalLanguageTestament here -- unlike each reading panel's
       // own picker, the copy dialog's "add version" popup never offers the
       // Hebrew/Greek interlinear "translations" at all (copying plain text
@@ -11846,7 +11875,12 @@ async function init() {
       getOrder: () => searchTranslationOrder,
       setOrder: (order) => {
         searchTranslationOrder = order;
+        pruneDialogTranslationStyle(searchTranslationStyle, order);
       },
+      // A chip body click fades/unfades it, same as a panel's own chips do --
+      // a faded one isn't searched (see runSearch), so the onChange below
+      // re-runs the search for it just as it does for adding/removing one.
+      ...dialogTranslationHideControls(searchTranslationStyle),
       onChange: () => {
         const query = searchInput.value.trim();
         if (searchDialog.open && query) runSearch(query);
