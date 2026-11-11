@@ -40,13 +40,6 @@
   --bars-border: #817c73;
   --bars-fill: #837e75;
   --heading-warm: #5f4630;
-  /* The chip mode popup's own "gray" text-color pick (see
-     .translation-line--color-gray/.chip-mode-swatch--gray) -- a step
-     lighter than --muted specifically for this, since --muted-soft's own
-     dark-theme value happens to land slightly darker than --muted there
-     (fine for its own de-emphasis uses, wrong direction for "lighter"
-     body text here). */
-  --translation-gray-text: #918c84;
   --verse-font-size: 14px;
   --toolbar-icon-gap: 4px;
   --shadow: 0 18px 45px rgba(55, 45, 30, 0.1);
@@ -91,11 +84,6 @@
   --bars-border: #9a9384;
   --bars-fill: #86806f;
   --heading-warm: #c9a36e;
-  /* A smaller lighten than the light-theme value's own +20%-toward-white --
-     dark ink here is already near-white, so lightening this by the same
-     amount read as too close to it (too little contrast against it) per
-     explicit correction; #a89f91 is --muted's own unlightened dark value. */
-  --translation-gray-text: #a89f91;
 }
 
 /* The Info dialog is documentation with light-background screenshots
@@ -7701,43 +7689,28 @@ body * {
   text-decoration: underline;
 }
 
-/* Text color pick from the same popup (see setTranslationTextColor) --
-   "black" (no class at all) is .translation-text's own base color already;
-   "own" renders in that version's own color instead of the default neutral
-   ink, and "gray" renders muted, in either verse layout. On HEB/GRK's own
-   interlinear row (bold above too) only each word block's original-
-   language word takes the pick -- its pronunciation/gloss lines keep their
-   own fixed blue/orange (see .interlinear-translit/.interlinear-gloss).
-   The .search-match-line variants are the TSK/Bookmark list dialogs' (and
-   embedded TSK pane's) result lines -- see appendTranslationMatchLines. */
-.translation-line--color-own .translation-text,
-.translation-line--color-own .interlinear-original,
-.search-match-line--color-own .search-match-text {
-  color: var(--translation-color);
+/* Text color pick from the same popup (see setTranslationTextColor and
+   applyTextColorPick in app.js) -- the palette's first cell, black, is the
+   default and takes no class at all: .translation-text's own base color
+   already reads as that. Any other pick sets --pick-color (the color as
+   chosen, for the light theme) and --pick-color-dark (the same color lifted
+   just far enough to read on the dark page -- see darkThemeTextColor) on the
+   line, in either verse layout. On HEB/GRK's own interlinear row (bold above
+   too) only each word block's original-language word takes the pick -- its
+   pronunciation/gloss lines keep their own fixed blue/orange (see
+   .interlinear-translit/.interlinear-gloss). The .search-match-line variant
+   is the TSK/Bookmark list dialogs' (and embedded TSK pane's) result lines --
+   see appendTranslationMatchLines. */
+.translation-line--color-pick .translation-text,
+.translation-line--color-pick .interlinear-original,
+.search-match-line--color-pick .search-match-text {
+  color: var(--pick-color);
 }
 
-/* Same brightening as .translation-label/.translation-name (see their own
-   dark-theme rules) -- "own"-colored body text uses this same
-   too-dark-on-dark-bg translation color. */
-[data-theme="dark"] .translation-line--color-own .translation-text,
-[data-theme="dark"] .translation-line--color-own .interlinear-original,
-[data-theme="dark"] .search-match-line--color-own .search-match-text {
-  filter: brightness(1.5) saturate(1.08);
-}
-
-/* ...but not on highlighted text: the highlight's light pastel fill would
-   be brightened along with it (a filter covers the whole element), and the
-   plain translation color already reads well on that fill (see
-   .translation-text-highlight). A rule of its own, so a browser without
-   :has() drops only this exception, not the brightening above. */
-[data-theme="dark"] .translation-line--color-own .translation-text:has(> .translation-text-highlight) {
-  filter: none;
-}
-
-.translation-line--color-gray .translation-text,
-.translation-line--color-gray .interlinear-original,
-.search-match-line--color-gray .search-match-text {
-  color: var(--translation-gray-text);
+[data-theme="dark"] .translation-line--color-pick .translation-text,
+[data-theme="dark"] .translation-line--color-pick .interlinear-original,
+[data-theme="dark"] .search-match-line--color-pick .search-match-text {
+  color: var(--pick-color-dark);
 }
 
 /* Side-by-side ("columns") verse layout (see setPanelVerseLayout in
@@ -8191,17 +8164,13 @@ body * {
 }
 
 /* A text color picked on the chip's own "..." popup (see
-   .translation-line--color-own/-gray) keeps showing on a highlighted verse
-   instead of the fixed dark ink above. Both stay their light-theme values
-   in dark mode too, for the same reason as that ink: the fill under them is
-   always a light pastel (the dark theme's own gray is meant for the dark
-   page background, and would wash out here). */
-.translation-line--color-own .translation-text-highlight {
-  color: var(--translation-color);
-}
-
-.translation-line--color-gray .translation-text-highlight {
-  color: #918c84;
+   .translation-line--color-pick) keeps showing on a highlighted verse
+   instead of the fixed dark ink above. It stays the color as picked in dark
+   mode too (never the dark theme's lift, which is meant for the dark page
+   background and would wash out here), for the same reason as that ink: the
+   fill under it is always a light pastel. */
+.translation-line--color-pick .translation-text-highlight {
+  color: var(--pick-color);
 }
 
 /* A verse's own note (see buildTranslationLinesInto in app.js) -- a small
@@ -8275,10 +8244,10 @@ body * {
    past a highlighted run's last character -- same chrome, so it shares
    this rule rather than repeating it. .chip-mode-popup (shown by
    showChipModePopup, positioned by positionChipModePopup) is the same
-   again, anchored below a translation chip -- see its own swatch rules
-   further down for how its three options differ from a highlight/bookmark
-   popup's own swatch/remove pair, and its own z-index rule below for why
-   it can't share this one's. */
+   again, anchored below a translation chip -- see its own color circle and
+   palette rules further down for how its color control differs from a
+   highlight/bookmark popup's own swatch/remove pair, and its own z-index
+   rule below for why it can't share this one's. */
 .highlight-manage-popup,
 .bookmark-manage-popup,
 .chip-mode-popup {
@@ -8365,9 +8334,9 @@ body * {
 }
 
 /* .chip-mode-popup's own B/I/U toggles (see toggleTranslationTextStyle in
-   app.js) -- same 26px box as the three swatch buttons beside them, but a
+   app.js) -- same 26px box as the color circle beside them, but a
    rounded square rather than a circle so they read as controls, not color
-   picks, and borderless like those three (a plain hover/selected fill
+   picks, and borderless like it (a plain hover/selected fill
    instead -- see below) rather than the bordered .panel-reading-mode-toggle
    look they used to share. line-height: 1 keeps the glyph's own line box
    from adding invisible height around it that place-items: center would
@@ -8434,13 +8403,16 @@ body * {
   text-underline-offset: 2px;
 }
 
-/* The popup's own three text-color swatches (see showChipModePopup/
-   applyChipModeColor in app.js) -- same 26px button / 18px swatch as
-   .highlight-manage-colors' own compact picker above, and never more than
-   one popup's worth of these on screen at a time (that popup is reused
-   across every chip), so plain classes instead of a per-translation
-   modifier are enough here. */
-.chip-mode-option {
+/* The popup's single text-color circle (see syncChipModeColorSelection and
+   setChipColorGridOpen in app.js) -- same 26px button / 18px swatch as
+   .highlight-manage-colors' own compact picker above. The swatch paints the
+   translation's current text color (--chip-mode-color, set per chip; the
+   theme's own ink while none is picked), lifted the same way the text
+   itself is in the dark theme (--chip-mode-color-dark). Pressing it opens
+   the palette grid below the popup. Which color is applied is told by the
+   grid's check mark, not by a state on this button, so the only state it
+   takes is a neutral fill while that grid is open. */
+.chip-mode-color {
   display: grid;
   place-items: center;
   width: 26px;
@@ -8451,16 +8423,9 @@ body * {
   background: none;
 }
 
-.chip-mode-option:hover {
+.chip-mode-color:hover,
+.chip-mode-color[aria-expanded="true"] {
   background: var(--hover-bg-strong);
-}
-
-/* Same soft accent halo as .highlight-color-option.selected -- without
-   this, once a color pick stopped closing the popup immediately (see
-   applyChipModeColor in app.js), there was no way to tell which of the
-   three was actually applied to this chip just by looking. */
-.chip-mode-option.selected {
-  background: var(--accent-soft);
 }
 
 .chip-mode-swatch {
@@ -8468,34 +8433,76 @@ body * {
   height: 18px;
   border-radius: 50%;
   border: 1px solid rgba(37, 35, 31, 0.18);
+  background: var(--chip-mode-color, var(--ink));
 }
 
-/* That translation's own color (see showChipModePopup, which sets this
-   from TRANSLATION_COLORS) -- the same full-strength color
-   .translation-line--color-own renders its body text in. */
-.chip-mode-swatch--own {
-  background: var(--chip-mode-own-color, var(--ink));
+[data-theme="dark"] .chip-mode-swatch {
+  border-color: rgba(236, 231, 221, 0.3);
+  background: var(--chip-mode-color-dark, var(--ink));
 }
 
-/* Same brightening as .translation-line--color-own's own dark-theme rule --
-   this swatch paints the same too-dark-on-dark-bg translation color. */
-[data-theme="dark"] .chip-mode-swatch--own {
-  filter: brightness(1.5) saturate(1.08);
+/* The text-color palette (TEXT_COLOR_PALETTE in app.js): a second floating
+   card right under .chip-mode-popup, on the same chrome and z-index, with
+   one circular cell per color -- 10 columns by 7 rows, the first (black)
+   cell standing for "no color picked" (see DEFAULT_TEXT_COLOR). The applied
+   color's cell carries a check mark, drawn in whichever of white or dark ink
+   reads better on it (data-check, set when the cells are built); there is
+   deliberately no other selected look. */
+.chip-color-popup {
+  position: fixed;
+  z-index: 30;
+  display: grid;
+  grid-template-columns: repeat(10, 24px);
+  gap: 2px;
+  padding: 5px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--surface-strong);
+  box-shadow: 0 5px 14px rgba(37, 35, 31, 0.18);
 }
 
-.chip-mode-swatch--black {
-  background: var(--ink);
+.chip-color-cell {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
 }
 
-.chip-mode-swatch--gray {
-  background: var(--translation-gray-text);
+.chip-color-cell:hover {
+  background: var(--hover-bg-strong);
+}
+
+.chip-color-swatch {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1px solid rgba(37, 35, 31, 0.18);
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 12px 12px;
+}
+
+[data-theme="dark"] .chip-color-swatch {
+  border-color: rgba(236, 231, 221, 0.3);
+}
+
+.chip-color-cell.selected[data-check="light"] .chip-color-swatch {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='3.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5'/%3E%3C/svg%3E");
+}
+
+.chip-color-cell.selected[data-check="dark"] .chip-color-swatch {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2325231f' stroke-width='3.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5'/%3E%3C/svg%3E");
 }
 
 /* HEB/GRK only (see showChipModePopup in app.js): one show/hide toggle
    each for the interlinear row's own pronunciation and English gloss
-   lines (see toggleOriginalLanguagePart), right after the three swatches
-   above. A bit smaller than those so they read as a separate, lighter
-   control rather than a fourth/fifth text-color pick, and painted in the
+   lines (see toggleOriginalLanguagePart), right after the color circle
+   above. A bit smaller than it so they read as a separate, lighter
+   control rather than a second text-color pick, and painted in the
    exact same token as the line each one hides (.interlinear-translit/
    .interlinear-gloss), in either theme. Filled (.selected) while that
    line is showing; ring only once it's hidden -- the border is there in

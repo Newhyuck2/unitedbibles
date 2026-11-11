@@ -57,6 +57,168 @@ const TEXT_STYLE_FIELDS = {
   underline: "underlineTranslations",
 };
 
+// The text-color picker's palette -- the grid the chip mode popup's color
+// circle opens (#chip-color-popup): 7 rows x 10 columns, one swatch per
+// cell. Row 1 is the black-to-white gray ramp. Row 2 holds the ten base
+// colors; its blue, orange, teal and purple columns are NIV/ESV/GAE/SAENEW's
+// own hues, darkened until each reads at about 7:1 on the page background.
+// Rows 3-6 are four lighter steps of every base (lightest first) and row 7
+// one darker step. Every step keeps its column's hue and chroma and changes
+// only lightness, spaced so that no two cells of the grid (the gray row's own
+// last two steps aside) sit closer than about 9 in CIEDE2000. Seven rows is
+// the most that holds: an eighth makes the lightest tints and the darkest
+// shades of neighbouring hues converge (closest pair 7.7).
+const TEXT_COLOR_PALETTE = [
+  ["#000000", "#1e1e1e", "#353535", "#4e4e4e", "#696969", "#858585", "#a2a2a2", "#c0c0c0", "#dfdfdf", "#ffffff"],
+  ["#834143", "#85481f", "#6a5608", "#44622a", "#186351", "#006372", "#335a85", "#525089", "#714782", "#7c4161"],
+  ["#ffc7c7", "#ffcbad", "#ecd691", "#c1e5a7", "#a2e9d2", "#98e6f7", "#bbdbff", "#d2d3ff", "#eec7ff", "#ffc3e1"],
+  ["#e59a9a", "#e49f76", "#c5b06c", "#9cbe82", "#7cc2ac", "#71bfcf", "#8ab5e5", "#a9aaea", "#cb9dde", "#dd99bc"],
+  ["#c47b7c", "#c28058", "#a6914d", "#7d9e64", "#5da28e", "#519faf", "#6c96c4", "#8b8bc9", "#ab7ebd", "#bc7b9c"],
+  ["#a35e5f", "#a2623a", "#87732e", "#608047", "#3e8370", "#308190", "#4f77a4", "#6e6da8", "#8c619e", "#9c5e7e"],
+  ["#5e2024", "#5a2800", "#453600", "#254105", "#004335", "#00404a", "#123961", "#332f65", "#4c235c", "#582140"],
+];
+// Row 1, column 1. Never stored: picking it removes the translation's entry
+// (see setTranslationTextColor), so its text goes back to the theme's own ink
+// -- dark on the light theme, near-white on the dark one -- rather than a
+// literal #000000 that would vanish into the dark page.
+const DEFAULT_TEXT_COLOR = TEXT_COLOR_PALETTE[0][0];
+// What the old "gray" pick painted on the light theme (its dark-theme value
+// was a different token); a save that still holds it moves to the nearest
+// gray of the palette.
+const LEGACY_GRAY_TEXT_COLOR = "#918c84";
+const HEX_COLOR_PATTERN = /^#[0-9a-f]{6}$/;
+// The lightest surface body text sits on in the dark theme (--surface-strong
+// there) and the contrast a lifted color has to reach against it.
+const DARK_TEXT_SURFACE = "#2c2721";
+const DARK_TEXT_MIN_CONTRAST = 4.7;
+
+function hexToLinearRgb(hex) {
+  const value = Number.parseInt(hex.slice(1), 16);
+  return [(value >> 16) & 255, (value >> 8) & 255, value & 255].map((channel) => {
+    const c = channel / 255;
+    return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  });
+}
+
+function relativeLuminance(hex) {
+  const [r, g, b] = hexToLinearRgb(hex);
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+function contrastRatio(hexA, hexB) {
+  const a = relativeLuminance(hexA);
+  const b = relativeLuminance(hexB);
+  return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+}
+
+// [L, a, b] in OKLab (Ottosson's matrices) -- the space the palette's steps
+// were laid out in, so "same hue and chroma, different lightness" holds here.
+function hexToOklab(hex) {
+  const [r, g, b] = hexToLinearRgb(hex);
+  const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
+  const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
+  const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
+  return [
+    0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s,
+    1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s,
+    0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s,
+  ];
+}
+
+// OKLCH back to a hex color, shrinking the chroma until it fits the sRGB gamut.
+function oklchToHex(lightness, chroma, hue) {
+  const linearRgb = (c) => {
+    const a = c * Math.cos(hue);
+    const b = c * Math.sin(hue);
+    const l = (lightness + 0.3963377774 * a + 0.2158037573 * b) ** 3;
+    const m = (lightness - 0.1055613458 * a - 0.0638541728 * b) ** 3;
+    const s = (lightness - 0.0894841775 * a - 1.291485548 * b) ** 3;
+    return [
+      4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
+      -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
+      -0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s,
+    ];
+  };
+  const inGamut = (c) => linearRgb(c).every((value) => value >= -0.0001 && value <= 1.0001);
+  let fitted = chroma;
+  if (!inGamut(chroma)) {
+    let low = 0;
+    let high = chroma;
+    for (let step = 0; step < 30; step += 1) {
+      const mid = (low + high) / 2;
+      if (inGamut(mid)) low = mid; else high = mid;
+    }
+    fitted = low;
+  }
+  const channels = linearRgb(fitted).map((value) => {
+    const c = Math.min(1, Math.max(0, value));
+    const encoded = c <= 0.0031308 ? 12.92 * c : 1.055 * c ** (1 / 2.4) - 0.055;
+    return Math.round(encoded * 255).toString(16).padStart(2, "0");
+  });
+  return `#${channels.join("")}`;
+}
+
+const darkThemeTextColors = new Map();
+
+// What a picked text color paints as in the dark theme: itself if it already
+// reads against the dark page, otherwise the same hue and chroma lifted just
+// far enough in lightness to reach DARK_TEXT_MIN_CONTRAST. So a dark pick (row
+// 2 or 7, the dark grays) stays a color of its own family instead of
+// disappearing into the page. The light theme paints a pick exactly as
+// chosen, and so does the fill under a highlighted verse (always a light
+// pastel -- see .translation-text-highlight).
+function darkThemeTextColor(hex) {
+  let lifted = darkThemeTextColors.get(hex);
+  if (lifted) return lifted;
+  lifted = hex;
+  if (contrastRatio(hex, DARK_TEXT_SURFACE) < DARK_TEXT_MIN_CONTRAST) {
+    const [lightness, a, b] = hexToOklab(hex);
+    const chroma = Math.hypot(a, b);
+    const hue = Math.atan2(b, a);
+    let low = lightness;
+    let high = 1;
+    for (let step = 0; step < 24; step += 1) {
+      const mid = (low + high) / 2;
+      const reads = contrastRatio(oklchToHex(mid, chroma, hue), DARK_TEXT_SURFACE) >= DARK_TEXT_MIN_CONTRAST;
+      if (reads) high = mid; else low = mid;
+    }
+    lifted = oklchToHex(high, chroma, hue);
+  }
+  darkThemeTextColors.set(hex, lifted);
+  return lifted;
+}
+
+function nearestPaletteColor(hex, candidates) {
+  const [l1, a1, b1] = hexToOklab(hex);
+  let nearest = candidates[0];
+  let nearestDistance = Infinity;
+  for (const candidate of candidates) {
+    const [l2, a2, b2] = hexToOklab(candidate);
+    const distance = (l1 - l2) ** 2 + (a1 - a2) ** 2 + (b1 - b2) ** 2;
+    if (distance < nearestDistance) {
+      nearest = candidate;
+      nearestDistance = distance;
+    }
+  }
+  return nearest;
+}
+
+// A saved text-color pick as the palette stores it: a lowercase hex color,
+// never the default black (that is the absence of an entry). A save from
+// before the palette existed holds "own" (the translation's own color) or
+// "gray" instead; each becomes the palette cell nearest to what it used to
+// paint -- a colored cell for "own" (rows 2-7), a gray for "gray" -- so
+// existing picks keep their look. Anything else is dropped.
+function normalizedTextColor(id, color) {
+  if (color === "own") {
+    return TRANSLATION_COLORS[id] ? nearestPaletteColor(TRANSLATION_COLORS[id], TEXT_COLOR_PALETTE.slice(1).flat()) : null;
+  }
+  if (color === "gray") return nearestPaletteColor(LEGACY_GRAY_TEXT_COLOR, TEXT_COLOR_PALETTE[0].slice(1));
+  if (typeof color !== "string") return null;
+  const hex = color.toLowerCase();
+  return HEX_COLOR_PATTERN.test(hex) && hex !== DEFAULT_TEXT_COLOR ? hex : null;
+}
+
 // Hebrew/Greek interlinear "translations" are synthetic: they are not part of
 // manifest.translations (no exported text data exists for them yet), so they
 // are resolved via ORIGINAL_LANGUAGE_META instead of the manifest lookup.
@@ -279,17 +441,28 @@ let bookmarkManagePanelEl = null;
 // button (see showChipModePopup -- STR/TSK/NOTE's own button is disabled
 // outright, so this never opens for them) -- same floating-popup chrome as
 // highlightManagePopup/bookmarkManagePopup above, just anchored below the
-// chip instead, and offering bold/italic/underline toggles plus a direct
-// own-color/black/gray text-color pick instead of a color/remove pair.
-// HEB/GRK also get chipModeParts' own two pronunciation/gloss show-hide dots
-// after those.
+// chip instead, and offering bold/italic/underline toggles plus one color
+// circle (it paints the translation's current text color) that opens the
+// palette grid just below the popup. HEB/GRK also get chipModeParts' own two
+// pronunciation/gloss show-hide dots after the circle.
 const chipModePopup = document.querySelector("#chip-mode-popup");
+// The palette grid (see TEXT_COLOR_PALETTE) -- a second floating card of the
+// same chrome, shown right under the popup while the color circle is open.
+// It follows the popup everywhere: into a modal dialog and back, and shut
+// whenever the popup is.
+const chipColorPopup = document.querySelector("#chip-color-popup");
 // Where the popup lives for a panel's own chip; showChipModePopup moves it
-// into a modal dialog for a chip there, and back here afterwards.
+// (and the grid with it) into a modal dialog for a chip there, and back here
+// afterwards.
 const chipModePopupHome = chipModePopup.parentElement;
 // The B/I/U buttons -- each names its TEXT_STYLE_FIELDS key in data-style.
 const chipModeStyleButtons = [...chipModePopup.querySelectorAll(".chip-mode-style")];
+const chipModeColorButton = document.querySelector("#chip-mode-color");
 const chipModeParts = document.querySelector("#chip-mode-parts");
+// One button per TEXT_COLOR_PALETTE cell, in row-major order, each carrying
+// its color in data-color (see the grid built next to the popup's own
+// functions below).
+const chipColorCells = [];
 // The panel/id a still-open chip mode popup is currently pointed at -- null
 // whenever it's hidden, since there's nothing for its own option buttons to
 // act on then.
@@ -663,9 +836,11 @@ function sanitizeState() {
         ? panel.translationTextColors
         : {};
       const translationTextColors = Object.fromEntries(
-        Object.entries(rawTextColors).filter(([id, color]) => (
-          enabledTranslations.includes(id) && (color === "own" || color === "gray")
-        )),
+        Object.entries(rawTextColors).flatMap(([id, color]) => {
+          if (!enabledTranslations.includes(id)) return [];
+          const hex = normalizedTextColor(id, color);
+          return hex ? [[id, hex]] : [];
+        }),
       );
       const dimmedTranslations = [...new Set(
         (Array.isArray(panel.dimmedTranslations) ? panel.dimmedTranslations : DEFAULT_DIMMED_TRANSLATIONS)
@@ -1657,16 +1832,34 @@ function toggleTranslationTextStyle(panelState, id, style) {
   panelState[field] = [...picked];
 }
 
-// The chip mode popup's own three color swatches -- "black" is the
-// baseline .translation-text color already, so it's stored as the absence
-// of an entry rather than an explicit value (see buildTranslationLinesInto/
-// getEmphasis's own reads of this), keeping a freshly added translation's
-// saved state exactly as small as before this existed.
+// The chip mode popup's color grid pick (a hex color of TEXT_COLOR_PALETTE) --
+// the default black is the baseline .translation-text color already, so it's
+// stored as the absence of an entry rather than an explicit value (see
+// buildTranslationLinesInto/applyTextColorPick's own reads of this), keeping
+// a freshly added translation's saved state exactly as small as before.
 function setTranslationTextColor(panelState, id, color) {
   const colors = { ...panelState.translationTextColors };
-  if (color === "black") delete colors[id];
+  if (color === DEFAULT_TEXT_COLOR) delete colors[id];
   else colors[id] = color;
   panelState.translationTextColors = colors;
+}
+
+// Puts a text-color pick on one rendered line (a panel's .translation-line or
+// a dialog's .search-match-line): `className` is the pick modifier styles.css
+// reads --pick-color/--pick-color-dark under -- the pick as chosen for the
+// light theme, and the lift of it the dark theme paints instead (see
+// darkThemeTextColor). No pick (the default black) clears all three, which
+// matters for a line restyled in place (see restyleTranslationMatchLines).
+function applyTextColorPick(line, className, color) {
+  const picked = typeof color === "string" && HEX_COLOR_PATTERN.test(color) && color !== DEFAULT_TEXT_COLOR;
+  line.classList.toggle(className, picked);
+  if (picked) {
+    line.style.setProperty("--pick-color", color);
+    line.style.setProperty("--pick-color-dark", darkThemeTextColor(color));
+  } else {
+    line.style.removeProperty("--pick-color");
+    line.style.removeProperty("--pick-color-dark");
+  }
 }
 
 // Which real translations a panel's reader has hidden with a chip click.
@@ -1765,10 +1958,7 @@ function applyTranslationMatchLineStyle(row, style) {
   row.classList.toggle("search-match-line--bold", style.boldTranslations.includes(translation));
   row.classList.toggle("search-match-line--italic", style.italicTranslations.includes(translation));
   row.classList.toggle("search-match-line--underline", style.underlineTranslations.includes(translation));
-  // "black" (the default -- see setTranslationTextColor) needs neither class.
-  const textColor = style.translationTextColors[translation] ?? "black";
-  row.classList.toggle("search-match-line--color-own", textColor === "own");
-  row.classList.toggle("search-match-line--color-gray", textColor === "gray");
+  applyTextColorPick(row, "search-match-line--color-pick", style.translationTextColors[translation]);
 }
 
 function restyleTranslationMatchLines(container, style) {
@@ -5518,11 +5708,9 @@ function buildTranslationLinesInto(pane, panelState, verseNumber, texts, list, b
     line.classList.toggle("translation-line--bold", boldList.includes(translation));
     line.classList.toggle("translation-line--italic", panelState.italicTranslations.includes(translation));
     line.classList.toggle("translation-line--underline", panelState.underlineTranslations.includes(translation));
-    // "black" (the default -- see setTranslationTextColor) needs neither
-    // class: .translation-text's own base color already reads as that.
-    const textColor = textColors[translation] ?? "black";
-    line.classList.toggle("translation-line--color-own", textColor === "own");
-    line.classList.toggle("translation-line--color-gray", textColor === "gray");
+    // The default black (see setTranslationTextColor) takes no class:
+    // .translation-text's own base color already reads as that.
+    applyTextColorPick(line, "translation-line--color-pick", textColors[translation]);
     if (isOriginalLanguage) {
       const hiddenParts = panelState.originalLanguageHiddenParts ?? [];
       line.classList.toggle("translation-line--translit-hidden", hiddenParts.includes("translit"));
@@ -7687,6 +7875,58 @@ function positionChipModePopup() {
   chipModePopup.style.top = `${top}px`;
 }
 
+// The palette grid sits right under the popup, left edges aligned, on the
+// same clamp-to-the-panel's-width rule as the popup itself. It only moves up
+// (above the popup) when it wouldn't fit on screen below it, and as a last
+// resort is pinned to the screen's bottom edge.
+function positionChipColorPopup() {
+  if (chipColorPopup.hidden) return;
+  const bounds = chipModePanelEl
+    ? chipModePanelEl.getBoundingClientRect()
+    : { left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight };
+  const popupRect = chipModePopup.getBoundingClientRect();
+  const gridRect = chipColorPopup.getBoundingClientRect();
+  let left = popupRect.left;
+  left = Math.min(left, bounds.right - gridRect.width - 4);
+  left = Math.max(left, bounds.left + 4);
+  let top = popupRect.bottom + 4;
+  if (top + gridRect.height > window.innerHeight - 4) {
+    const above = popupRect.top - gridRect.height - 4;
+    top = above >= 4 ? above : Math.max(4, window.innerHeight - gridRect.height - 4);
+  }
+  chipColorPopup.style.left = `${left}px`;
+  chipColorPopup.style.top = `${top}px`;
+}
+
+function setChipColorGridOpen(open) {
+  chipColorPopup.hidden = !open;
+  chipModeColorButton.setAttribute("aria-expanded", String(open));
+  if (open) positionChipColorPopup();
+}
+
+// One button per palette cell, built once (the grid is a shared singleton
+// like the popup). A cell is a circle painted in its own color; the check
+// mark on the selected one is drawn in whichever of white or dark ink reads
+// better on that color (data-check -- see .chip-color-cell in styles.css).
+for (const row of TEXT_COLOR_PALETTE) {
+  for (const hex of row) {
+    const cell = document.createElement("button");
+    cell.type = "button";
+    cell.className = "chip-color-cell";
+    cell.dataset.color = hex;
+    cell.dataset.check = contrastRatio(hex, "#ffffff") >= contrastRatio(hex, "#25231f") ? "light" : "dark";
+    cell.setAttribute("role", "menuitemradio");
+    cell.setAttribute("aria-checked", "false");
+    cell.setAttribute("aria-label", hex === DEFAULT_TEXT_COLOR ? "Black (default)" : hex);
+    const swatch = document.createElement("span");
+    swatch.className = "chip-color-swatch";
+    swatch.style.backgroundColor = hex;
+    cell.append(swatch);
+    chipColorPopup.append(cell);
+    chipColorCells.push(cell);
+  }
+}
+
 // The B/I/U buttons' own selected look (soft accent fill, see
 // .chip-mode-style.selected in styles.css) for whichever of the three this
 // translation currently has on -- they're independent toggles, so any mix
@@ -7699,15 +7939,26 @@ function syncChipModeStyleSelection(panelState, id) {
   }
 }
 
-// Same "selected = soft accent halo" look as .highlight-color-option's own
-// (see showHighlightManagePopup's sibling styles) -- without this, once a
-// color pick stopped closing the popup (see applyChipModeColor's own
-// comment), there was nothing left showing *which* of the three was
-// actually active for this chip.
+// Where the current text color shows: the color circle (painted in the
+// translation's pick -- lifted for the dark theme the same way its text is --
+// or left to the theme's own ink while none is picked) and the palette's
+// check mark on the cell holding that color (none when a saved color isn't one
+// of the palette's cells). Kept right even while the grid is shut, since the
+// circle is always showing.
 function syncChipModeColorSelection(panelState, id) {
-  const color = panelState.translationTextColors[id] ?? "black";
-  for (const option of chipModePopup.querySelectorAll(".chip-mode-option")) {
-    option.classList.toggle("selected", option.dataset.color === color);
+  const saved = panelState.translationTextColors[id];
+  const color = typeof saved === "string" && HEX_COLOR_PATTERN.test(saved) ? saved : DEFAULT_TEXT_COLOR;
+  if (color === DEFAULT_TEXT_COLOR) {
+    chipModePopup.style.removeProperty("--chip-mode-color");
+    chipModePopup.style.removeProperty("--chip-mode-color-dark");
+  } else {
+    chipModePopup.style.setProperty("--chip-mode-color", color);
+    chipModePopup.style.setProperty("--chip-mode-color-dark", darkThemeTextColor(color));
+  }
+  for (const cell of chipColorCells) {
+    const selected = cell.dataset.color === color;
+    cell.classList.toggle("selected", selected);
+    cell.setAttribute("aria-checked", String(selected));
   }
 }
 
@@ -7726,9 +7977,9 @@ function syncChipModePartSelection(panelState) {
 // Opened by a real translation or HEB/GRK chip's own "..." button (see
 // renderTranslationChipList -- STR/TSK/NOTE's own button is disabled
 // outright, so this is never reached for them). Syncs the B/I/U buttons' own
-// selected look to whichever of those this translation already has on, since
-// the popup is a shared singleton reused across every chip.
-// --chip-mode-own-color is read by .chip-mode-swatch--own (see styles.css).
+// selected look and the color circle/palette check mark to whichever of
+// those this translation already has on, since the popup is a shared
+// singleton reused across every chip. The palette grid always starts shut.
 // chipModeParts is shown only for HEB/GRK -- set before positioning below,
 // since it changes how wide the popup is.
 //
@@ -7736,8 +7987,9 @@ function syncChipModePartSelection(panelState) {
 // dialog's own style (see dialogTranslationStyleControls), which passes
 // onChange to restyle its own list instead of the panel re-render below.
 // A modal dialog makes everything outside it inert and paints above it, so
-// for a chip inside one the popup moves into that dialog while it's open
-// (and closes with it), then back to its own place for a panel chip.
+// for a chip inside one the popup (and the palette grid) moves into that
+// dialog while it's open (and closes with it), then back to its own place for
+// a panel chip.
 function showChipModePopup(chipEl, panelState, id, { onChange } = {}) {
   chipModeTarget = { panelState, id, onChange, chipEl };
   syncChipModeStyleSelection(panelState, id);
@@ -7745,18 +7997,20 @@ function showChipModePopup(chipEl, panelState, id, { onChange } = {}) {
   const isOriginalLanguage = ORIGINAL_LANGUAGE_IDS.includes(id);
   chipModeParts.hidden = !isOriginalLanguage;
   if (isOriginalLanguage) syncChipModePartSelection(panelState);
-  chipModePopup.style.setProperty("--chip-mode-own-color", TRANSLATION_COLORS[id]);
   const dialog = chipEl.closest("dialog");
   const host = dialog ?? chipModePopupHome;
   if (chipModePopup.parentElement !== host) host.append(chipModePopup);
+  if (chipColorPopup.parentElement !== host) host.append(chipColorPopup);
   if (dialog) dialog.addEventListener("close", hideChipModePopup, { once: true });
   chipModeAnchorRect = chipEl.getBoundingClientRect();
   chipModePanelEl = chipEl.closest(".bible-panel") ?? dialog;
   chipModePopup.hidden = false;
   positionChipModePopup();
+  setChipColorGridOpen(false);
 }
 
 function hideChipModePopup() {
+  setChipColorGridOpen(false);
   chipModePopup.hidden = true;
   chipModeTarget = null;
   chipModeAnchorRect = null;
@@ -7764,10 +8018,10 @@ function hideChipModePopup() {
 }
 
 // A B/I/U button's own click (see toggleTranslationTextStyle) -- an
-// independent toggle, not a mutually-exclusive pick like the three swatches
-// beside them, so this re-renders in place and leaves the popup open rather
-// than closing it, the same way the highlight-manage popup's own swatch
-// stays open after a re-color.
+// independent toggle, not a mutually-exclusive pick like the palette's
+// cells, so this re-renders in place and leaves the popup open rather than
+// closing it, the same way the highlight-manage popup's own swatch stays
+// open after a re-color.
 function toggleChipModeStyle(style) {
   if (!chipModeTarget) return;
   const { panelState, id } = chipModeTarget;
@@ -7790,12 +8044,12 @@ function applyChipModeChange() {
   refreshTskCrossColumnTranslations(panelState);
 }
 
-// A picked swatch's own action: sets the target chip directly to that text
-// color (see setTranslationTextColor -- an explicit set, never a toggle/
-// cycle). Leaves the popup open, same as the B button above -- per
-// explicit request, only the outside-pointerdown handler further down
-// closes it now, not a pick itself, so trying a color (or several in a
-// row) doesn't need reopening the popup each time.
+// A picked palette cell's own action: sets the target chip directly to that
+// text color (see setTranslationTextColor -- an explicit set, never a toggle/
+// cycle). Leaves the popup and the grid open, same as the B button above --
+// per explicit request, only the outside-pointerdown handler further down
+// closes them now, not a pick itself, so trying a color (or several in a
+// row) doesn't need reopening anything each time.
 function applyChipModeColor(color) {
   if (!chipModeTarget) return;
   const { panelState, id } = chipModeTarget;
@@ -12141,18 +12395,27 @@ document.addEventListener("scroll", () => {
 chipModePopup.addEventListener("mousedown", (event) => {
   if (event.target === chipModePopup) event.preventDefault();
 });
+chipColorPopup.addEventListener("mousedown", (event) => {
+  if (event.target === chipColorPopup) event.preventDefault();
+});
 for (const button of chipModeStyleButtons) {
   button.addEventListener("click", () => toggleChipModeStyle(button.dataset.style));
 }
-for (const option of chipModePopup.querySelectorAll(".chip-mode-option")) {
-  option.addEventListener("click", () => applyChipModeColor(option.dataset.color));
-}
+// The color circle opens/shuts the palette grid under the popup; a cell in
+// the grid is the actual pick.
+chipModeColorButton.addEventListener("click", () => {
+  if (chipModeTarget) setChipColorGridOpen(chipColorPopup.hidden);
+});
+chipColorPopup.addEventListener("click", (event) => {
+  const cell = event.target.closest(".chip-color-cell");
+  if (cell) applyChipModeColor(cell.dataset.color);
+});
 for (const button of chipModeParts.querySelectorAll(".chip-mode-part")) {
   button.addEventListener("click", () => toggleChipModePart(button.dataset.part));
 }
 document.addEventListener("pointerdown", (event) => {
   if (chipModePopup.hidden) return;
-  if (chipModePopup.contains(event.target)) return;
+  if (chipModePopup.contains(event.target) || chipColorPopup.contains(event.target)) return;
   hideChipModePopup();
   shieldOutsidePress(event);
 });
