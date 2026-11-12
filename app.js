@@ -30,19 +30,6 @@ const TRANSLATION_COLORS = {
   TSK: "#8e7cc3",
   NOTE: "#c27ba0",
 };
-// The six options in the highlight dialog's own color picker (see
-// #highlight-color-group in index.html, whose swatches paint these same
-// hex values via a matching data-highlight-color CSS selector) -- kept
-// here too since applyHighlight/buildTranslationLinesInto need the actual
-// color to set as each highlighted verse's own --highlight-color.
-const HIGHLIGHT_COLORS = {
-  red: "#ffd9d9",
-  orange: "#ffebd3",
-  yellow: "#fff9cf",
-  green: "#dbf2d7",
-  blue: "#d9ecfb",
-  purple: "#eee2f8",
-};
 const TRANSLATION_GROUPS = [
   { label: "English", ids: ["NIV", "ESV", "KJV", "NASB", "NRSV", "NLT"] },
   { label: "Korean", ids: ["GAE", "SAENEW", "WLB", "KLB", "EASY", "KRV"] },
@@ -110,6 +97,41 @@ const HEX_COLOR_PATTERN = /^#[0-9a-f]{6}$/;
 // there) and the contrast a lifted color has to reach against it.
 const DARK_TEXT_SURFACE = "#2c2721";
 const DARK_TEXT_MIN_CONTRAST = 4.7;
+
+// A highlight's fill comes from the same palette as a text color (see
+// TEXT_COLOR_PALETTE), less its first row: the black-to-white grays make no
+// sense as a highlighter's ink, so what is left is the colored rows -- the
+// ten bright bases, their three light tints and three dark shades: 7 rows x
+// 10 columns, 70 cells. A highlight is saved as the hex of its cell. There is
+// no "default" cell here (nothing like a translation's accent color to ring):
+// every cell is just a color.
+const HIGHLIGHT_COLOR_PALETTE = TEXT_COLOR_PALETTE.slice(1);
+const HIGHLIGHT_PALETTE_COLORS = HIGHLIGHT_COLOR_PALETTE.flat();
+// The six named colors earlier saves hold (the old picker's pastels: #ffd9d9,
+// #ffebd3, #fff9cf, #dbf2d7, #d9ecfb, #eee2f8), each on the cell of the
+// palette's first light-tint row ("light ... 3") of the same hue -- the nearest
+// in lightness and chroma to what it used to paint, so existing highlights keep
+// their look (see normalizedHighlightColor). Picked by hue rather than by
+// distance: for such pale colors a lightness match alone puts the old purple
+// on the blue cell. The old picker's first color, red, is also what the
+// highlight dialog starts on.
+const LEGACY_HIGHLIGHT_COLORS = {
+  red: "#f4cccc",
+  orange: "#fce5cd",
+  yellow: "#fff2cc",
+  green: "#d9ead3",
+  blue: "#cfe2f3",
+  purple: "#d9d2e9",
+};
+const DEFAULT_HIGHLIGHT_COLOR = LEGACY_HIGHLIGHT_COLORS.red;
+// Inks to try, in order of preference, for the text on a highlight's fill:
+// the usual dark ink first (what every old pastel took), then white and
+// black for the darker and the mid-tone cells (see highlightInk).
+const HIGHLIGHT_INKS = ["#221f1a", "#ffffff", "#000000"];
+const HIGHLIGHT_INK_MIN_CONTRAST = 4.5;
+// The least contrast a translation's own text-color pick keeps on a highlight's
+// fill (see styleHighlightMark) -- the usual floor for large text and UI parts.
+const HIGHLIGHT_PICK_MIN_CONTRAST = 3;
 
 function hexToLinearRgb(hex) {
   const value = Number.parseInt(hex.slice(1), 16);
@@ -184,12 +206,13 @@ const darkThemeTextColors = new Map();
 // far enough in lightness to reach DARK_TEXT_MIN_CONTRAST. So a dark pick (one
 // of the dark shades or dark grays) stays a color of its own family instead
 // of disappearing into the page. The light theme paints a pick exactly as
-// chosen, and so does the fill under a highlighted verse (always a light
-// pastel -- see .translation-text-highlight). A translation's accent color
-// (TRANSLATION_COLORS) is lifted the same way for the dark theme -- see
-// TRANSLATION_COLORS_DARK. Pure black is the one exception: it can only be
-// picked on the dark page on purpose (the grid's black cell is "no pick" on
-// the light theme only), so it stays the black that was asked for.
+// chosen, and so does a highlighted verse in either theme (the fill under it
+// is the same in both, not the dark page -- see styleHighlightMark). A
+// translation's accent color (TRANSLATION_COLORS) is lifted the same way for
+// the dark theme -- see TRANSLATION_COLORS_DARK. Pure black is the one
+// exception: it can only be picked on the dark page on purpose (the grid's
+// black cell is "no pick" on the light theme only), so it stays the black that
+// was asked for.
 function darkThemeTextColor(hex) {
   if (hex === BLACK_TEXT_COLOR) return hex;
   let lifted = darkThemeTextColors.get(hex);
@@ -270,6 +293,63 @@ function themeTextColor() {
 // when it doesn't.
 function chromaticTextColor(color) {
   return typeof color === "string" && HEX_COLOR_PATTERN.test(color) && !NEUTRAL_TEXT_COLORS.has(color) ? color : null;
+}
+
+// A saved highlight color as the highlight palette stores it: the lowercase
+// hex of one of its 70 cells. One of the six names an earlier save holds
+// becomes its cell (see LEGACY_HIGHLIGHT_COLORS); a hex that is no cell of the
+// palette (a gray from the text palette, say) moves to the nearest cell, so
+// the grid can always show which color a highlight has. Anything else is
+// dropped, and the highlight with it.
+function normalizedHighlightColor(value) {
+  if (typeof value !== "string") return null;
+  if (Object.hasOwn(LEGACY_HIGHLIGHT_COLORS, value)) return LEGACY_HIGHLIGHT_COLORS[value];
+  const hex = value.toLowerCase();
+  if (!HEX_COLOR_PATTERN.test(hex)) return null;
+  return HIGHLIGHT_PALETTE_COLORS.includes(hex) ? hex : nearestPaletteColor(hex, HIGHLIGHT_PALETTE_COLORS);
+}
+
+const highlightInks = new Map();
+
+// The ink for text sitting on a highlight of this fill color. The old six
+// fills were all light pastels, so the text on them was always the same dark
+// ink; the palette also has dark and mid-tone cells, where that ink would
+// vanish. So: the usual dark ink if it reads on the fill (at least 4.5:1),
+// otherwise white, otherwise black -- and if none of the three reaches 4.5
+// (it can't happen: black does from 4.6 up wherever white falls short) the best
+// of them. The same in both themes, since the fill itself is.
+function highlightInk(fill) {
+  let ink = highlightInks.get(fill);
+  if (ink) return ink;
+  let bestContrast = 0;
+  for (const candidate of HIGHLIGHT_INKS) {
+    const contrast = contrastRatio(fill, candidate);
+    if (contrast >= HIGHLIGHT_INK_MIN_CONTRAST) {
+      ink = candidate;
+      break;
+    }
+    if (contrast > bestContrast) {
+      ink = candidate;
+      bestContrast = contrast;
+    }
+  }
+  highlightInks.set(fill, ink);
+  return ink;
+}
+
+// Paints one highlighted run of verse text (a panel's or the highlight list's
+// .translation-text-highlight span): its fill, and the ink that reads on it.
+// A translation's own text-color pick (`pick`, in a panel) still shows on its
+// highlighted verses, exactly as picked in both themes -- it is the reader's
+// explicit choice, and the fill under it is theme-independent -- unless it
+// would all but vanish on this fill (under 3:1, say a dark blue pick on a dark
+// blue highlight), when the run falls back to the ink highlightInk chooses.
+function styleHighlightMark(mark, color, pick = null) {
+  const keepPick = typeof pick === "string"
+    && HEX_COLOR_PATTERN.test(pick)
+    && contrastRatio(color, pick) >= HIGHLIGHT_PICK_MIN_CONTRAST;
+  mark.style.setProperty("--highlight-color", color);
+  mark.style.setProperty("--highlight-ink", keepPick ? pick : highlightInk(color));
 }
 
 // Hebrew/Greek interlinear "translations" are synthetic: they are not part of
@@ -459,13 +539,17 @@ const highlightTranslationPicker = document.querySelector("#highlight-translatio
 const highlightTranslationPickerToggle = document.querySelector("#highlight-translation-picker-toggle");
 const highlightTranslationPickerMenu = document.querySelector("#highlight-translation-picker-menu");
 const highlightStatus = document.querySelector("#highlight-status");
-const highlightColorOptions = highlightDialog.querySelectorAll(".highlight-color-option[data-highlight-color]");
+// The dialog's own color picker: the highlight palette (see
+// HIGHLIGHT_COLOR_PALETTE) laid out right in the dialog -- its cells are built
+// at startup (see highlightDialogColorCells).
+const highlightColorGrid = document.querySelector("#highlight-color-grid");
 const highlightManagePopup = document.querySelector("#highlight-manage-popup");
 const highlightManageSwatch = document.querySelector("#highlight-manage-swatch");
 const highlightManageRemoveButton = document.querySelector("#highlight-manage-remove");
-const highlightManageColors = document.querySelector("#highlight-manage-colors");
-const highlightManageColorOptions = highlightManageColors.querySelectorAll(".highlight-color-option[data-highlight-color]");
-let highlightColor = "red";
+// The same palette as a floating card under the manage popup, opened by its
+// color circle -- the way .chip-mode-popup's circle opens its own grid.
+const highlightColorPopup = document.querySelector("#highlight-color-popup");
+let highlightColor = DEFAULT_HIGHLIGHT_COLOR;
 let highlightBook = 0;
 let highlightChapter = 1;
 let highlightStartVerse = 1;
@@ -809,8 +893,14 @@ function sanitizeState() {
     const rawHighlights = state.highlights && typeof state.highlights === "object" && !Array.isArray(state.highlights)
       ? state.highlights
       : {};
+    // Each color is saved as the hex of its palette cell (see
+    // normalizedHighlightColor, which also moves a save's old color names and
+    // any off-palette hex onto a cell); one that is neither is dropped.
     state.highlights = Object.fromEntries(
-      Object.entries(rawHighlights).filter(([, color]) => Object.hasOwn(HIGHLIGHT_COLORS, color)),
+      Object.entries(rawHighlights).flatMap(([key, color]) => {
+        const hex = normalizedHighlightColor(color);
+        return hex ? [[key, hex]] : [];
+      }),
     );
   }
   {
@@ -5844,15 +5934,15 @@ function buildTranslationLinesInto(pane, panelState, verseNumber, texts, list, b
     } else {
       const text = document.createElement("p");
       text.className = "translation-text";
-      const highlightColorKey = state.highlights[highlightKey(translation, panelState.book, panelState.chapter, verseNumber)];
-      if (highlightColorKey && hasContent) {
+      const highlightFill = state.highlights[highlightKey(translation, panelState.book, panelState.chapter, verseNumber)];
+      if (highlightFill && hasContent) {
         // An inline span around just the text, not a background on
         // .translation-text itself -- that would color the whole block's
         // width (blank space past a short last line included) rather than
         // hugging the actual glyphs the way a real highlighter would.
         const mark = document.createElement("span");
         mark.className = "translation-text-highlight";
-        mark.style.setProperty("--highlight-color", HIGHLIGHT_COLORS[highlightColorKey]);
+        styleHighlightMark(mark, highlightFill, textColors[translation]);
         mark.textContent = translationText;
         // Own click, not the verse-group's -- opens the manage popup
         // instead of also toggling this verse into/out of copy-selection
@@ -5860,7 +5950,7 @@ function buildTranslationLinesInto(pane, panelState, verseNumber, texts, list, b
         // reasoning on interlinear words).
         mark.addEventListener("click", (event) => {
           event.stopPropagation();
-          showHighlightManagePopup(mark, translation, panelState.book, panelState.chapter, verseNumber, highlightColorKey);
+          showHighlightManagePopup(mark, translation, panelState.book, panelState.chapter, verseNumber, highlightFill);
         });
         text.append(mark);
       } else {
@@ -7448,9 +7538,10 @@ function closeCopyDialog() {
 // ---- Highlight dialog -- same shape as the copy dialog above (range row,
 // version picker, showModal/populate/close), minus reading mode (a
 // highlight has no "reading style" to render) and with the copy dialog's
-// own Order fieldset swapped for a six-color picker (see setHighlightColor
-// and #highlight-color-group in index.html) instead of verse/version
-// ordering, which has nothing to mean for a highlight. ----
+// own Order fieldset swapped for the highlight palette (see
+// setHighlightColor and #highlight-color-grid in index.html: 7 rows x 10
+// columns of the same circular cells as the text-color palette) instead of
+// verse/version ordering, which has nothing to mean for a highlight. ----
 function highlightRangeVerseItems() {
   const verses = highlightChapterDataCache?.v.map(([verse]) => Number(verse)) ?? [1];
   return verses.map((verse) => ({ value: verse, label: String(verse) }));
@@ -7580,14 +7671,21 @@ function closeHighlightDialog() {
   highlightPanelState = null;
 }
 
+// The dialog's palette cells, one per HIGHLIGHT_PALETTE_COLORS color in the
+// same row-by-row order as the palette itself, built once at startup; the
+// default color starts out checked.
+const highlightDialogColorCells = HIGHLIGHT_PALETTE_COLORS.map((hex) => {
+  const cell = buildColorCell(hex, hex, "radio");
+  highlightColorGrid.append(cell);
+  return cell;
+});
+
 function setHighlightColor(color) {
   highlightColor = color;
-  for (const option of highlightColorOptions) {
-    const selected = option.dataset.highlightColor === color;
-    option.classList.toggle("selected", selected);
-    option.setAttribute("aria-pressed", String(selected));
-  }
+  syncColorGridSelection(highlightDialogColorCells, color);
 }
+
+setHighlightColor(DEFAULT_HIGHLIGHT_COLOR);
 
 // What actually gets highlighted -- mirrors copyEffectiveVerseNumbers in
 // the copy dialog above. An individual-mode selection with gaps (e.g.
@@ -7617,7 +7715,7 @@ function highlightEffectiveVerseNumbers() {
 }
 
 // The confirm button's own action: marks every selected verse, for every
-// selected version, with the current color (see HIGHLIGHT_COLORS) and
+// selected version, with the current color (a palette cell's hex) and
 // re-renders any panel currently showing this book/chapter so the result
 // is visible immediately -- not just highlightPanelState's own panel,
 // since a linked partner (or any other panel a reader has open on the
@@ -7830,9 +7928,9 @@ function lastHighlightCharacterRect(textEl) {
 // text's last character) can sit close enough to that panel's own right/
 // bottom edge that the popup's natural position would spill into the
 // next panel, or past the window entirely. Re-run (not just called once
-// from showHighlightManagePopup) whenever the popup's own size changes --
-// swapping the swatch for the six-color picker widens it -- since that
-// can turn an already-fine position into an overflowing one.
+// from showHighlightManagePopup) whenever the popup's own size could have
+// changed, since that can turn an already-fine position into an
+// overflowing one.
 function positionHighlightManagePopup() {
   if (!highlightManageAnchorRect) return;
   const bounds = highlightManagePanelEl
@@ -7849,21 +7947,45 @@ function positionHighlightManagePopup() {
   highlightManagePopup.style.top = `${top}px`;
 }
 
-function showHighlightManagePopup(textEl, translation, book, chapter, verse, colorKey) {
+// The manage popup's palette cells -- the same 70 as the dialog's, in a
+// floating card (#highlight-color-popup) that its color circle opens right
+// under the popup; built once at startup.
+const highlightPopupColorCells = HIGHLIGHT_PALETTE_COLORS.map((hex) => {
+  const cell = buildColorCell(hex, hex, "radio");
+  highlightColorPopup.append(cell);
+  return cell;
+});
+
+function positionHighlightColorPopup() {
+  positionColorGrid(highlightManagePopup, highlightColorPopup, highlightManagePanelEl);
+}
+
+function setHighlightColorGridOpen(open) {
+  highlightColorPopup.hidden = !open;
+  highlightManageSwatch.setAttribute("aria-expanded", String(open));
+  if (open) positionHighlightColorPopup();
+}
+
+// Where the highlight's current color shows in the manage popup: its color
+// circle, and the palette's check mark on the cell holding that color.
+function syncHighlightManageColor(color) {
+  highlightManageSwatch.style.background = color;
+  syncColorGridSelection(highlightPopupColorCells, color);
+}
+
+function showHighlightManagePopup(textEl, translation, book, chapter, verse, color) {
   highlightManageTarget = { translation, book, chapter, verse };
-  highlightManageSwatch.style.background = HIGHLIGHT_COLORS[colorKey];
-  highlightManageSwatch.hidden = false;
-  highlightManageColors.hidden = true;
+  syncHighlightManageColor(color);
   highlightManagePanelEl = textEl.closest(".bible-panel");
   highlightManageAnchorRect = lastHighlightCharacterRect(textEl);
   highlightManagePopup.hidden = false;
   positionHighlightManagePopup();
+  setHighlightColorGridOpen(false);
 }
 
 function hideHighlightManagePopup() {
+  setHighlightColorGridOpen(false);
   highlightManagePopup.hidden = true;
-  highlightManageSwatch.hidden = false;
-  highlightManageColors.hidden = true;
   highlightManageTarget = null;
   highlightManageAnchorRect = null;
   highlightManagePanelEl = null;
@@ -7878,19 +8000,18 @@ function removeHighlight() {
   rerenderPanelsPreservingVerseAnchor(book, chapter, verse);
 }
 
-// The manage popup's own swatch button swaps places with this instead of
-// acting as a static color label -- picking one re-colors the highlight
-// in place (the popup itself stays open, swapped back to just the swatch/
-// remove, so the trash button is still one click away without reopening).
-function setHighlightManageColor(colorKey) {
+// A cell picked in the manage popup's palette (opened by its color circle)
+// re-colors the highlight in place. The popup and the grid both stay open --
+// same as the text-color palette -- so trying a color, or several in a row,
+// doesn't mean reopening anything each time, and the trash button is still
+// one click away; only an outside press (or scroll, or the circle itself)
+// closes them.
+function setHighlightManageColor(color) {
   if (!highlightManageTarget) return;
   const { translation, book, chapter, verse } = highlightManageTarget;
-  state.highlights[highlightKey(translation, book, chapter, verse)] = colorKey;
+  state.highlights[highlightKey(translation, book, chapter, verse)] = color;
   saveState();
-  highlightManageSwatch.style.background = HIGHLIGHT_COLORS[colorKey];
-  highlightManageSwatch.hidden = false;
-  highlightManageColors.hidden = true;
-  positionHighlightManagePopup();
+  syncHighlightManageColor(color);
   rerenderPanelsPreservingVerseAnchor(book, chapter, verse);
 }
 
@@ -7964,12 +8085,23 @@ function positionChipModePopup() {
 // (above the popup) when it wouldn't fit on screen below it, and as a last
 // resort is pinned to the screen's bottom edge.
 function positionChipColorPopup() {
-  if (chipColorPopup.hidden) return;
-  const bounds = chipModePanelEl
-    ? chipModePanelEl.getBoundingClientRect()
+  positionColorGrid(chipModePopup, chipColorPopup, chipModePanelEl);
+}
+
+// Places a palette card (a .chip-color-popup -- the text-color grid under the
+// chip popup, the highlight-color grid under the highlight manage popup) right
+// under the popup that opened it, left edges aligned, on the same
+// clamp-to-the-panel's-width rule as the popup itself (panelEl, or the whole
+// window when there is none). It only moves up (above the popup) when it
+// wouldn't fit on screen below it, and as a last resort is pinned to the
+// screen's bottom edge.
+function positionColorGrid(popupEl, gridEl, panelEl) {
+  if (gridEl.hidden) return;
+  const bounds = panelEl
+    ? panelEl.getBoundingClientRect()
     : { left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight };
-  const popupRect = chipModePopup.getBoundingClientRect();
-  const gridRect = chipColorPopup.getBoundingClientRect();
+  const popupRect = popupEl.getBoundingClientRect();
+  const gridRect = gridEl.getBoundingClientRect();
   let left = popupRect.left;
   left = Math.min(left, bounds.right - gridRect.width - 4);
   left = Math.max(left, bounds.left + 4);
@@ -7978,8 +8110,8 @@ function positionChipColorPopup() {
     const above = popupRect.top - gridRect.height - 4;
     top = above >= 4 ? above : Math.max(4, window.innerHeight - gridRect.height - 4);
   }
-  chipColorPopup.style.left = `${left}px`;
-  chipColorPopup.style.top = `${top}px`;
+  gridEl.style.left = `${left}px`;
+  gridEl.style.top = `${top}px`;
 }
 
 function setChipColorGridOpen(open) {
@@ -7988,28 +8120,48 @@ function setChipColorGridOpen(open) {
   if (open) positionChipColorPopup();
 }
 
-// One button per palette cell, built once (the grid is a shared singleton
-// like the popup). A cell is a circle painted in its own color; the check
-// mark on the applied one, and the ring on the one that is the translation's
-// own accent color, are both drawn in whichever of white or dark ink reads
-// better on that color (data-check -- see .chip-color-cell in styles.css).
+// One circular palette cell (see .chip-color-cell in styles.css), shared by
+// the chip popup's text-color grid and the two highlight-color grids. A cell
+// is a circle painted in its own color; the check mark on the applied one
+// (and, in the text grid, the ring on the one that is the translation's own
+// accent color) is drawn in whichever of white or dark ink reads better on
+// that color (data-check). `role` is its ARIA role: a menu item in the text
+// popup's menu, a radio in a highlight grid's radiogroup.
+function buildColorCell(hex, name, role) {
+  const cell = document.createElement("button");
+  cell.type = "button";
+  cell.className = "chip-color-cell";
+  cell.dataset.color = hex;
+  cell.dataset.check = contrastRatio(hex, "#ffffff") >= contrastRatio(hex, "#25231f") ? "light" : "dark";
+  cell.dataset.name = name;
+  cell.setAttribute("role", role);
+  cell.setAttribute("aria-checked", "false");
+  cell.setAttribute("aria-label", name);
+  const swatch = document.createElement("span");
+  swatch.className = "chip-color-swatch";
+  swatch.style.backgroundColor = hex;
+  cell.append(swatch);
+  return cell;
+}
+
+// Checks the one cell of `cells` holding `color` (none when no cell does) and
+// unchecks the rest -- the selected look is the check mark alone (.selected).
+function syncColorGridSelection(cells, color) {
+  for (const cell of cells) {
+    const selected = cell.dataset.color === color;
+    cell.classList.toggle("selected", selected);
+    cell.setAttribute("aria-checked", String(selected));
+  }
+}
+
+// One button per text-color palette cell, built once (the grid is a shared
+// singleton like the popup).
 for (const row of TEXT_COLOR_PALETTE) {
   for (const hex of row) {
-    const cell = document.createElement("button");
-    cell.type = "button";
-    cell.className = "chip-color-cell";
-    cell.dataset.color = hex;
-    cell.dataset.check = contrastRatio(hex, "#ffffff") >= contrastRatio(hex, "#25231f") ? "light" : "dark";
-    cell.dataset.name = hex === BLACK_TEXT_COLOR ? "Black (default on the light theme)"
+    const name = hex === BLACK_TEXT_COLOR ? "Black (default on the light theme)"
       : hex === WHITE_TEXT_COLOR ? "White (default on the dark theme)"
         : hex;
-    cell.setAttribute("role", "menuitemradio");
-    cell.setAttribute("aria-checked", "false");
-    cell.setAttribute("aria-label", cell.dataset.name);
-    const swatch = document.createElement("span");
-    swatch.className = "chip-color-swatch";
-    swatch.style.backgroundColor = hex;
-    cell.append(swatch);
+    const cell = buildColorCell(hex, name, "menuitemradio");
     chipColorPopup.append(cell);
     chipColorCells.push(cell);
   }
@@ -11728,7 +11880,7 @@ function buildHighlightResultRow(group, chaptersByKey) {
     if (hasContent) {
       const mark = document.createElement("span");
       mark.className = "translation-text-highlight";
-      mark.style.setProperty("--highlight-color", HIGHLIGHT_COLORS[entry.value]);
+      styleHighlightMark(mark, entry.value);
       mark.textContent = text;
       textWrap.append(mark);
     }
@@ -12487,9 +12639,10 @@ copyDialog.addEventListener("click", (event) => {
 });
 closeHighlightButton.addEventListener("click", closeHighlightDialog);
 confirmHighlightButton.addEventListener("click", applyHighlight);
-for (const option of highlightColorOptions) {
-  option.addEventListener("click", () => setHighlightColor(option.dataset.highlightColor));
-}
+highlightColorGrid.addEventListener("click", (event) => {
+  const cell = event.target.closest(".chip-color-cell");
+  if (cell) setHighlightColor(cell.dataset.color);
+});
 highlightDialog.addEventListener("click", (event) => {
   if (event.target === highlightDialog) closeHighlightDialog();
 });
@@ -12506,18 +12659,22 @@ highlightDialog.addEventListener("click", (event) => {
 highlightManagePopup.addEventListener("mousedown", (event) => {
   if (event.target === highlightManagePopup) event.preventDefault();
 });
-highlightManageRemoveButton.addEventListener("click", removeHighlight);
-highlightManageSwatch.addEventListener("click", () => {
-  highlightManageSwatch.hidden = true;
-  highlightManageColors.hidden = false;
-  positionHighlightManagePopup();
+highlightColorPopup.addEventListener("mousedown", (event) => {
+  if (event.target === highlightColorPopup) event.preventDefault();
 });
-for (const option of highlightManageColorOptions) {
-  option.addEventListener("click", () => setHighlightManageColor(option.dataset.highlightColor));
-}
+highlightManageRemoveButton.addEventListener("click", removeHighlight);
+// The color circle opens/shuts the palette grid under the popup; a cell in
+// the grid is the actual pick.
+highlightManageSwatch.addEventListener("click", () => {
+  if (highlightManageTarget) setHighlightColorGridOpen(highlightColorPopup.hidden);
+});
+highlightColorPopup.addEventListener("click", (event) => {
+  const cell = event.target.closest(".chip-color-cell");
+  if (cell) setHighlightManageColor(cell.dataset.color);
+});
 document.addEventListener("pointerdown", (event) => {
   if (highlightManagePopup.hidden) return;
-  if (highlightManagePopup.contains(event.target)) return;
+  if (highlightManagePopup.contains(event.target) || highlightColorPopup.contains(event.target)) return;
   hideHighlightManagePopup();
   // Same reasoning as shieldOutsidePress's own comment -- the press that
   // dismissed this popup shouldn't also land on whatever verse or button

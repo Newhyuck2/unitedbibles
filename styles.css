@@ -8156,40 +8156,17 @@ body * {
 
 /* ---- Highlight dialog's color picker, in the exact spot the copy
    dialog's own Order fieldset (verse-by-verse/version-by-version) sits --
-   a row of circular swatches instead of that stacked two-way toggle,
-   since there's no text label a circle needs room for. Six colors, one
-   selectable at a time (radiogroup), same convention as .copy-order-
-   option's own "selected = ring/fill" treatment just adapted to a circle. ---- */
-.highlight-color-group {
-  display: flex;
-  justify-content: center;
-  gap: 12px;
-  padding: 4px 0;
-}
-
-.highlight-color-option {
+   the highlight palette (HIGHLIGHT_COLOR_PALETTE in app.js: the text-color
+   palette less its gray row) laid out in place rather than as a floating
+   card: 10 columns by 7 rows of the very same circular cells (.chip-color-cell
+   -- see the text-color palette further down), centered, one checked at a time
+   (radiogroup). The check mark is the whole selected look, same as there. ---- */
+.highlight-color-grid {
   display: grid;
-  place-items: center;
-  width: 34px;
-  height: 34px;
-  padding: 0;
-  border: 0;
-  border-radius: 50%;
-  background: none;
-}
-
-.highlight-color-swatch {
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  border: 1px solid rgba(37, 35, 31, 0.18);
-}
-
-/* A soft, larger halo behind the swatch rather than a hard ring right
-   against its edge -- the button's own circular box (34px, vs. the
-   swatch's own 24px) already gives room for it. */
-.highlight-color-option.selected {
-  background: var(--accent-soft);
+  grid-template-columns: repeat(10, 22px);
+  justify-content: center;
+  gap: 0;
+  padding: 4px 0;
 }
 
 /* ---- Note dialog's own textarea, in that same copy-dialog Order-
@@ -8216,58 +8193,29 @@ body * {
   border-color: var(--accent);
 }
 
-.highlight-color-option[data-highlight-color="red"] .highlight-color-swatch {
-  background: #ffd9d9;
-}
-
-.highlight-color-option[data-highlight-color="orange"] .highlight-color-swatch {
-  background: #ffebd3;
-}
-
-.highlight-color-option[data-highlight-color="yellow"] .highlight-color-swatch {
-  background: #fff9cf;
-}
-
-.highlight-color-option[data-highlight-color="green"] .highlight-color-swatch {
-  background: #dbf2d7;
-}
-
-.highlight-color-option[data-highlight-color="blue"] .highlight-color-swatch {
-  background: #d9ecfb;
-}
-
-.highlight-color-option[data-highlight-color="purple"] .highlight-color-swatch {
-  background: #eee2f8;
-}
-
 /* A verse's own highlight (see buildTranslationLinesInto in app.js, which
-   sets --highlight-color per element from the same six colors above) --
+   sets --highlight-color per element from the highlight palette's cell) --
    an inline span around just the verse's own text, not .translation-text
    itself, so the colored background hugs the glyphs on each wrapped line
    the way a real highlighter would rather than filling the full block
    width behind short or unjustified lines. Square corners (no border-
    radius) -- a real highlighter stroke doesn't round off. */
 .translation-text-highlight {
-  /* Fixed dark ink, not var(--ink) -- the highlight fill (--highlight-color)
-     is always a light pastel in both themes, so the text sitting on it must
-     stay dark even when var(--ink) itself flips to near-white in dark mode. */
-  color: #221f1a;
+  /* Not var(--ink): the fill (--highlight-color) is the same in both themes,
+     so the text sitting on it can't follow the theme's own text color, which
+     flips to near-white in dark mode. --highlight-ink is the ink that reads on
+     this particular fill (dark on the light cells, white or black on the dark
+     and mid-tone ones, or the translation's own text-color pick while that
+     reads -- see styleHighlightMark); the fallback is the usual dark ink. A
+     pick is used as picked in dark mode too, never the dark theme's lift,
+     which is meant for the dark page background and would wash out here. */
+  color: var(--highlight-ink, #221f1a);
   background: var(--highlight-color);
   padding: 1px 3px;
   margin: -1px -3px;
   cursor: pointer;
   -webkit-box-decoration-break: clone;
   box-decoration-break: clone;
-}
-
-/* A text color picked on the chip's own "..." popup (see
-   .translation-line--color-pick) keeps showing on a highlighted verse
-   instead of the fixed dark ink above. It stays the color as picked in dark
-   mode too (never the dark theme's lift, which is meant for the dark page
-   background and would wash out here), for the same reason as that ink: the
-   fill under it is always a light pastel. */
-.translation-line--color-pick .translation-text-highlight {
-  color: var(--pick-color);
 }
 
 /* A verse's own note (see buildTranslationLinesInto in app.js) -- a small
@@ -8331,10 +8279,10 @@ body * {
    from a getBoundingClientRect() read (viewport-relative) of the
    highlighted text's own last character, not from any single ancestor's
    own box, then clamped to stay inside that panel's own bounds (see
-   positionHighlightManagePopup). #highlight-manage-colors (the re-color
-   picker) and #highlight-manage-swatch swap places in this same row
-   instead -- see setHighlightManageColor -- rather than the picker
-   opening as a second row below. */
+   positionHighlightManagePopup). Its color circle (#highlight-manage-swatch)
+   opens the highlight palette (#highlight-color-popup, a .chip-color-popup
+   card like the text-color one) right below it -- see setHighlightColorGridOpen
+   and setHighlightManageColor. */
 /* .bookmark-manage-popup (shown by showBookmarkManagePopup, positioned
    by positionBookmarkManagePopup) is the exact same floating-popup
    mechanism just anchored below a bookmarked .verse-number instead of
@@ -8371,6 +8319,11 @@ body * {
   z-index: 30;
 }
 
+/* The highlight's own color (set inline by syncHighlightManageColor) -- the
+   button that opens its palette. Same 18px circle as .chip-mode-swatch, with
+   the same neutral 26px halo behind it on hover and while the palette is open
+   (.chip-mode-color's own fill), drawn as a spread shadow since the circle is
+   the button itself here. */
 .highlight-manage-swatch {
   width: 18px;
   height: 18px;
@@ -8378,6 +8331,15 @@ body * {
   border: 1px solid rgba(37, 35, 31, 0.18);
   border-radius: 50%;
   background: none;
+}
+
+.highlight-manage-swatch:hover,
+.highlight-manage-swatch[aria-expanded="true"] {
+  box-shadow: 0 0 0 4px var(--hover-bg-strong);
+}
+
+[data-theme="dark"] .highlight-manage-swatch {
+  border-color: rgba(236, 231, 221, 0.3);
 }
 
 .highlight-manage-remove,
@@ -8392,23 +8354,6 @@ body * {
   border-radius: 6px;
   background: none;
   color: var(--ink);
-}
-
-/* The same six swatches as #highlight-color-group (the dialog's own
-   picker), just smaller to fit this compact popup. */
-.highlight-manage-colors {
-  display: flex;
-  gap: 2px;
-}
-
-.highlight-manage-colors .highlight-color-option {
-  width: 26px;
-  height: 26px;
-}
-
-.highlight-manage-colors .highlight-color-swatch {
-  width: 18px;
-  height: 18px;
 }
 
 .highlight-manage-remove svg,
@@ -8501,8 +8446,9 @@ body * {
 }
 
 /* The popup's single text-color circle (see syncChipModeColorSelection and
-   setChipColorGridOpen in app.js) -- same 26px button / 18px swatch as
-   .highlight-manage-colors' own compact picker above. The swatch paints the
+   setChipColorGridOpen in app.js) -- a 26px button around an 18px swatch (the
+   highlight popup's color circle, .highlight-manage-swatch above, is the same
+   18px circle with the same halo). The swatch paints the
    translation's current text color (--chip-mode-color, set per chip; the
    theme's own ink while none is picked), lifted the same way the text
    itself is in the dark theme (--chip-mode-color-dark). Pressing it opens
@@ -8551,7 +8497,13 @@ body * {
    own accent color (.theme -- see syncChipModeColorSelection) a thick ring
    flush with the circle's edge, both drawn in whichever of white or dark ink
    reads better on that color (data-check, set when the cells are built);
-   there is deliberately no other selected look. */
+   there is deliberately no other selected look.
+
+   The highlight palette (the same cells less the gray row, so 7 rows) reuses
+   all of this -- as the same kind of card under the highlight manage popup
+   (#highlight-color-popup), and in place in the highlight dialog
+   (.highlight-color-grid above). It has no ring: a highlight has no default
+   color of its own to mark. */
 .chip-color-popup {
   position: fixed;
   z-index: 30;

@@ -23,7 +23,7 @@
     <meta name="twitter:title" content="United Bibles" />
     <meta name="twitter:description" content="A compact multi-panel Bible reader" />
     <meta name="twitter:image" content="https://unitedbibles.org/icons/icon-512.png" />
-    <meta name="asset-version" content="20261001-32" />
+    <meta name="asset-version" content="20261001-33" />
     <meta name="theme-color" content="#284f43" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" /> 
@@ -32,7 +32,7 @@
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" type="image/png" href="./icons/icon-192.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="./icons/icon-180.png" />
-    <link rel="stylesheet" href="./styles.css?v=20261001-32" />
+    <link rel="stylesheet" href="./styles.css?v=20261001-33" />
     <!-- Applies the saved theme before first paint so a dark-theme visitor
          never sees a light-theme flash while app.js's module script (and
          its manifest.json fetch) is still loading. Reads the same
@@ -507,26 +507,10 @@
 
         <fieldset>
           <legend>Color</legend>
-          <div class="highlight-color-group" id="highlight-color-group" role="radiogroup" aria-label="Highlight color">
-            <button type="button" class="highlight-color-option selected" data-highlight-color="red" aria-pressed="true" aria-label="Red">
-              <span class="highlight-color-swatch"></span>
-            </button>
-            <button type="button" class="highlight-color-option" data-highlight-color="orange" aria-pressed="false" aria-label="Orange">
-              <span class="highlight-color-swatch"></span>
-            </button>
-            <button type="button" class="highlight-color-option" data-highlight-color="yellow" aria-pressed="false" aria-label="Yellow">
-              <span class="highlight-color-swatch"></span>
-            </button>
-            <button type="button" class="highlight-color-option" data-highlight-color="green" aria-pressed="false" aria-label="Green">
-              <span class="highlight-color-swatch"></span>
-            </button>
-            <button type="button" class="highlight-color-option" data-highlight-color="blue" aria-pressed="false" aria-label="Blue">
-              <span class="highlight-color-swatch"></span>
-            </button>
-            <button type="button" class="highlight-color-option" data-highlight-color="purple" aria-pressed="false" aria-label="Purple">
-              <span class="highlight-color-swatch"></span>
-            </button>
-          </div>
+          <!-- The 7 x 10 highlight palette (HIGHLIGHT_COLOR_PALETTE in app.js:
+               the text-color palette minus its gray row); its 70 cell
+               buttons are built by app.js. -->
+          <div class="highlight-color-grid" id="highlight-color-grid" role="radiogroup" aria-label="Highlight color"></div>
         </fieldset>
 
         <div class="copy-actions">
@@ -1190,8 +1174,8 @@
 
               <section class="info-section" id="info-section-6-4">
                 <h3 class="info-section-heading">6.4 Highlight</h3>
-                <p class="info-body-text"><img class="info-icon" src="./assets/info/icon-highlight.png" alt="Highlight icon" /> Highlights the selected version's Bible verse. Click it to change the highlight color or remove it.</p>
-                <img class="info-screenshot" src="./assets/info/verse-highlight-manage.png" alt="Genesis 1:1 with the NIV text highlighted green and the color picker/remove popup open" width="355" />
+                <p class="info-body-text"><img class="info-icon" src="./assets/info/icon-highlight.png" alt="Highlight icon" /> Highlights the selected version's Bible verse. Click the highlighted text, then its color circle to pick another color from the palette, or the trash icon to remove it.</p>
+                <img class="info-screenshot" src="./assets/info/verse-highlight-manage.png" alt="Genesis 1:1 with the NIV text highlighted green, its color circle and trash icon, and the color palette open below them" width="355" />
               </section>
 
               <section class="info-section" id="info-section-6-5">
@@ -1603,28 +1587,10 @@
       </article>
     </template>
 
+    <!-- The color circle opens the highlight palette (#highlight-color-popup,
+         right below) -- same cells as the dialog's Color grid. -->
     <div class="highlight-manage-popup" id="highlight-manage-popup" hidden>
-      <button class="highlight-manage-swatch" id="highlight-manage-swatch" type="button" aria-label="Change highlight color"></button>
-      <div class="highlight-manage-colors" id="highlight-manage-colors" role="radiogroup" aria-label="Highlight color" hidden>
-        <button type="button" class="highlight-color-option" data-highlight-color="red" aria-label="Red">
-          <span class="highlight-color-swatch"></span>
-        </button>
-        <button type="button" class="highlight-color-option" data-highlight-color="orange" aria-label="Orange">
-          <span class="highlight-color-swatch"></span>
-        </button>
-        <button type="button" class="highlight-color-option" data-highlight-color="yellow" aria-label="Yellow">
-          <span class="highlight-color-swatch"></span>
-        </button>
-        <button type="button" class="highlight-color-option" data-highlight-color="green" aria-label="Green">
-          <span class="highlight-color-swatch"></span>
-        </button>
-        <button type="button" class="highlight-color-option" data-highlight-color="blue" aria-label="Blue">
-          <span class="highlight-color-swatch"></span>
-        </button>
-        <button type="button" class="highlight-color-option" data-highlight-color="purple" aria-label="Purple">
-          <span class="highlight-color-swatch"></span>
-        </button>
-      </div>
+      <button class="highlight-manage-swatch" id="highlight-manage-swatch" type="button" aria-label="Change highlight color" aria-haspopup="true" aria-expanded="false" aria-controls="highlight-color-popup"></button>
       <button class="highlight-manage-remove" id="highlight-manage-remove" type="button" aria-label="Remove highlight">
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <path d="M4 7h16"></path>
@@ -1634,6 +1600,10 @@
         </svg>
       </button>
     </div>
+
+    <!-- The 7 x 10 highlight palette as a floating card (same look as
+         #chip-color-popup); its 70 cell buttons are built by app.js. -->
+    <div class="chip-color-popup" id="highlight-color-popup" hidden role="radiogroup" aria-label="Highlight color"></div>
 
     <div class="bookmark-manage-popup" id="bookmark-manage-popup" hidden>
       <button class="bookmark-manage-remove" id="bookmark-manage-remove" type="button" aria-label="Remove bookmark">
@@ -1693,6 +1663,6 @@
     </div>
 
     <noscript>JavaScript is required to display the Bible text.</noscript>
-    <script type="module" src="./app.js?v=20261001-32"></script>
+    <script type="module" src="./app.js?v=20261001-33"></script>
   </body>
 </html>
