@@ -8731,3 +8731,120 @@ body * {
   font-size: 0;
 }
 
+/* Panel chip row on a phone held upright: where a tap on a chip lands.
+   A tap meant to hide or show a version (anywhere on the chip but its two
+   buttons) kept landing on the dots button just left of the name, or on the x
+   button just right of it. Two things did that: each button's 24px box sat
+   flush against the name's 4px gap, leaving a strip of under 30px between them
+   on a short name like NIV; and Chrome snaps a tap that lands within about
+   10px of a button onto that button, which cut the strip down to about 8px --
+   for the tap that is made far more often than either button's.
+
+   The two boxes are now narrower on the name's side and reach out to the
+   chip's own edge on the other (1px in from its border), so they begin and end
+   where their icons do:
+
+   - the dots' box runs from the chip's left edge to 3px past the dots
+     themselves (20px wide, was 24px from 4px in);
+   - the x's box runs from 3px before the x to the chip's right edge (22px
+     wide, was 24px from 4px in).
+
+   And chipButtonPressIsStray in app.js keeps the browser's snap from pulling a
+   tap onto either button from outside its box, so each box is exactly what
+   takes a tap: everything between them hides or shows the version -- 41px of a
+   short name's chip, where it was 8 (the strip between the old boxes was 28).
+   The boxes themselves shrink, rather than only their hit areas, because the
+   browser's snap goes by each button's own box.
+
+   Nothing about the look moves. Each box's outer margin is negative (-4px) and
+   its inner one makes up the difference, so a chip is the width it was and the
+   name sits where it did; each icon is shifted inside its new box back to
+   where it was drawn (the dots by +6px on top of the 2px nudge
+   .chip-mode-toggle span already has, the x by -5px); and the hover tint that
+   used to fill the whole old box (also what a tap leaves showing on a touch
+   screen) is painted by a ::before on that old box's area instead, which takes
+   no taps itself (pointer-events: none) -- isolation keeps it behind the icon.
+   The desktop and landscape rules above are untouched. */
+@media (orientation: portrait) and (max-width: 599px) {
+  .panel-translation-list .translation-chip .chip-mode-toggle,
+  .panel-translation-list .translation-chip .chip-remove {
+    position: relative;
+    isolation: isolate;
+  }
+
+  .panel-translation-list .translation-chip .chip-mode-toggle {
+    width: 20px;
+    margin: 0 8px 0 -4px;
+  }
+
+  .panel-translation-list .translation-chip .chip-remove {
+    width: 22px;
+    margin: 0 -4px 0 6px;
+  }
+
+  /* The braille cell is two columns wide and the dots are its left one, so
+     once shifted back the cell's empty right column reaches 4px past the new
+     box -- it takes no taps of its own, or the dots' area would still run to
+     there. */
+  .panel-translation-list .translation-chip .chip-mode-toggle span {
+    transform: translateX(8px);
+    pointer-events: none;
+  }
+
+  .panel-translation-list .translation-chip .chip-remove span {
+    transform: translateX(-5px);
+  }
+
+  .panel-translation-list .translation-chip .chip-mode-toggle::before,
+  .panel-translation-list .translation-chip .chip-remove::before {
+    position: absolute;
+    z-index: -1;
+    top: 0;
+    bottom: 0;
+    border-radius: 5px;
+    content: "";
+    pointer-events: none;
+  }
+
+  /* The old 24px boxes, in the new boxes' coordinates: the dots' began 4px in
+     from the new left edge and ended 8px past the new right one; the x's began
+     6px before the new left edge and ended 4px short of the new right one. */
+  .panel-translation-list .translation-chip .chip-mode-toggle::before {
+    right: -8px;
+    left: 4px;
+  }
+
+  .panel-translation-list .translation-chip .chip-remove::before {
+    right: 4px;
+    left: -6px;
+  }
+
+  /* STR, TSK and NOTE have no style popup, so their dots are disabled -- and a
+     disabled button swallows the click that lands on it, while the browser
+     still snaps taps from beside it onto it. A tap anywhere near those dots
+     therefore did nothing at all. Here the dots take no taps, and the chip
+     under them handles the tap like the rest of its body (hide/show, or
+     switch to the tool); the button itself is as disabled as before. */
+  .panel-translation-list .translation-chip .chip-mode-toggle:disabled {
+    pointer-events: none;
+  }
+
+  /* The hover tints themselves are unchanged (see .chip-mode-toggle and
+     .chip-remove above) -- only the thing they paint on moves. */
+  .panel-translation-list .translation-chip .chip-mode-toggle:not(:disabled):hover {
+    background: transparent;
+  }
+
+  .panel-translation-list .translation-chip .chip-mode-toggle:not(:disabled):hover::before {
+    background: var(--hover-bg-strong);
+  }
+
+  .panel-translation-list .translation-chip .chip-remove:hover {
+    background: transparent;
+  }
+
+  .panel-translation-list .translation-chip .chip-remove:hover::before {
+    background: rgba(162, 79, 98, 0.14);
+  }
+}
+

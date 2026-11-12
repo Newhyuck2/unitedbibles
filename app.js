@@ -2230,6 +2230,27 @@ function applyTranslationOrder(panelState, order) {
   if (!activeOriginalLanguageId(order)) panelState.originalLanguageHiddenParts = [];
 }
 
+// Whether a press that a chip's dots or x button reports as its target really
+// began somewhere else on the chip. On a touch screen Chrome snaps a tap that
+// lands within about 10px of a small button onto that button: both the press
+// and the click that follows name the button as their target even with the
+// finger on the chip's name, while the press's own coordinates stay the
+// finger's. That is how the dots and the x kept taking taps meant to hide or
+// show a version -- on a short name like NIV the two snaps left under 10px of
+// the chip for it. So in the panel's chip row on a phone held upright (where
+// styles.css sets up the two buttons' boxes for this: the dots' reaches from
+// the chip's left edge to just past the dots, the x's from just before the x to
+// its right edge), a press only counts as a button's when it began inside that
+// button's own box; any other press carries on as a press on the chip itself --
+// the touch drag that reorders it, and the click that hides or shows the
+// version (see renderTranslationChipList for how the click is handed over) --
+// exactly as it would had the browser not snapped it.
+function chipButtonPressIsStray(list, button, event) {
+  if (!list.classList.contains("panel-translation-list") || !phonePortraitLayout.matches) return false;
+  const box = button.getBoundingClientRect();
+  return event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom;
+}
+
 function renderTranslationChipList({ list, order, getEmphasis, onToggleActive, onOpenModePopup, onRemove, onMove }) {
   list.replaceChildren();
 
@@ -2279,6 +2300,23 @@ function renderTranslationChipList({ list, order, getEmphasis, onToggleActive, o
     const glyph = document.createElement("span");
     glyph.setAttribute("aria-hidden", "true");
     glyph.textContent = "⠇";
+    // Set by the pointerdown of the dots or the x when the browser only snapped
+    // that press onto the button (see chipButtonPressIsStray), and read by the
+    // click that follows it, which then is the chip's own: hiding or showing
+    // the version, as a tap on the chip's body does. The click is the button's
+    // to receive either way (the browser decides its target when the tap
+    // ends), so the button hands it on rather than the chip catching it -- and
+    // a keyboard click (detail 0) is never one of these.
+    let strayPress = false;
+    const onChipButtonPointerdown = (button) => (event) => {
+      strayPress = chipButtonPressIsStray(list, button, event);
+      if (!strayPress) event.stopPropagation();
+    };
+    const takeStrayPress = (event) => {
+      const stray = strayPress && event.detail > 0;
+      strayPress = false;
+      return stray;
+    };
     let handle;
     if (onOpenModePopup) {
       const hasModePopup = isIndexableTranslationId(id) || ORIGINAL_LANGUAGE_IDS.includes(id);
@@ -2291,6 +2329,10 @@ function renderTranslationChipList({ list, order, getEmphasis, onToggleActive, o
         handle.setAttribute("aria-label", `${meta.label} style`);
         handle.addEventListener("click", (event) => {
           event.stopPropagation();
+          if (takeStrayPress(event)) {
+            onToggleActive?.(id);
+            return;
+          }
           onOpenModePopup(id, chip);
         });
       } else {
@@ -2300,8 +2342,9 @@ function renderTranslationChipList({ list, order, getEmphasis, onToggleActive, o
       // Same opt-out-of-drag pointerdown as the remove button below -- this
       // button is a dedicated tap target for the popup, not part of the
       // drag surface, even though the chip body around it is (see handle:
-      // chip in setupTouchReorder below).
-      handle.addEventListener("pointerdown", (event) => event.stopPropagation());
+      // chip in setupTouchReorder below). Except a press the browser only
+      // snapped onto it, which is a press on the chip.
+      handle.addEventListener("pointerdown", onChipButtonPointerdown(handle));
     } else {
       handle = document.createElement("span");
       handle.className = "drag-handle";
@@ -2343,9 +2386,13 @@ function renderTranslationChipList({ list, order, getEmphasis, onToggleActive, o
     removeButton.append(removeIcon);
     removeButton.addEventListener("click", (event) => {
       event.stopPropagation();
+      if (takeStrayPress(event)) {
+        onToggleActive?.(id);
+        return;
+      }
       onRemove(id);
     });
-    removeButton.addEventListener("pointerdown", (event) => event.stopPropagation());
+    removeButton.addEventListener("pointerdown", onChipButtonPointerdown(removeButton));
 
     chip.addEventListener("dragstart", (event) => {
       chip.classList.add("dragging");
