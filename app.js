@@ -4628,8 +4628,17 @@ function createPanelElement(panelState) {
     // swap, not a real scroll gesture. Broadcasting that 0 to the rest of
     // the group would yank every *other* linked panel's own plain-text
     // reading position back to the top of its chapter for no reason a
-    // reader asked for.
-    if (panelState.linkGroupId != null && !panelState.activeStudyTool && !isSuppressingGroupScrollSync(id)) {
+    // reader asked for. Same for a panel the group's hide-linked-panels
+    // toggle is hiding or bringing back (see isLinkedPanelLeftOut): its text
+    // reflows as its width shrinks or grows, and the scrolling that causes
+    // isn't the reader's either -- passed on, it dragged every other panel
+    // several verses away from where they were being read.
+    if (
+      panelState.linkGroupId != null
+      && !panelState.activeStudyTool
+      && !isSuppressingGroupScrollSync(id)
+      && !isLinkedPanelLeftOut(panelState)
+    ) {
       syncGroupScroll(panelState, content.scrollTop);
     }
   });
@@ -8756,15 +8765,23 @@ const linkVisibilityAnimationTokens = new Map();
 // under the show they just asked for.
 const linkVisibilityTargetHidden = new Map();
 
-// Whether panelState is hidden by its group's hide-linked-panels toggle --
-// already, or on its way there (its collapse animation still running, see
-// animateLinkedPanelHide). Read from the same target state as above rather
-// than panel.hidden, which only flips once that animation ends, so what a
-// linked group measures (see equalizeGroupRowHeights) already treats the
-// panel as gone from the moment the toggle is pressed.
-function isLinkedPanelHidden(panelState) {
+// Whether panelState is out of its link group's picture for now: hidden by
+// the group's hide-linked-panels toggle -- already, or on its way there (its
+// collapse animation still running, see animateLinkedPanelHide) -- or being
+// brought back and still growing out of nothing (see animateLinkedPanelShow),
+// its text squeezed into a sliver. Read from the same target state as above
+// rather than panel.hidden, which only flips once a collapse ends, and from
+// the transition class for the growing one, so the group treats the panel as
+// gone from the moment the toggle is pressed until it is whole again. What the
+// group measures leaves such a panel out (see equalizeGroupRowHeights), and
+// its scrolling -- reflow of that squeezed text, not a reader -- doesn't scroll
+// the others (see the .panel-content scroll listener in createPanelElement).
+function isLinkedPanelLeftOut(panelState) {
+  const panel = panelElements.get(panelState.id)?.panel;
+  if (!panel) return false;
+  if (panel.classList.contains("panel-link-visibility-transition")) return true;
   if (linkVisibilityTargetHidden.has(panelState.id)) return linkVisibilityTargetHidden.get(panelState.id);
-  return Boolean(panelElements.get(panelState.id)?.panel.hidden);
+  return panel.hidden;
 }
 
 function nextLinkVisibilityAnimationToken(panelId) {
@@ -8879,8 +8896,10 @@ function animateLinkedPanelHide(panelState, offsetPx) {
 // flex-basis, which -- because .bible-panel is flex-shrink: 0 -- already
 // equals its true rendered width and, unlike getBoundingClientRect,
 // resolves correctly even while still display: none (see this function's
-// own first steps below).
-function animateLinkedPanelShow(panelState, offsetPx) {
+// own first steps below). alignToPanelId (the panel whose toggle brought this
+// one back) is who the group is put on the scroll position of once the panel
+// is whole again -- see pendingGroupScrollAlignment.
+function animateLinkedPanelShow(panelState, offsetPx, alignToPanelId = null) {
   const elements = panelElements.get(panelState.id);
   if (!elements) return false;
   const panel = elements.panel;
@@ -8926,6 +8945,7 @@ function animateLinkedPanelShow(panelState, offsetPx) {
     // panel's verse rows while it was still mid-grow (nowhere near its
     // real width yet); re-running it now against the fully-revealed
     // panel keeps the group's row heights and scroll anchors correct.
+    if (alignToPanelId != null) pendingGroupScrollAlignment.set(panelState.linkGroupId, alignToPanelId);
     scheduleGroupRowHeightSync(panelState.linkGroupId);
   };
   panel.addEventListener("transitionend", onTransitionEnd);
@@ -8968,6 +8988,12 @@ function applyLinkedPartnersVisibility(groupId, { centerPanelId = null } = {}) {
   const hiding = members.some((panel) => hidingLinkedPartners.has(panel.id));
   const centerIndex = centerPanelId == null ? -1 : state.panels.findIndex((panel) => panel.id === centerPanelId);
   let activeInitiator = null;
+  // A panel brought back on the spot (no animation to wait for), when the
+  // reader's own click did it: the group gets put on that panel's scroll
+  // position once the pass scheduled above has settled (see
+  // pendingGroupScrollAlignment). An animated one asks for the same itself when
+  // it ends (see animateLinkedPanelShow).
+  let shownOnTheSpot = false;
   for (const panel of members) {
     const elements = panelElements.get(panel.id);
     if (!elements) continue;
@@ -8983,10 +9009,14 @@ function applyLinkedPartnersVisibility(groupId, { centerPanelId = null } = {}) {
       const offsetPx = state.panels.indexOf(panel) < centerIndex ? LINK_VISIBILITY_SLIDE_OFFSET : -LINK_VISIBILITY_SLIDE_OFFSET;
       const animated = shouldHide
         ? animateLinkedPanelHide(panel, offsetPx)
-        : animateLinkedPanelShow(panel, offsetPx);
-      if (!animated) elements.panel.hidden = shouldHide;
+        : animateLinkedPanelShow(panel, offsetPx, centerPanelId);
+      if (!animated) {
+        elements.panel.hidden = shouldHide;
+        if (!shouldHide) shownOnTheSpot = true;
+      }
     } else if (stateChanged) {
       elements.panel.hidden = shouldHide;
+      if (!shouldHide) shownOnTheSpot = true;
     }
     const arrows = isInitiator ? LINK_VISIBILITY_ARROWS.hidden : LINK_VISIBILITY_ARROWS.shown;
     elements.linkVisibilityToggle.querySelector(".panel-link-visibility-arrow-left").setAttribute("d", arrows.left);
@@ -8994,6 +9024,7 @@ function applyLinkedPartnersVisibility(groupId, { centerPanelId = null } = {}) {
     elements.linkVisibilityToggle.setAttribute("aria-pressed", String(isInitiator));
     elements.linkVisibilityToggle.setAttribute("aria-label", isInitiator ? "Show linked panels" : "Hide linked panels");
   }
+  if (shownOnTheSpot && centerPanelId != null) pendingGroupScrollAlignment.set(groupId, centerPanelId);
   // The reader's own "active" panel (see setActivePanel) can end up one of
   // the ones just hidden -- global keyboard shortcuts and the like still
   // route through activePanelId regardless, so it's moved to whichever
@@ -9090,18 +9121,21 @@ function endSuppressingGroupScrollSync(id) {
 // whole group.
 //
 // Only the members showing take part. One that a partner's hide-linked-panels
-// toggle has hidden (see isLinkedPanelHidden) isn't on screen to line up with,
+// toggle has hidden (see isLinkedPanelLeftOut) isn't on screen to line up with,
 // and its frozenRowHeights below -- the one thing a hidden member can still
 // add, since its own rows measure 0 -- would keep stretching the rows of the
 // panel left showing to heights only that hidden partner ever needed: blank
-// lines under every verse. The panels showing are matched among themselves,
-// and a lone one left over has nothing to match, so its rows just go back to
-// their own natural height.
+// lines under every verse. One still growing back has its text squeezed into
+// a sliver, so its rows measure absurdly tall for the length of the animation;
+// it joins once it is whole (the pass animateLinkedPanelShow schedules when it
+// ends). The panels showing are matched among themselves, and a lone one left
+// over has nothing to match, so its rows just go back to their own natural
+// height.
 function equalizeGroupRowHeights(groupId) {
   if (groupId == null) return;
   const members = state.panels.filter((panel) => panel.linkGroupId === groupId);
   if (members.length < 2) return;
-  const showing = members.filter((panel) => !isLinkedPanelHidden(panel));
+  const showing = members.filter((panel) => !isLinkedPanelLeftOut(panel));
   const rowSets = [];
   for (const panelState of showing) {
     const elements = panelElements.get(panelState.id);
@@ -9167,7 +9201,7 @@ function equalizeGroupHeaderHeights(groupId) {
   if (groupId == null) return;
   const members = state.panels.filter((panel) => panel.linkGroupId === groupId);
   if (members.length < 2) return;
-  const showing = members.filter((panel) => !isLinkedPanelHidden(panel));
+  const showing = members.filter((panel) => !isLinkedPanelLeftOut(panel));
   const rows = [];
   for (const panelState of showing) {
     const row = panelElements.get(panelState.id)?.panel.querySelector(".panel-translation-controls");
@@ -9250,6 +9284,10 @@ function refinalizeGroupNoteIcons(groupId) {
 // plain async/await, no rAF involved) well before the browser's next
 // paint, so waiting until here to snapshot sees each member's own
 // final, settled state for this navigation.
+//
+// A member that is left out for now (see isLinkedPanelLeftOut) gets no anchor:
+// where it is scrolled means nothing while it is hidden or squeezed to a
+// sliver, and putting it back is what alignGroupScroll is for.
 const pendingGroupRowHeightSync = new Set();
 function scheduleGroupRowHeightSync(groupId) {
   if (groupId == null || pendingGroupRowHeightSync.has(groupId)) return;
@@ -9258,7 +9296,7 @@ function scheduleGroupRowHeightSync(groupId) {
     pendingGroupRowHeightSync.delete(groupId);
     const anchors = [];
     for (const panel of state.panels) {
-      if (panel.linkGroupId !== groupId) continue;
+      if (panel.linkGroupId !== groupId || isLinkedPanelLeftOut(panel)) continue;
       const elements = panelElements.get(panel.id);
       if (!elements) continue;
       anchors.push({ content: elements.content, anchor: captureVerseAnchor(elements.content, panel) });
@@ -9267,7 +9305,38 @@ function scheduleGroupRowHeightSync(groupId) {
     equalizeGroupRowHeights(groupId);
     refinalizeGroupNoteIcons(groupId);
     for (const { content, anchor } of anchors) restoreVerseAnchor(content, anchor);
+    const alignTo = pendingGroupScrollAlignment.get(groupId);
+    if (alignTo != null) {
+      pendingGroupScrollAlignment.delete(groupId);
+      alignGroupScroll(groupId, alignTo);
+    }
   });
+}
+
+// Link group id -> id of the panel whose scroll position the rest of the group
+// is to be put on once the next pass of scheduleGroupRowHeightSync has settled.
+// Set when hidden members are brought back (see applyLinkedPartnersVisibility
+// and animateLinkedPanelShow): a panel that was hidden kept the scrollTop it
+// had, while the group moved on without it (setting a hidden panel's scrollTop
+// does nothing), and nothing else lines it up with the panel the reader is on
+// -- it only ever seemed to, through the scrolling its own reflow caused, which
+// is no longer passed on to the others.
+const pendingGroupScrollAlignment = new Map();
+
+// Puts every showing member of the group on the scroll position of the
+// preferred panel (the one whose toggle was pressed), or of the first showing
+// plain-text member when that one can't be the reference -- a panel showing
+// STR/TSK has nothing to scroll, its scrollTop says nothing about a verse (see
+// the .panel-content scroll listener). Only meaningful once the rows have been
+// matched up (equalizeGroupRowHeights), when the same scrollTop is the same
+// verse in every member.
+function alignGroupScroll(groupId, preferredPanelId) {
+  const candidates = state.panels.filter((panel) => (
+    panel.linkGroupId === groupId && !panel.activeStudyTool && !isLinkedPanelLeftOut(panel)
+  ));
+  const source = candidates.find((panel) => panel.id === preferredPanelId) ?? candidates[0];
+  const content = source ? panelElements.get(source.id)?.content : null;
+  if (content && content.offsetParent !== null) syncGroupScroll(source, content.scrollTop);
 }
 
 function updateLinkModeControls(panelState) {
