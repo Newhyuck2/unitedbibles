@@ -23,7 +23,7 @@
     <meta name="twitter:title" content="United Bibles" />
     <meta name="twitter:description" content="A compact multi-panel Bible reader" />
     <meta name="twitter:image" content="https://unitedbibles.org/icons/icon-512.png" />
-    <meta name="asset-version" content="20261001-33" />
+    <meta name="asset-version" content="20261001-34" />
     <meta name="theme-color" content="#284f43" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" /> 
@@ -32,7 +32,7 @@
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" type="image/png" href="./icons/icon-192.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="./icons/icon-180.png" />
-    <link rel="stylesheet" href="./styles.css?v=20261001-33" />
+    <link rel="stylesheet" href="./styles.css?v=20261001-34" />
     <!-- Applies the saved theme before first paint so a dark-theme visitor
          never sees a light-theme flash while app.js's module script (and
          its manifest.json fetch) is still loading. Reads the same
@@ -507,8 +507,8 @@
 
         <fieldset>
           <legend>Color</legend>
-          <!-- The 7 x 10 highlight palette (HIGHLIGHT_COLOR_PALETTE in app.js:
-               the text-color palette minus its gray row); its 70 cell
+          <!-- The 8 x 10 highlight palette (HIGHLIGHT_PALETTE_COLORS in app.js:
+               the very same cells as the text-color palette); its 80 cell
                buttons are built by app.js. -->
           <div class="highlight-color-grid" id="highlight-color-grid" role="radiogroup" aria-label="Highlight color"></div>
         </fieldset>
@@ -1601,8 +1601,8 @@
       </button>
     </div>
 
-    <!-- The 7 x 10 highlight palette as a floating card (same look as
-         #chip-color-popup); its 70 cell buttons are built by app.js. -->
+    <!-- The 8 x 10 highlight palette as a floating card (same look as
+         #chip-color-popup); its 80 cell buttons are built by app.js. -->
     <div class="chip-color-popup" id="highlight-color-popup" hidden role="radiogroup" aria-label="Highlight color"></div>
 
     <div class="bookmark-manage-popup" id="bookmark-manage-popup" hidden>
@@ -1663,6 +1663,6 @@
     </div>
 
     <noscript>JavaScript is required to display the Bible text.</noscript>
-    <script type="module" src="./app.js?v=20261001-33"></script>
+    <script type="module" src="./app.js?v=20261001-34"></script>
   </body>
 </html>

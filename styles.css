@@ -8156,11 +8156,12 @@ body * {
 
 /* ---- Highlight dialog's color picker, in the exact spot the copy
    dialog's own Order fieldset (verse-by-verse/version-by-version) sits --
-   the highlight palette (HIGHLIGHT_COLOR_PALETTE in app.js: the text-color
-   palette less its gray row) laid out in place rather than as a floating
-   card: 10 columns by 7 rows of the very same circular cells (.chip-color-cell
-   -- see the text-color palette further down), centered, one checked at a time
-   (radiogroup). The check mark is the whole selected look, same as there. ---- */
+   the highlight palette (HIGHLIGHT_PALETTE_COLORS in app.js: the very same
+   cells as the text-color palette) laid out in place rather than as a
+   floating card: 10 columns by 8 rows of the same circular cells
+   (.chip-color-cell -- see the text-color palette further down), centered, one
+   checked at a time (radiogroup). The check mark is the whole selected look,
+   same as there. ---- */
 .highlight-color-grid {
   display: grid;
   grid-template-columns: repeat(10, 22px);
@@ -8499,11 +8500,12 @@ body * {
    reads better on that color (data-check, set when the cells are built);
    there is deliberately no other selected look.
 
-   The highlight palette (the same cells less the gray row, so 7 rows) reuses
+   The highlight palette (the very same 80 cells, the gray row included) reuses
    all of this -- as the same kind of card under the highlight manage popup
    (#highlight-color-popup), and in place in the highlight dialog
-   (.highlight-color-grid above). It has no ring: a highlight has no default
-   color of its own to mark. */
+   (.highlight-color-grid above). It has no ring, and no end of the gray row
+   stands for "no pick": a highlight has no default color of its own to mark,
+   so every cell is just a color. */
 .chip-color-popup {
   position: fixed;
   z-index: 30;

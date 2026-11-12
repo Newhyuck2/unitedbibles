@@ -98,15 +98,12 @@ const HEX_COLOR_PATTERN = /^#[0-9a-f]{6}$/;
 const DARK_TEXT_SURFACE = "#2c2721";
 const DARK_TEXT_MIN_CONTRAST = 4.7;
 
-// A highlight's fill comes from the same palette as a text color (see
-// TEXT_COLOR_PALETTE), less its first row: the black-to-white grays make no
-// sense as a highlighter's ink, so what is left is the colored rows -- the
-// ten bright bases, their three light tints and three dark shades: 7 rows x
-// 10 columns, 70 cells. A highlight is saved as the hex of its cell. There is
-// no "default" cell here (nothing like a translation's accent color to ring):
-// every cell is just a color.
-const HIGHLIGHT_COLOR_PALETTE = TEXT_COLOR_PALETTE.slice(1);
-const HIGHLIGHT_PALETTE_COLORS = HIGHLIGHT_COLOR_PALETTE.flat();
+// A highlight's fill comes from the very same palette as a text color (see
+// TEXT_COLOR_PALETTE): 8 rows x 10 columns, 80 cells, the black-to-white gray
+// row included. A highlight is saved as the hex of its cell. Unlike a text
+// color, no cell stands for "no pick", and none is a translation's own accent
+// color to ring: every cell is just a color.
+const HIGHLIGHT_PALETTE_COLORS = PALETTE_COLORS;
 // The six named colors earlier saves hold (the old picker's pastels: #ffd9d9,
 // #ffebd3, #fff9cf, #dbf2d7, #d9ecfb, #eee2f8), each on the cell of the
 // palette's first light-tint row ("light ... 3") of the same hue -- the nearest
@@ -296,11 +293,10 @@ function chromaticTextColor(color) {
 }
 
 // A saved highlight color as the highlight palette stores it: the lowercase
-// hex of one of its 70 cells. One of the six names an earlier save holds
+// hex of one of its 80 cells. One of the six names an earlier save holds
 // becomes its cell (see LEGACY_HIGHLIGHT_COLORS); a hex that is no cell of the
-// palette (a gray from the text palette, say) moves to the nearest cell, so
-// the grid can always show which color a highlight has. Anything else is
-// dropped, and the highlight with it.
+// palette moves to the nearest cell, so the grid can always show which color a
+// highlight has. Anything else is dropped, and the highlight with it.
 function normalizedHighlightColor(value) {
   if (typeof value !== "string") return null;
   if (Object.hasOwn(LEGACY_HIGHLIGHT_COLORS, value)) return LEGACY_HIGHLIGHT_COLORS[value];
@@ -540,7 +536,7 @@ const highlightTranslationPickerToggle = document.querySelector("#highlight-tran
 const highlightTranslationPickerMenu = document.querySelector("#highlight-translation-picker-menu");
 const highlightStatus = document.querySelector("#highlight-status");
 // The dialog's own color picker: the highlight palette (see
-// HIGHLIGHT_COLOR_PALETTE) laid out right in the dialog -- its cells are built
+// HIGHLIGHT_PALETTE_COLORS) laid out right in the dialog -- its cells are built
 // at startup (see highlightDialogColorCells).
 const highlightColorGrid = document.querySelector("#highlight-color-grid");
 const highlightManagePopup = document.querySelector("#highlight-manage-popup");
@@ -7539,9 +7535,9 @@ function closeCopyDialog() {
 // version picker, showModal/populate/close), minus reading mode (a
 // highlight has no "reading style" to render) and with the copy dialog's
 // own Order fieldset swapped for the highlight palette (see
-// setHighlightColor and #highlight-color-grid in index.html: 7 rows x 10
-// columns of the same circular cells as the text-color palette) instead of
-// verse/version ordering, which has nothing to mean for a highlight. ----
+// setHighlightColor and #highlight-color-grid in index.html: the text-color
+// palette's 8 rows x 10 columns of circular cells) instead of verse/version
+// ordering, which has nothing to mean for a highlight. ----
 function highlightRangeVerseItems() {
   const verses = highlightChapterDataCache?.v.map(([verse]) => Number(verse)) ?? [1];
   return verses.map((verse) => ({ value: verse, label: String(verse) }));
@@ -7947,7 +7943,7 @@ function positionHighlightManagePopup() {
   highlightManagePopup.style.top = `${top}px`;
 }
 
-// The manage popup's palette cells -- the same 70 as the dialog's, in a
+// The manage popup's palette cells -- the same 80 as the dialog's, in a
 // floating card (#highlight-color-popup) that its color circle opens right
 // under the popup; built once at startup.
 const highlightPopupColorCells = HIGHLIGHT_PALETTE_COLORS.map((hex) => {
