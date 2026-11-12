@@ -1,25 +1,33 @@
 const STORAGE_KEY = "side-by-side-bible:v1";
+// Every translation's own accent color -- its chip name, the label above its
+// verse text, its row in the picker menus. Each one is a cell of
+// TEXT_COLOR_PALETTE below, so the text-color grid can ring the cell that is
+// the translation's own (see syncChipModeColorSelection). NIV, ESV, GAE and
+// SAENEW sit on the cells nearest the muted colors they used to have (blue,
+// brown-orange, teal-green, purple); the others were picked to stay apart:
+// no two of these twenty are closer than about 11 in CIEDE2000, and each one
+// still reads on the light page.
 const TRANSLATION_COLORS = {
-  ESV: "#9b5c34",
-  NIV: "#476f9b",
-  KJV: "#79652f",
-  NASB: "#42808a",
-  NRSV: "#8a6d1f",
-  NLT: "#8c4678",
-  GAE: "#2f7663",
-  KRV: "#6b7d3d",
-  SAENEW: "#805692",
-  WLB: "#a24f62",
-  KLB: "#b0632e",
-  EASY: "#3c8c46",
-  CNV: "#5d5fa0",
-  TB: "#c1442d",
-  HEB: "#9c6b1f",
-  GRK: "#4a5aa8",
-  LXX: "#6b8e4e",
-  STR: "#96591f",
-  TSK: "#5a6b8a",
-  NOTE: "#3d7a7a",
+  ESV: "#b45f06",
+  NIV: "#3c78d8",
+  KJV: "#274e13",
+  NASB: "#9900ff",
+  NRSV: "#85200c",
+  NLT: "#a64d79",
+  GAE: "#45818e",
+  KRV: "#7f6000",
+  SAENEW: "#674ea7",
+  WLB: "#741b47",
+  KLB: "#cc0000",
+  EASY: "#38761d",
+  CNV: "#073763",
+  TB: "#783f04",
+  HEB: "#ff0000",
+  GRK: "#1155cc",
+  LXX: "#0000ff",
+  STR: "#e06666",
+  TSK: "#8e7cc3",
+  NOTE: "#c27ba0",
 };
 // The six options in the highlight dialog's own color picker (see
 // #highlight-color-group in index.html, whose swatches paint these same
@@ -58,25 +66,28 @@ const TEXT_STYLE_FIELDS = {
 };
 
 // The text-color picker's palette -- the grid the chip mode popup's color
-// circle opens (#chip-color-popup): 7 rows x 10 columns, one swatch per
-// cell. Row 1 is the black-to-white gray ramp. Row 2 holds the ten base
-// colors; its blue, orange, teal and purple columns are NIV/ESV/GAE/SAENEW's
-// own hues, darkened until each reads at about 7:1 on the page background.
-// Rows 3-6 are four lighter steps of every base (lightest first) and row 7
-// one darker step. Every step keeps its column's hue and chroma and changes
-// only lightness, spaced so that no two cells of the grid (the gray row's own
-// last two steps aside) sit closer than about 9 in CIEDE2000. Seven rows is
-// the most that holds: an eighth makes the lightest tints and the darkest
-// shades of neighbouring hues converge (closest pair 7.7).
+// circle opens (#chip-color-popup), the same standard palette Google Docs,
+// Sheets and Slides use: 10 columns x 8 rows, one swatch per cell, hex values
+// as those apps define them. Row 1 is the black-to-white gray ramp. Row 2 holds
+// the ten bright base colors (red berry, red, orange, yellow, green, cyan,
+// cornflower blue, blue, purple, magenta), rows 3-5 their light 3/2/1 tints
+// and rows 6-8 their dark 1/2/3 shades. Every translation's own accent color
+// (TRANSLATION_COLORS) is one of these cells.
 const TEXT_COLOR_PALETTE = [
-  ["#000000", "#1e1e1e", "#353535", "#4e4e4e", "#696969", "#858585", "#a2a2a2", "#c0c0c0", "#dfdfdf", "#ffffff"],
-  ["#834143", "#85481f", "#6a5608", "#44622a", "#186351", "#006372", "#335a85", "#525089", "#714782", "#7c4161"],
-  ["#ffc7c7", "#ffcbad", "#ecd691", "#c1e5a7", "#a2e9d2", "#98e6f7", "#bbdbff", "#d2d3ff", "#eec7ff", "#ffc3e1"],
-  ["#e59a9a", "#e49f76", "#c5b06c", "#9cbe82", "#7cc2ac", "#71bfcf", "#8ab5e5", "#a9aaea", "#cb9dde", "#dd99bc"],
-  ["#c47b7c", "#c28058", "#a6914d", "#7d9e64", "#5da28e", "#519faf", "#6c96c4", "#8b8bc9", "#ab7ebd", "#bc7b9c"],
-  ["#a35e5f", "#a2623a", "#87732e", "#608047", "#3e8370", "#308190", "#4f77a4", "#6e6da8", "#8c619e", "#9c5e7e"],
-  ["#5e2024", "#5a2800", "#453600", "#254105", "#004335", "#00404a", "#123961", "#332f65", "#4c235c", "#582140"],
+  ["#000000", "#434343", "#666666", "#999999", "#b7b7b7", "#cccccc", "#d9d9d9", "#efefef", "#f3f3f3", "#ffffff"],
+  ["#980000", "#ff0000", "#ff9900", "#ffff00", "#00ff00", "#00ffff", "#4a86e8", "#0000ff", "#9900ff", "#ff00ff"],
+  ["#e6b8af", "#f4cccc", "#fce5cd", "#fff2cc", "#d9ead3", "#d0e0e3", "#c9daf8", "#cfe2f3", "#d9d2e9", "#ead1dc"],
+  ["#dd7e6b", "#ea9999", "#f9cb9c", "#ffe599", "#b6d7a8", "#a2c4c9", "#a4c2f4", "#9fc5e8", "#b4a7d6", "#d5a6bd"],
+  ["#cc4125", "#e06666", "#f6b26b", "#ffd966", "#93c47d", "#76a5af", "#6d9eeb", "#6fa8dc", "#8e7cc3", "#c27ba0"],
+  ["#a61c00", "#cc0000", "#e69138", "#f1c232", "#6aa84f", "#45818e", "#3c78d8", "#3d85c6", "#674ea7", "#a64d79"],
+  ["#85200c", "#990000", "#b45f06", "#bf9000", "#38761d", "#134f5c", "#1155cc", "#0b5394", "#351c75", "#741b47"],
+  ["#5b0f00", "#660000", "#783f04", "#7f6000", "#274e13", "#0c343d", "#1c4587", "#073763", "#20124d", "#4c1130"],
 ];
+const PALETTE_COLORS = TEXT_COLOR_PALETTE.flat();
+// Row 1 -- black, the grays and white -- is the palette's colorless row: a
+// pick from it recolors the text only, while a pick from any other row also
+// recolors the translation's name label (see chromaticTextColor).
+const NEUTRAL_TEXT_COLORS = new Set(TEXT_COLOR_PALETTE[0]);
 // Row 1, column 1. Never stored: picking it removes the translation's entry
 // (see setTranslationTextColor), so its text goes back to the theme's own ink
 // -- dark on the light theme, near-white on the dark one -- rather than a
@@ -162,11 +173,13 @@ const darkThemeTextColors = new Map();
 
 // What a picked text color paints as in the dark theme: itself if it already
 // reads against the dark page, otherwise the same hue and chroma lifted just
-// far enough in lightness to reach DARK_TEXT_MIN_CONTRAST. So a dark pick (row
-// 2 or 7, the dark grays) stays a color of its own family instead of
-// disappearing into the page. The light theme paints a pick exactly as
+// far enough in lightness to reach DARK_TEXT_MIN_CONTRAST. So a dark pick (one
+// of the dark shades or dark grays) stays a color of its own family instead
+// of disappearing into the page. The light theme paints a pick exactly as
 // chosen, and so does the fill under a highlighted verse (always a light
-// pastel -- see .translation-text-highlight).
+// pastel -- see .translation-text-highlight). A translation's accent color
+// (TRANSLATION_COLORS) is lifted the same way for the dark theme -- see
+// TRANSLATION_COLORS_DARK.
 function darkThemeTextColor(hex) {
   let lifted = darkThemeTextColors.get(hex);
   if (lifted) return lifted;
@@ -203,12 +216,15 @@ function nearestPaletteColor(hex, candidates) {
   return nearest;
 }
 
-// A saved text-color pick as the palette stores it: a lowercase hex color,
-// never the default black (that is the absence of an entry). A save from
-// before the palette existed holds "own" (the translation's own color) or
-// "gray" instead; each becomes the palette cell nearest to what it used to
-// paint -- a colored cell for "own" (rows 2-7), a gray for "gray" -- so
-// existing picks keep their look. Anything else is dropped.
+// A saved text-color pick as the palette stores it: the lowercase hex of one
+// of its cells, never the default black (that is the absence of an entry). A
+// save from before the palette existed holds "own" (the translation's own
+// color) or "gray" instead; each becomes the palette cell nearest to what it
+// used to paint -- a colored cell for "own" (rows 2-8, which is the
+// translation's own accent cell), a gray for "gray" -- so existing picks keep
+// their look. A hex that is no cell of this palette (a pick saved while an
+// earlier palette was in use) moves to the nearest cell, so the grid can always
+// show which color is applied. Anything else is dropped.
 function normalizedTextColor(id, color) {
   if (color === "own") {
     return TRANSLATION_COLORS[id] ? nearestPaletteColor(TRANSLATION_COLORS[id], TEXT_COLOR_PALETTE.slice(1).flat()) : null;
@@ -216,7 +232,19 @@ function normalizedTextColor(id, color) {
   if (color === "gray") return nearestPaletteColor(LEGACY_GRAY_TEXT_COLOR, TEXT_COLOR_PALETTE[0].slice(1));
   if (typeof color !== "string") return null;
   const hex = color.toLowerCase();
-  return HEX_COLOR_PATTERN.test(hex) && hex !== DEFAULT_TEXT_COLOR ? hex : null;
+  if (!HEX_COLOR_PATTERN.test(hex)) return null;
+  const cell = PALETTE_COLORS.includes(hex) ? hex : nearestPaletteColor(hex, PALETTE_COLORS);
+  return cell === DEFAULT_TEXT_COLOR ? null : cell;
+}
+
+// The part of a text-color pick that carries over to the translation's name
+// label (the "NIV" above its verse text): a pick from any colored cell --
+// everything but the colorless first row of black, grays and white -- repaints
+// the label too, while the default black and that row's grays and white leave
+// it in the translation's own accent color. Returns the pick when it carries
+// over, null when it doesn't.
+function chromaticTextColor(color) {
+  return typeof color === "string" && HEX_COLOR_PATTERN.test(color) && !NEUTRAL_TEXT_COLORS.has(color) ? color : null;
 }
 
 // Hebrew/Greek interlinear "translations" are synthetic: they are not part of
@@ -291,6 +319,21 @@ function blendTranslationColors(whiteRatio) {
 }
 // Dimmed chip text: paler than full strength but still legible on white.
 const DIM_TRANSLATION_COLORS = blendTranslationColors(0.55);
+// What each accent color paints as in the dark theme: itself where it already
+// reads against the dark page, otherwise lifted in lightness only as far as
+// it takes (see darkThemeTextColor) -- so a dark shade like KJV's keeps its hue
+// instead of vanishing into the charcoal panel.
+const TRANSLATION_COLORS_DARK = Object.fromEntries(
+  Object.entries(TRANSLATION_COLORS).map(([id, hex]) => [id, darkThemeTextColor(hex)]),
+);
+
+// Gives an element a translation's accent color for the stylesheet to paint
+// its name with (--translation-color, and --translation-color-dark under the
+// dark theme -- see .translation-label and the other name rules in styles.css).
+function setTranslationColor(element, id) {
+  element.style.setProperty("--translation-color", TRANSLATION_COLORS[id]);
+  element.style.setProperty("--translation-color-dark", TRANSLATION_COLORS_DARK[id]);
+}
 const ASSET_VERSION = document.querySelector('meta[name="asset-version"]').content;
 const MOBILE_LAYOUT_QUERY = "(max-width: 820px), (max-width: 1366px) and (any-pointer: coarse)";
 const mobileLayout = window.matchMedia(MOBILE_LAYOUT_QUERY);
@@ -1049,9 +1092,10 @@ function updateReadingModeControls(panelState) {
     elements.readingTranslationName.textContent = translation ? translationMeta(translation).label : "";
     elements.readingTranslationName.lang = lang;
     if (translation) {
-      elements.readingTranslationName.style.setProperty("--translation-color", TRANSLATION_COLORS[translation]);
+      setTranslationColor(elements.readingTranslationName, translation);
     } else {
       elements.readingTranslationName.style.removeProperty("--translation-color");
+      elements.readingTranslationName.style.removeProperty("--translation-color-dark");
     }
     elements.readingBookPrev.disabled = panelState.book <= 0;
     elements.readingBookNext.disabled = panelState.book >= manifest.books.length - 1;
@@ -1845,9 +1889,10 @@ function setTranslationTextColor(panelState, id, color) {
 }
 
 // Puts a text-color pick on one rendered line (a panel's .translation-line or
-// a dialog's .search-match-line): `className` is the pick modifier styles.css
-// reads --pick-color/--pick-color-dark under -- the pick as chosen for the
-// light theme, and the lift of it the dark theme paints instead (see
+// a dialog's .search-match-line) -- or on a line's name label, which gets only
+// the picks chromaticTextColor lets through: `className` is the pick modifier
+// styles.css reads --pick-color/--pick-color-dark under -- the pick as chosen
+// for the light theme, and the lift of it the dark theme paints instead (see
 // darkThemeTextColor). No pick (the default black) clears all three, which
 // matters for a line restyled in place (see restyleTranslationMatchLines).
 function applyTextColorPick(line, className, color) {
@@ -1937,7 +1982,7 @@ function appendTranslationMatchLines(body, texts, order, style) {
     const row = document.createElement("div");
     row.className = "search-match-line";
     row.dataset.translation = translation;
-    row.style.setProperty("--translation-color", TRANSLATION_COLORS[translation]);
+    setTranslationColor(row, translation);
     const label = document.createElement("span");
     label.className = "search-match-label";
     label.lang = translationLanguage(translation);
@@ -1959,6 +2004,11 @@ function applyTranslationMatchLineStyle(row, style) {
   row.classList.toggle("search-match-line--italic", style.italicTranslations.includes(translation));
   row.classList.toggle("search-match-line--underline", style.underlineTranslations.includes(translation));
   applyTextColorPick(row, "search-match-line--color-pick", style.translationTextColors[translation]);
+  // The name label follows a colored pick too (see chromaticTextColor).
+  const label = row.querySelector(".search-match-label");
+  if (label) {
+    applyTextColorPick(label, "search-match-label--pick", chromaticTextColor(style.translationTextColors[translation]));
+  }
 }
 
 function restyleTranslationMatchLines(container, style) {
@@ -2157,7 +2207,7 @@ function renderTranslationChipList({ list, order, getEmphasis, onToggleActive, o
     name.className = "translation-name";
     name.lang = translationLanguage(id);
     name.textContent = meta.label;
-    name.style.setProperty("--translation-color", TRANSLATION_COLORS[id]);
+    setTranslationColor(name, id);
 
     // Every chip type has something to do on a plain body click: a real
     // translation toggles hidden/shown (or, while a study tool is showing,
@@ -2489,7 +2539,7 @@ function buildTranslationPickerOption({ id, meta, isEnabled, disabled, onPick })
   label.className = "picker-label";
   label.lang = translationLanguage(id);
   label.textContent = meta.label;
-  label.style.setProperty("--translation-color", TRANSLATION_COLORS[id]);
+  setTranslationColor(label, id);
   const name = document.createElement("span");
   name.className = "picker-name";
   name.textContent = meta.name;
@@ -5722,10 +5772,14 @@ function buildTranslationLinesInto(pane, panelState, verseNumber, texts, list, b
     // translation showing unless the reader explicitly turned it off.
     line.classList.toggle("translation-line--name-hidden", !panelState.translationNamesShown);
     line.lang = translationLanguage(translation);
-    line.style.setProperty("--translation-color", TRANSLATION_COLORS[translation]);
+    setTranslationColor(line, translation);
     const label = document.createElement("span");
     label.className = "translation-label";
     label.textContent = translationMeta(translation).label;
+    // A text color picked from a colored cell repaints the name label too (see
+    // chromaticTextColor); the default and the grays leave it in the
+    // translation's own accent color.
+    applyTextColorPick(label, "translation-label--pick", chromaticTextColor(textColors[translation]));
     line.append(label);
     if (isOriginalLanguage) {
       if (tokens?.length) {
@@ -5804,7 +5858,7 @@ function buildNoteTranslationLinesInto(pane, panelState, verseNumber) {
   line.className = "translation-line translation-line--note";
   line.classList.toggle("translation-line--name-hidden", !panelState.translationNamesShown);
   line.lang = translationLanguage("NOTE");
-  line.style.setProperty("--translation-color", TRANSLATION_COLORS.NOTE);
+  setTranslationColor(line, "NOTE");
   const label = document.createElement("span");
   label.className = "translation-label";
   label.textContent = translationMeta("NOTE").label;
@@ -6096,7 +6150,7 @@ function createEmbeddedTskTool(panelState) {
     const line = document.createElement("div");
     line.className = "translation-line tsk-verse-line";
     line.lang = translationLanguage("KJV");
-    line.style.setProperty("--translation-color", TRANSLATION_COLORS.KJV);
+    setTranslationColor(line, "KJV");
     const label = document.createElement("span");
     label.className = "translation-label";
     label.textContent = translationMeta("KJV").label;
@@ -6901,7 +6955,14 @@ function renderPanelBody(panelState) {
         heading.className = "translation-label panel-column-heading";
         heading.lang = translationLanguage(translation);
         heading.textContent = translationMeta(translation).label;
-        heading.style.setProperty("--translation-color", TRANSLATION_COLORS[translation]);
+        setTranslationColor(heading, translation);
+        // Follows the translation's text color pick exactly as the inline
+        // label it stands in for does (see buildTranslationLinesInto).
+        applyTextColorPick(
+          heading,
+          "translation-label--pick",
+          chromaticTextColor(panelState.translationTextColors[translation]),
+        );
         return heading;
       }),
     );
@@ -7906,7 +7967,8 @@ function setChipColorGridOpen(open) {
 
 // One button per palette cell, built once (the grid is a shared singleton
 // like the popup). A cell is a circle painted in its own color; the check
-// mark on the selected one is drawn in whichever of white or dark ink reads
+// mark on the applied one, and the ring on the one that is the translation's
+// own accent color, are both drawn in whichever of white or dark ink reads
 // better on that color (data-check -- see .chip-color-cell in styles.css).
 for (const row of TEXT_COLOR_PALETTE) {
   for (const hex of row) {
@@ -7915,9 +7977,10 @@ for (const row of TEXT_COLOR_PALETTE) {
     cell.className = "chip-color-cell";
     cell.dataset.color = hex;
     cell.dataset.check = contrastRatio(hex, "#ffffff") >= contrastRatio(hex, "#25231f") ? "light" : "dark";
+    cell.dataset.name = hex === DEFAULT_TEXT_COLOR ? "Black (default)" : hex;
     cell.setAttribute("role", "menuitemradio");
     cell.setAttribute("aria-checked", "false");
-    cell.setAttribute("aria-label", hex === DEFAULT_TEXT_COLOR ? "Black (default)" : hex);
+    cell.setAttribute("aria-label", cell.dataset.name);
     const swatch = document.createElement("span");
     swatch.className = "chip-color-swatch";
     swatch.style.backgroundColor = hex;
@@ -7943,8 +8006,10 @@ function syncChipModeStyleSelection(panelState, id) {
 // translation's pick -- lifted for the dark theme the same way its text is --
 // or left to the theme's own ink while none is picked) and the palette's
 // check mark on the cell holding that color (none when a saved color isn't one
-// of the palette's cells). Kept right even while the grid is shut, since the
-// circle is always showing.
+// of the palette's cells). Separately from the pick, the cell that is the
+// translation's own accent color always carries a ring (.theme), whether or
+// not it is the one applied. Kept right even while the grid is shut, since
+// the circle is always showing.
 function syncChipModeColorSelection(panelState, id) {
   const saved = panelState.translationTextColors[id];
   const color = typeof saved === "string" && HEX_COLOR_PATTERN.test(saved) ? saved : DEFAULT_TEXT_COLOR;
@@ -7955,10 +8020,17 @@ function syncChipModeColorSelection(panelState, id) {
     chipModePopup.style.setProperty("--chip-mode-color", color);
     chipModePopup.style.setProperty("--chip-mode-color-dark", darkThemeTextColor(color));
   }
+  const themeColor = TRANSLATION_COLORS[id];
   for (const cell of chipColorCells) {
     const selected = cell.dataset.color === color;
+    const isTheme = cell.dataset.color === themeColor;
     cell.classList.toggle("selected", selected);
+    cell.classList.toggle("theme", isTheme);
     cell.setAttribute("aria-checked", String(selected));
+    cell.setAttribute(
+      "aria-label",
+      isTheme ? `${cell.dataset.name}, ${translationMeta(id)?.label ?? id} color` : cell.dataset.name,
+    );
   }
 }
 
@@ -10638,7 +10710,7 @@ function wordMorphologyDisplay(word) {
 function buildConcordanceMatchLine(translation, langCode, text, phrases, exact) {
   const row = document.createElement("div");
   row.className = "search-match-line";
-  row.style.setProperty("--translation-color", TRANSLATION_COLORS[translation]);
+  setTranslationColor(row, translation);
   const label = document.createElement("span");
   label.className = "search-match-label";
   label.lang = langCode;
@@ -10667,7 +10739,7 @@ function buildConcordanceOriginalLine(lang, forms) {
   if (!forms.length) return null;
   const row = document.createElement("div");
   row.className = "search-match-line search-match-line-original";
-  row.style.setProperty("--translation-color", TRANSLATION_COLORS[lang === "he" ? "HEB" : "GRK"]);
+  setTranslationColor(row, lang === "he" ? "HEB" : "GRK");
   const label = document.createElement("span");
   label.className = "search-match-label";
   label.lang = lang;
@@ -11111,7 +11183,7 @@ function renderTskVerseText() {
   const line = document.createElement("div");
   line.className = "translation-line tsk-verse-line";
   line.lang = translationLanguage("KJV");
-  line.style.setProperty("--translation-color", TRANSLATION_COLORS.KJV);
+  setTranslationColor(line, "KJV");
   const label = document.createElement("span");
   label.className = "translation-label";
   label.textContent = translationMeta("KJV").label;
@@ -11562,7 +11634,7 @@ function buildHighlightResultRow(group, chaptersByKey) {
     const hasContent = hasVerseText(text);
     const row = document.createElement("div");
     row.className = "search-match-line";
-    row.style.setProperty("--translation-color", TRANSLATION_COLORS[entry.translation]);
+    setTranslationColor(row, entry.translation);
     const label = document.createElement("span");
     label.className = "search-match-label";
     label.lang = translationLanguage(entry.translation);
@@ -12032,7 +12104,7 @@ function renderSearchResults(query, matches, bookCounts, totalTranslationMatches
     for (const line of result.lines) {
       const row = document.createElement("div");
       row.className = "search-match-line";
-      row.style.setProperty("--translation-color", TRANSLATION_COLORS[line.translation]);
+      setTranslationColor(row, line.translation);
       const label = document.createElement("span");
       label.className = "search-match-label";
       label.lang = translationLanguage(line.translation);

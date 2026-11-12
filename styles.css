@@ -690,9 +690,20 @@ p {
   color: var(--translation-color);
 }
 
-/* Same brightening as .translation-label (see its own dark-theme rule) --
-   the chip's own name text is the same too-dark-on-dark-bg color. */
+/* Each translation's accent color (TRANSLATION_COLORS in app.js, one cell of
+   the text-color palette) is chosen to read on the light page; several are
+   too dark against the dark theme's charcoal panel. So under the dark theme
+   every rule that paints a translation's name -- this one, .translation-label,
+   .search-match-label, .picker-label -- uses --translation-color-dark instead
+   (setTranslationColor in app.js sets both): the same hue, lifted in
+   lightness only as far as the dark page needs. */
 [data-theme="dark"] .translation-name {
+  color: var(--translation-color-dark, var(--translation-color));
+}
+
+/* A hidden chip's own paler color (--translation-color-dim, further down)
+   keeps the brightening it was tuned with. */
+[data-theme="dark"] .translation-chip.chip-dimmed .translation-name {
   filter: brightness(1.5) saturate(1.08);
 }
 
@@ -1115,14 +1126,11 @@ input:focus {
   letter-spacing: 0.06em;
 }
 
-/* Each translation's own accent color (TRANSLATION_COLORS in app.js) is
-   tuned for the light --surface background; several read too dark against
-   the dark theme's charcoal panel. Brightening via filter (rather than a
-   second dark color table) keeps every translation's hue but lifts them
-   all to the same legible range, and covers both this label's text and
-   its ::before dot (currentColor) in one rule. */
+/* Dark-theme counterpart of the accent color above (see the note on
+   .translation-name's own dark-theme rule); the ::before dot follows it
+   through currentColor. */
 [data-theme="dark"] .translation-label {
-  filter: brightness(1.5) saturate(1.08);
+  color: var(--translation-color-dark, var(--translation-color));
 }
 
 .translation-label::before {
@@ -1645,6 +1653,10 @@ input:focus {
      .translation-label. */
   margin-top: 3px;
   white-space: nowrap;
+}
+
+[data-theme="dark"] .search-match-label {
+  color: var(--translation-color-dark, var(--translation-color));
 }
 
 /* Search results (the only place <mark> is used -- see appendHighlighted
@@ -7061,6 +7073,10 @@ body * {
   white-space: nowrap;
 }
 
+[data-theme="dark"] .translation-picker-option .picker-label {
+  color: var(--translation-color-dark, var(--translation-color));
+}
+
 .translation-picker-option .picker-name {
   flex: 1 1 auto;
   min-width: 0;
@@ -7710,6 +7726,22 @@ body * {
 [data-theme="dark"] .translation-line--color-pick .translation-text,
 [data-theme="dark"] .translation-line--color-pick .interlinear-original,
 [data-theme="dark"] .search-match-line--color-pick .search-match-text {
+  color: var(--pick-color-dark);
+}
+
+/* The translation's name label (the "NIV" above its verse text, a columns
+   layout's heading, a result line's label) takes the pick too, but only a
+   pick from a colored cell -- black, the grays and white leave the label in
+   the translation's own accent color (see chromaticTextColor in app.js,
+   which is what adds this class). Same light/dark pair as the text; the
+   doubled class keeps these ahead of the accent-color rules above. */
+.translation-label.translation-label--pick,
+.search-match-label.search-match-label--pick {
+  color: var(--pick-color);
+}
+
+[data-theme="dark"] .translation-label.translation-label--pick,
+[data-theme="dark"] .search-match-label.search-match-label--pick {
   color: var(--pick-color-dark);
 }
 
@@ -8443,18 +8475,22 @@ body * {
 
 /* The text-color palette (TEXT_COLOR_PALETTE in app.js): a second floating
    card right under .chip-mode-popup, on the same chrome and z-index, with
-   one circular cell per color -- 10 columns by 7 rows, the first (black)
-   cell standing for "no color picked" (see DEFAULT_TEXT_COLOR). The applied
-   color's cell carries a check mark, drawn in whichever of white or dark ink
-   reads better on it (data-check, set when the cells are built); there is
-   deliberately no other selected look. */
+   one circular cell per color -- 10 columns by 8 rows, the first (black)
+   cell standing for "no color picked" (see DEFAULT_TEXT_COLOR). The circles
+   are packed close: each 20px swatch sits in a 22px cell with no gap between
+   cells, so neighbouring circles are 2px apart both across and down. The
+   applied color's cell carries a check mark and the cell that is the
+   translation's own accent color (.theme -- see syncChipModeColorSelection)
+   a ring just inside its edge, both drawn in whichever of white or dark ink
+   reads better on that color (data-check, set when the cells are built);
+   there is deliberately no other selected look. */
 .chip-color-popup {
   position: fixed;
   z-index: 30;
   display: grid;
-  grid-template-columns: repeat(10, 24px);
-  gap: 2px;
-  padding: 5px;
+  grid-template-columns: repeat(10, 22px);
+  gap: 0;
+  padding: 4px;
   border: 1px solid var(--line-strong);
   border-radius: 8px;
   background: var(--surface-strong);
@@ -8464,8 +8500,8 @@ body * {
 .chip-color-cell {
   display: grid;
   place-items: center;
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
   padding: 0;
   border: 0;
   border-radius: 50%;
@@ -8477,6 +8513,7 @@ body * {
 }
 
 .chip-color-swatch {
+  position: relative;
   width: 20px;
   height: 20px;
   border-radius: 50%;
@@ -8484,6 +8521,18 @@ body * {
   background-position: center;
   background-repeat: no-repeat;
   background-size: 12px 12px;
+}
+
+.chip-color-cell.theme .chip-color-swatch::after {
+  position: absolute;
+  inset: 1.5px;
+  border: 1.5px solid #fff;
+  border-radius: 50%;
+  content: "";
+}
+
+.chip-color-cell.theme[data-check="dark"] .chip-color-swatch::after {
+  border-color: #25231f;
 }
 
 [data-theme="dark"] .chip-color-swatch {
