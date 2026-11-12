@@ -6175,21 +6175,7 @@ function createEmbeddedTskTool(panelState) {
   const renderVerseText = () => {
     verseText.replaceChildren();
     const verseEntry = viewState.data?.v.find(([v]) => v === viewState.verse);
-    const texts = verseEntry ? verseEntry[1] : {};
-    const rawText = texts.KJV;
-    const line = document.createElement("div");
-    line.className = "translation-line tsk-verse-line";
-    line.lang = translationLanguage("KJV");
-    setTranslationColor(line, "KJV");
-    const label = document.createElement("span");
-    label.className = "translation-label";
-    label.textContent = translationMeta("KJV").label;
-    const text = document.createElement("p");
-    text.className = "translation-text";
-    if (rawText && viewState.anchors.length) appendWithAnchors(text, rawText, viewState.anchors);
-    else text.textContent = rawText || "";
-    line.append(label, text);
-    verseText.append(line);
+    appendTskVerseLines(verseText, verseEntry ? verseEntry[1] : {}, viewState.anchors);
   };
 
   function buildResultRow(bookId, chapter, verse, chaptersByKey, translationOrder) {
@@ -6781,6 +6767,10 @@ function createEmbeddedStrongsTool(panelState) {
   shell.append(fieldsSlot, body);
 
   let currentWord = null;
+  // Whether this pane's Strong's fields are folded away (see
+  // buildStrongsFieldsToggle) -- held here, outside the fields every lookup
+  // rebuilds, so it carries over to the next word looked up in this pane.
+  const details = { collapsed: false };
 
   const goToCode = (code) => {
     showEntry({ strongs: code, original: code, lang: code.startsWith("H") ? "he" : "grc" });
@@ -6798,7 +6788,7 @@ function createEmbeddedStrongsTool(panelState) {
     body.replaceChildren();
     if (!isClassicalStrongsCode(word.strongs)) {
       biblehubLink.hidden = true;
-      showNoStrongsNumberEntry(fieldsSlot, word, biblehubLink);
+      showNoStrongsNumberEntry(fieldsSlot, word, biblehubLink, details);
       return;
     }
     showLookupEmpty(fieldsSlot, "Loading…");
@@ -6815,14 +6805,14 @@ function createEmbeddedStrongsTool(panelState) {
     const fields = document.createElement("div");
     fields.className = "word-dictionary-fields";
     if (entry) {
-      appendOriginalWordField(fields, entry.lemma, biblehubLink, { lang: word.lang });
+      appendOriginalWordField(fields, entry.lemma, biblehubLink, { lang: word.lang, details });
       appendLookupField(fields, "Transliteration", entry.translit);
       appendLookupField(fields, "KJV", entry.kjv);
       appendStrongsLinkedField(fields, "Word Origin", entry.derivation, word.lang, goToCode);
       appendStrongsLinkedField(fields, "Definition", entry.def, word.lang, goToCode);
       appendLookupField(fields, "Morphology", wordMorphologyDisplay(word));
     } else if (word.gloss || word.transliteration) {
-      appendOriginalWordField(fields, word.original, biblehubLink, { lang: word.lang });
+      appendOriginalWordField(fields, word.original, biblehubLink, { lang: word.lang, details });
       appendLookupField(fields, "Transliteration", word.transliteration);
       appendLookupField(fields, "In This Verse", word.gloss);
       appendLookupField(fields, "Morphology", wordMorphologyDisplay(word));
@@ -9402,14 +9392,14 @@ function appendLookupField(container, label, value, { lang } = {}) {
 // and its parsing -- no dictionary fields, and (the caller returns before
 // renderConcordanceSection) no concordance either. A bare code typed or
 // linked with no word behind it just says so.
-function showNoStrongsNumberEntry(container, word, biblehubLink) {
+function showNoStrongsNumberEntry(container, word, biblehubLink, details) {
   if (!word.gloss && !word.transliteration) {
     showLookupEmpty(container, "No Strong's number for this word.");
     return;
   }
   const fields = document.createElement("div");
   fields.className = "word-dictionary-fields";
-  appendOriginalWordField(fields, word.original, biblehubLink, { lang: word.lang });
+  appendOriginalWordField(fields, word.original, biblehubLink, { lang: word.lang, details });
   appendLookupField(fields, "Transliteration", word.transliteration);
   appendLookupField(fields, "In This Verse", word.gloss);
   appendLookupField(fields, "Morphology", wordMorphologyDisplay(word));
@@ -9420,7 +9410,10 @@ function showNoStrongsNumberEntry(container, word, biblehubLink) {
   container.replaceChildren(fields);
 }
 
-function appendOriginalWordField(container, value, biblehubLink, { lang } = {}) {
+// `details` ({ collapsed }, one object per view that keeps the choice -- the
+// dialog's own, or one per panel's STR pane) adds the fold toggle right of
+// Bible Hub, in the same trailing group (see buildStrongsFieldsToggle).
+function appendOriginalWordField(container, value, biblehubLink, { lang, details } = {}) {
   if (!value) return;
   const block = document.createElement("div");
   block.className = "lookup-entry lookup-original-word-entry";
@@ -9433,9 +9426,50 @@ function appendOriginalWordField(container, value, biblehubLink, { lang } = {}) 
   valueEl.className = "lookup-value";
   if (lang) valueEl.lang = lang;
   valueEl.textContent = value;
-  valueRow.append(valueEl, biblehubLink);
+  const tools = document.createElement("div");
+  tools.className = "lookup-original-word-tools";
+  tools.append(biblehubLink);
+  if (details) tools.append(buildStrongsFieldsToggle(container, details));
+  valueRow.append(valueEl, tools);
   block.append(labelEl, valueRow);
   container.append(block);
+}
+
+// The two states of the fold toggle: while the Strong's fields are showing
+// the chevron points up (pressing it folds them away), and once they are
+// folded it points down (pressing it brings them back).
+const STRONGS_FIELDS_TOGGLE_ICONS = {
+  expanded: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 15 6-6 6 6"></path></svg>',
+  collapsed: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>',
+};
+
+// A long Strong's entry (a many-line Definition, say) leaves the Englishman's
+// Concordance below it little room, so the Original Word row carries a
+// chevron button, right of Bible Hub, that folds every field under it away
+// (and the concordance moves up into the room) -- the row itself stays, so
+// the button is still there to bring them back. `fields` is the
+// .word-dictionary-fields container the Original Word row sits in;
+// `details.collapsed` is where the view remembers the choice, so the next
+// word looked up in the same view (which builds a fresh container) comes up
+// folded or open the same way.
+function buildStrongsFieldsToggle(fields, details) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "dialog-history-arrow lookup-fields-toggle";
+  const sync = () => {
+    fields.classList.toggle("word-dictionary-fields--collapsed", details.collapsed);
+    const label = details.collapsed ? "Show Strong's details" : "Hide Strong's details";
+    button.setAttribute("aria-label", label);
+    button.setAttribute("aria-expanded", String(!details.collapsed));
+    button.title = label;
+    button.innerHTML = STRONGS_FIELDS_TOGGLE_ICONS[details.collapsed ? "collapsed" : "expanded"];
+  };
+  button.addEventListener("click", () => {
+    details.collapsed = !details.collapsed;
+    sync();
+  });
+  sync();
+  return button;
 }
 
 // Matches Strong's codes as they appear in derivation text (e.g. "G1615",
@@ -9982,6 +10016,12 @@ strongsNavNext.addEventListener("click", () => {
   if (word) renderStrongsDialog(word, activeOrFirstPanel(), { record: false });
 });
 
+// Whether the dialog's Strong's fields are folded away (see
+// buildStrongsFieldsToggle) -- kept here, outside the content that every
+// lookup rebuilds, so it holds across words and across the dialog closing and
+// opening again. Each panel's own STR pane keeps one of its own instead.
+const strongsDialogDetails = { collapsed: false };
+
 async function renderStrongsDialog(word, panelState, { record = true } = {}) {
   if (record) recordStrongsHistory(word);
   strongsDialogTitle.textContent = "Strong's Concordance";
@@ -9989,7 +10029,7 @@ async function renderStrongsDialog(word, panelState, { record = true } = {}) {
   if (!isClassicalStrongsCode(word.strongs)) {
     strongsBiblehubLink.hidden = true;
     setStrongsEnglishCommitted("");
-    showNoStrongsNumberEntry(strongsDialogBody, word, strongsBiblehubLink);
+    showNoStrongsNumberEntry(strongsDialogBody, word, strongsBiblehubLink, strongsDialogDetails);
     return;
   }
   showLookupEmpty(strongsDialogBody, "Loading…");
@@ -10019,7 +10059,7 @@ async function renderStrongsDialog(word, panelState, { record = true } = {}) {
   const fields = document.createElement("div");
   fields.className = "word-dictionary-fields";
   if (entry) {
-    appendOriginalWordField(fields, entry.lemma, strongsBiblehubLink, { lang: word.lang });
+    appendOriginalWordField(fields, entry.lemma, strongsBiblehubLink, { lang: word.lang, details: strongsDialogDetails });
     appendLookupField(fields, "Transliteration", entry.translit);
     appendLookupField(fields, "KJV", entry.kjv);
     appendStrongsLinkedField(fields, "Word Origin", entry.derivation, word.lang);
@@ -10033,7 +10073,7 @@ async function renderStrongsDialog(word, panelState, { record = true } = {}) {
     // to what the interlinear tagging itself already gave us for this
     // word (see the token tuple in renderPanelBody/buildInterlinearWordRow)
     // instead of leaving the dialog looking empty.
-    appendOriginalWordField(fields, word.original, strongsBiblehubLink, { lang: word.lang });
+    appendOriginalWordField(fields, word.original, strongsBiblehubLink, { lang: word.lang, details: strongsDialogDetails });
     appendLookupField(fields, "Transliteration", word.transliteration);
     appendLookupField(fields, "In This Verse", word.gloss);
     appendLookupField(fields, "Morphology", wordMorphologyDisplay(word));
@@ -10081,17 +10121,18 @@ function closeStrongsDialog() {
   strongsDialog.close();
 }
 
-// Builds the Englishman's Concordance section: a title row (modal only --
-// see renderConcordanceResults), and the results under it. side is only
-// ever passed by an embedded caller (see createEmbeddedStrongsTool), so it
-// doubles here as the signal for which of the two layouts to build. Every
-// occurrence of this Strong's number always shows, regardless of the
-// grammatical form of the word that was actually clicked -- there used to
-// be a Morphology toggle here to narrow that down, but "does this verse use
-// the same root word" is what this list is for, not "does it use the exact
-// same inflected form."
+// Builds the Englishman's Concordance section: just the results (a book nav
+// and the verse list), with no heading of its own -- the dialog used to put a
+// bold "Englishman's Concordance" title above them, which the panel's
+// embedded STR pane never had, and which only took up room the results could
+// use. side is only ever passed by an embedded caller (see
+// createEmbeddedStrongsTool), so it doubles here as the signal for which of
+// the two layouts to build. Every occurrence of this Strong's number always
+// shows, regardless of the grammatical form of the word that was actually
+// clicked -- there used to be a Morphology toggle here to narrow that down,
+// but "does this verse use the same root word" is what this list is for, not
+// "does it use the exact same inflected form."
 async function renderConcordanceSection(panelState, word, concordance, container = strongsDialogBody, isStillWanted = () => strongsDialog.open, side) {
-  const embedded = side !== undefined;
   const section = document.createElement("div");
   section.className = "word-concordance";
   container.append(section);
@@ -10101,23 +10142,11 @@ async function renderConcordanceSection(panelState, word, concordance, container
     return;
   }
 
-  let controls = null;
-  if (!embedded) {
-    controls = document.createElement("div");
-    controls.className = "concordance-mode-control";
-    controls.setAttribute("role", "group");
-    controls.setAttribute("aria-label", "Concordance grouping");
-    const title = document.createElement("span");
-    title.className = "concordance-mode-title";
-    title.textContent = "Englishman's Concordance";
-    controls.append(title);
-  }
-
   const resultsContainer = document.createElement("div");
   resultsContainer.className = "concordance-results-slot";
   section.append(resultsContainer);
 
-  await renderConcordanceResults(resultsContainer, concordance.occ, controls, word.lang, isStillWanted, panelState, side, word.strongs);
+  await renderConcordanceResults(resultsContainer, concordance.occ, word.lang, isStillWanted, panelState, side, word.strongs);
 }
 
 // Word-search-style master/detail, grouped by book instead of by anchor
@@ -10129,9 +10158,6 @@ async function renderConcordanceSection(panelState, word, concordance, container
 // modal dialog (the only caller until the embedded study-tool panes below)
 // checks strongsDialog.open; an embedded pane checks container.isConnected
 // instead, since it has no dialog to ask.
-// header is the modal's own .concordance-mode-control row (see
-// renderConcordanceSection) -- null when embedded, which has no controls
-// row of its own to show early (see showHeaderOnly).
 // Scrolls `list` alone to bring one of its own descendants (`target`) to
 // its own top edge -- unlike target.scrollIntoView({block: "start"}), which
 // walks every scrollable ancestor in turn, not just the nearest one. Both
@@ -10155,19 +10181,14 @@ function scrollListItemIntoView(list, target) {
 // Greek/Hebrew text itself, so each result row's own original-language line
 // (see buildConcordanceResultRow) is built separately here from each
 // occurrence's chapter's own interlinear data instead, matched by this code.
-async function renderConcordanceResults(container, occurrences, header, lang, isStillWanted = () => strongsDialog.open, panelState, side, code) {
+async function renderConcordanceResults(container, occurrences, lang, isStillWanted = () => strongsDialog.open, panelState, side, code) {
   const embedded = side !== undefined;
-  const showHeaderOnly = () => {
-    if (header) container.prepend(header);
-  };
   if (!isStillWanted()) return;
   if (!occurrences.length) {
     showLookupEmpty(container, "No occurrences for this form.");
-    showHeaderOnly();
     return;
   }
   showLookupEmpty(container, "Loading…");
-  showHeaderOnly();
 
   const chapterKeys = new Set();
   for (const [bookId, chapter] of occurrences) chapterKeys.add(`${bookId}:${chapter}`);
@@ -10290,7 +10311,7 @@ async function renderConcordanceResults(container, occurrences, header, lang, is
     navRow.append(nav);
     results.append(navRow, list);
   } else {
-    results.append(header, nav, list);
+    results.append(nav, list);
   }
   container.replaceChildren(results);
 }
@@ -10786,7 +10807,15 @@ function buildConcordanceOriginalLine(lang, forms) {
   const textEl = document.createElement("span");
   textEl.lang = lang;
   forms.forEach(({ word, translit }, index) => {
-    if (index > 0) textEl.append(document.createTextNode(" / "));
+    if (index > 0) {
+      // A plain " / " read too small to tell where one word ends and the next
+      // begins -- the slash gets its own span, drawn larger (see
+      // .concordance-original-separator), spaces included so they widen with it.
+      const separator = document.createElement("span");
+      separator.className = "concordance-original-separator";
+      separator.textContent = " / ";
+      textEl.append(separator);
+    }
     const strong = document.createElement("strong");
     strong.className = "concordance-original-word";
     strong.textContent = word;
@@ -11211,30 +11240,44 @@ function appendWithAnchors(element, text, anchors) {
   if (cursor < text.length) element.append(document.createTextNode(text.slice(cursor)));
 }
 
-// The verse text is always plain KJV -- TSK's anchors are themselves KJV
-// words, and this line is independent of the translation icons above, which
-// only control the cross-reference results further down.
+// The verse text up top is always KJV with GAE under it -- TSK's anchors are
+// themselves KJV words, and these lines are independent of the translation
+// icons above, which only control the cross-reference results further down.
 function renderTskVerseText() {
   tskVerseText.replaceChildren();
   const verseEntry = tskViewState.data?.v.find(([verse]) => verse === tskViewState.verse);
-  const texts = verseEntry ? verseEntry[1] : {};
-  const rawText = texts.KJV;
-  const line = document.createElement("div");
-  line.className = "translation-line tsk-verse-line";
-  line.lang = translationLanguage("KJV");
-  setTranslationColor(line, "KJV");
-  const label = document.createElement("span");
-  label.className = "translation-label";
-  label.textContent = translationMeta("KJV").label;
-  const text = document.createElement("p");
-  text.className = "translation-text";
-  if (rawText && tskViewState.anchors.length) {
-    appendWithAnchors(text, rawText, tskViewState.anchors);
-  } else {
-    text.textContent = rawText || "";
+  appendTskVerseLines(tskVerseText, verseEntry ? verseEntry[1] : {}, tskViewState.anchors);
+}
+
+// The two lines at the top of a TSK view (the dialog's own verse text above,
+// and each panel pane's copy of it -- see createEmbeddedTskTool): the verse in
+// KJV, whose words are what TSK's anchors mark, so the anchors are marked
+// here -- and, right below it in the same label-and-text format, in GAE
+// (개역개정), which has no anchors of its own and so shows plain.
+const TSK_VERSE_TRANSLATIONS = ["KJV", "GAE"];
+
+function appendTskVerseLines(container, texts, anchors) {
+  for (const translation of TSK_VERSE_TRANSLATIONS) {
+    // A verse a translation leaves out (GAE stores a literal "(없음)" for
+    // some) is a blank line here, same as it is everywhere else in the app.
+    const rawText = hasVerseText(texts[translation]) ? texts[translation] : "";
+    const line = document.createElement("div");
+    line.className = "translation-line tsk-verse-line";
+    line.lang = translationLanguage(translation);
+    setTranslationColor(line, translation);
+    const label = document.createElement("span");
+    label.className = "translation-label";
+    label.textContent = translationMeta(translation).label;
+    const text = document.createElement("p");
+    text.className = "translation-text";
+    if (translation === "KJV" && rawText && anchors.length) {
+      appendWithAnchors(text, rawText, anchors);
+    } else {
+      text.textContent = rawText || "";
+    }
+    line.append(label, text);
+    container.append(line);
   }
-  line.append(label, text);
-  tskVerseText.append(line);
 }
 
 function buildTskResultRow(bookId, chapter, verse, chaptersByKey) {

@@ -2869,15 +2869,16 @@ mark {
 }
 
 /* The Original Word field's own value cell (see appendOriginalWordField):
-   Bible Hub sits at this row's trailing edge, beside the word itself,
-   instead of the plain .lookup-value paragraph other fields use alone --
-   absolutely positioned (see below) so it never moves the word itself or
-   ties the row's own height to its own fixed 32px. This row's height is
-   always just the word text's own line box, exactly like every other
-   (single-line) field's row, so the *next* field always sits the normal
-   field-to-field gap below this one's own visible text, same as
-   everywhere else. See .lookup-value's own reserved padding-right below,
-   so a long word doesn't run underneath Bible Hub. */
+   Bible Hub (with the fold toggle right of it -- see
+   .lookup-original-word-tools below) sits at this row's trailing edge, beside
+   the word itself, instead of the plain .lookup-value paragraph other fields
+   use alone -- absolutely positioned (see below) so it never moves the word
+   itself or ties the row's own height to its own fixed 32px. This row's
+   height is always just the word text's own line box, exactly like every
+   other (single-line) field's row, so the *next* field always sits the
+   normal field-to-field gap below this one's own visible text, same as
+   everywhere else. See .lookup-value's own reserved padding-right below, so
+   a long word doesn't run underneath Bible Hub. */
 .lookup-original-word-row {
   position: relative;
   display: flex;
@@ -2886,14 +2887,38 @@ mark {
   gap: 10px;
 }
 
-.lookup-original-word-row .biblehub-link {
+/* Bible Hub and, to its right, the fold toggle (see buildStrongsFieldsToggle
+   in app.js) travel as one group at the row's trailing edge -- positioned
+   as a group, for the same reason Bible Hub alone used to be absolute (see
+   the comment above). The toggle's own chrome is .dialog-history-arrow's
+   (32px, same height as Bible Hub). */
+.lookup-original-word-tools {
   position: absolute;
   top: 0;
   right: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
+/* Room for the group above: Bible Hub (about 88px), the 6px gap and the 32px
+   toggle. */
 .lookup-original-word-row .lookup-value {
-  padding-right: 100px;
+  padding-right: 134px;
+}
+
+/* Folded: only the Original Word row stays (it holds the toggle that brings
+   the rest back); every other field -- and the note that can follow them --
+   goes, so the concordance below moves up into the room. The row is held to
+   the toggle's own 32px height meanwhile: the toggle is absolutely
+   positioned, so with the fields gone nothing else would keep the row tall
+   enough to contain it, and it would run into the concordance below. */
+.word-dictionary-fields--collapsed > :not(.lookup-original-word-entry) {
+  display: none;
+}
+
+.word-dictionary-fields--collapsed .lookup-original-word-row {
+  min-height: 32px;
 }
 
 /* .lookup-entry's own align-items: baseline (base rule) works fine for
@@ -3208,7 +3233,11 @@ mark {
   margin-bottom: 14px;
 }
 
-.tsk-verse-line + .tsk-verse-line {
+/* Compound with .translation-line so this keeps the gap between the KJV and
+   개역개정 lines at 6px: the plain .tsk-verse-line + .tsk-verse-line used to
+   sit at the same specificity as .translation-line + .translation-line
+   further down this file, which won by coming later and made it 3px. */
+.translation-line.tsk-verse-line + .tsk-verse-line {
   margin-top: 6px;
 }
 
@@ -3223,6 +3252,19 @@ mark {
 .tsk-verse-line .translation-label {
   margin-top: 4px;
   margin-left: 8px;
+  white-space: nowrap;
+}
+
+/* The two verse lines up top (KJV, then 개역개정 -- see appendTskVerseLines
+   in app.js) share one label column so their texts line up. 개역개정 is four
+   Korean characters, wider than the 42px column .translation-line gives its
+   labels at most sizes: with this line's own 8px left indent above it
+   wrapped onto two lines. 50px fits it on one (nowrap keeps it there on any
+   font) and, in a panel's pane, puts the verse text's left edge right where
+   the cross-reference results' own text starts. The compound selector keeps
+   this ahead of every breakpoint's own .translation-line column width. */
+.translation-line.tsk-verse-line {
+  grid-template-columns: 50px minmax(0, 1fr);
 }
 
 /* TSK anchors and concordance-highlighted words are both KJV words that a
@@ -3250,6 +3292,21 @@ mark {
   font-weight: 400;
 }
 
+/* The " / " between two original forms of one verse ("word (translit) /
+   word (translit)"): drawn larger than the words around it so it reads as a
+   real divider between them. line-height: 0 keeps the bigger glyph from
+   making the line (and so the row) taller than it is without one;
+   white-space: pre keeps the spaces inside it from collapsing at the edges of
+   a wrapped line. */
+.concordance-original-separator {
+  font-size: 1.7em;
+  font-style: normal;
+  font-weight: 400;
+  line-height: 0;
+  white-space: pre;
+  color: var(--ink);
+}
+
 .tsk-anchor-section + .tsk-anchor-section {
   margin-top: 10px;
 }
@@ -3272,37 +3329,28 @@ mark {
   gap: 14px;
 }
 
-/* The Lemma/Morphology toggle row lives inside .concordance-results now
-   (a sibling of the nav and list columns, not a separate row above them in
-   .word-concordance's own grid) so that on mobile it and .concordance-nav
-   share the exact same immediate parent for their sticky positioning --
-   no nested grid/flex boundary between them to risk a mismatched
-   containing block. A flex-wrap + 100%-basis item was tried first for
-   "force this item onto its own row," but .concordance-nav's un-shrinkable
-   (flex-shrink: 0) row of book buttons pushed the whole wrap container's
-   width out to fit it, and the 100% basis then resolved against that
-   blown-out width instead of the dialog's actual size. An explicit grid
-   sidesteps that: every row gets the full 1fr track width on its own, so
-   nav's width demands can never leak into the mode-control row above it. */
+/* The dialog's Englishman's Concordance results are just the book nav and the
+   verse list side by side -- there used to be a title row above them (a bold
+   "Englishman's Concordance" heading), which the panel's embedded STR pane
+   never had and which is gone now, so the nav and list start right at the
+   top of their section. An explicit grid (rather than a flex-wrap) keeps the
+   nav's un-shrinkable (flex-shrink: 0) row of book buttons from pushing the
+   container's width out on mobile: every track gets the full 1fr width on
+   its own. */
 .concordance-results {
   display: grid;
   grid-template-columns: 220px minmax(0, 1fr);
-  grid-template-rows: auto minmax(0, 1fr);
-}
-
-.concordance-results .concordance-mode-control {
-  grid-column: 1 / -1;
-  grid-row: 1;
+  grid-template-rows: minmax(0, 1fr);
 }
 
 .concordance-results .concordance-nav {
   grid-column: 1;
-  grid-row: 2;
+  grid-row: 1;
 }
 
 .concordance-results .concordance-list {
   grid-column: 2;
-  grid-row: 2;
+  grid-row: 1;
 }
 
 /* TSK sits in its own fixed grid row (see .tsk-dialog-shell), so it needs
@@ -3606,9 +3654,8 @@ mark {
   border-radius: 0;
 }
 
-/* Fills the #strongs-dialog-body grid's second (1fr) row, and is itself an
-   auto/1fr grid (mode toggle, then results) for the same reason -- see
-   that rule for why grid rows are used here instead of flex-grow.
+/* Fills the #strongs-dialog-body grid's second (1fr) row -- see that rule
+   for why grid rows are used here instead of flex-grow.
    The 16px gap from the fields above is padding, not margin: height: 100%
    already fills the whole row, so a margin on top of it pushed the box 16px
    past the row's bottom, where #strongs-dialog-body's overflow: hidden cut
@@ -3623,26 +3670,10 @@ mark {
   padding-top: 16px;
 }
 
-.concordance-mode-control {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-bottom: 12px;
-}
-
-/* Matches #strongs-dialog-title's own size (.lookup-header h2) exactly. */
-.concordance-mode-title {
-  margin-right: auto;
-  font-family: Georgia, "Noto Serif KR", serif;
-  font-size: 19px;
-  font-weight: 700;
-  color: var(--ink);
-}
-
-/* Fills .word-concordance's second (1fr) grid row -- this wrapper (not
-   .concordance-results itself, which is re-created on every mode toggle)
-   is the actual grid item, so it's what needs min-height:0 + overflow to
-   stop growing past the track to fit its content instead of respecting it;
+/* Fills .word-concordance's one (1fr) grid row -- this wrapper (not
+   .concordance-results itself, which is re-created on every render) is the
+   actual grid item, so it's what needs min-height:0 + overflow to stop
+   growing past the track to fit its content instead of respecting it;
    .concordance-results's own children already scroll internally. */
 .concordance-results-slot {
   min-height: 0;
@@ -3730,29 +3761,29 @@ mark {
     margin-top: 0;
   }
 
-  /* Word dictionary: the Strong's fields, Morphology toggle, and book-name
-     nav row all stay fixed in place -- matching TSK's own mobile layout
-     just above -- and only .concordance-list scrolls. Dragging the
-     Englishman's Concordance verse list must never drag the dictionary
-     fields above it along with it, so this keeps the base (desktop)
-     fixed-header/scrolling-body grid split instead of collapsing everything
-     into one continuously-scrolling page; only the nav+list stacking
-     (side-by-side on desktop) needs to change to match the nav row's
-     mobile horizontal-strip treatment above. */
+  /* Word dictionary: the Strong's fields and the book-name nav row both
+     stay fixed in place -- matching TSK's own mobile layout just above --
+     and only .concordance-list scrolls. Dragging the Englishman's
+     Concordance verse list must never drag the dictionary fields above it
+     along with it, so this keeps the base (desktop) fixed-header/scrolling-
+     body grid split instead of collapsing everything into one continuously-
+     scrolling page; only the nav+list stacking (side-by-side on desktop)
+     needs to change to match the nav row's mobile horizontal-strip
+     treatment above. */
   .concordance-results {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto auto minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
     gap: 0;
   }
 
   .concordance-results .concordance-nav {
     grid-column: 1;
-    grid-row: 2;
+    grid-row: 1;
   }
 
   .concordance-results .concordance-list {
     grid-column: 1;
-    grid-row: 3;
+    grid-row: 2;
   }
 }
 
