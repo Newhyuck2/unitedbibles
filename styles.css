@@ -3511,6 +3511,14 @@ mark {
   min-width: 0;
   min-height: 0;
   overflow-y: auto;
+  /* These lists' rows fill in with their text as they near the screen (see
+     createLazyRowHydrator in app.js), which makes them taller; when that
+     happens above what is being read, the script moves the scroll position
+     along by exactly the growth. Browsers that do their own scroll anchoring
+     (Chrome) would adjust for it too and double the correction -- the others
+     (Safari) wouldn't at all -- so it is off here, leaving that one place to
+     do it the same way everywhere. */
+  overflow-anchor: none;
 }
 
 /* Info dialog: same word-search-style master/detail layout as the TSK

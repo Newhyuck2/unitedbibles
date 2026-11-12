@@ -5105,10 +5105,16 @@ function chapterPath(bookIndex, chapter) {
   return `./data/chapters/${manifest.books[bookIndex].slug}/${chapter}.json?v=${ASSET_VERSION}`;
 }
 
+// Every data file below is requested at a URL that carries the asset version
+// (?v=), so the browser's own HTTP cache is safe to use for them: a file that
+// changes ships with a new version and so a new URL. They used to be fetched
+// with cache: "no-store", which made every lookup download its files again --
+// including anything that had already fallen out of the small in-memory
+// caches below -- and left no repeat visit anything to reuse.
 async function getChapter(bookIndex, chapter) {
   const key = `${bookIndex}:${chapter}`;
   if (chapterCache.has(key)) return chapterCache.get(key);
-  const response = await fetch(chapterPath(bookIndex, chapter), { cache: "no-store" });
+  const response = await fetch(chapterPath(bookIndex, chapter));
   if (!response.ok) throw new Error(`Could not load this chapter (${response.status})`);
   const data = await response.json();
   chapterCache.set(key, data);
@@ -5141,7 +5147,7 @@ function interlinearPath(bookIndex, chapter, langId) {
 async function getInterlinearChapter(bookIndex, chapter, langId = originalLanguageForTestament(testamentForBook(bookIndex))) {
   const key = `${langId}:${bookIndex}:${chapter}`;
   if (interlinearCache.has(key)) return interlinearCache.get(key);
-  const response = await fetch(interlinearPath(bookIndex, chapter, langId), { cache: "no-store" });
+  const response = await fetch(interlinearPath(bookIndex, chapter, langId));
   const data = response.ok ? await response.json() : { v: [] };
   interlinearCache.set(key, data);
   if (interlinearCache.size > 40) interlinearCache.delete(interlinearCache.keys().next().value);
@@ -5207,11 +5213,7 @@ function interlinearTokensForVerse(panelState, verseNumber, translationId) {
 // decide their own per-call fallback on rejection (see e.g. renderStrongsDialog).
 function getStrongsData() {
   if (!strongsDataPromise) {
-    strongsDataPromise = fetch(`./data/strongs.json?v=${ASSET_VERSION}`, { cache: "no-store" })
-      .then((response) => {
-        if (!response.ok) throw new Error(`Could not load Strong's data (${response.status})`);
-        return response.json();
-      })
+    strongsDataPromise = fetchJsonPersisted(`./data/strongs.json?v=${ASSET_VERSION}`)
       .catch((error) => {
         strongsDataPromise = null;
         throw error;
@@ -5220,12 +5222,52 @@ function getStrongsData() {
   return strongsDataPromise;
 }
 
+// The Strong's dictionary is 3 MB (about 0.9 MB on the wire) and every lookup
+// needs it, so it is also kept in Cache Storage under the current asset
+// version: a later visit reads it from disk instead of downloading it again,
+// and a new asset version starts a fresh cache and drops the old ones. Where
+// Cache Storage isn't available (or fails) this is a plain fetch.
+const DATA_CACHE_PREFIX = "data-v:";
+let dataCachePruned = false;
+
+async function fetchJsonPersisted(url) {
+  const cacheName = `${DATA_CACHE_PREFIX}${ASSET_VERSION}`;
+  let cache = null;
+  try {
+    if (typeof caches !== "undefined") {
+      cache = await caches.open(cacheName);
+      if (!dataCachePruned) {
+        dataCachePruned = true;
+        caches.keys()
+          .then((names) => Promise.all(names
+            .filter((name) => name.startsWith(DATA_CACHE_PREFIX) && name !== cacheName)
+            .map((name) => caches.delete(name))))
+          .catch(() => {});
+      }
+    }
+  } catch {
+    cache = null;
+  }
+  if (cache) {
+    try {
+      const hit = await cache.match(url);
+      if (hit) return await hit.json();
+    } catch {
+      // An unreadable entry just means going to the network below.
+    }
+  }
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`Could not load ${url} (${response.status})`);
+  if (cache) cache.put(url, response.clone()).catch(() => {});
+  return response.json();
+}
+
 // The Englishman's Concordance is exported one file per Strong's code (see
 // scripts/export_englishmans.py), fetched lazily on first lookup.
 async function getEnglishmansEntry(code) {
   if (!isClassicalStrongsCode(code)) return null;
   if (englishmansCache.has(code)) return englishmansCache.get(code);
-  const response = await fetch(`./data/englishmans/${code}.json?v=${ASSET_VERSION}`, { cache: "no-store" });
+  const response = await fetch(`./data/englishmans/${code}.json?v=${ASSET_VERSION}`);
   const data = response.ok ? await response.json() : null;
   englishmansCache.set(code, data);
   return data;
@@ -5240,7 +5282,7 @@ function tskPath(bookIndex, chapter) {
 async function getTskChapter(bookIndex, chapter) {
   const key = `${bookIndex}:${chapter}`;
   if (tskCache.has(key)) return tskCache.get(key);
-  const response = await fetch(tskPath(bookIndex, chapter), { cache: "no-store" });
+  const response = await fetch(tskPath(bookIndex, chapter));
   const data = response.ok ? await response.json() : { v: [] };
   tskCache.set(key, data);
   if (tskCache.size > 40) tskCache.delete(tskCache.keys().next().value);
@@ -6285,12 +6327,12 @@ function buildEmbeddedTskLinkButton(panelState, bookId, chapter, verse) {
   button.type = "button";
   button.className = "button button-secondary icon-only-button search-result-action";
   button.setAttribute("aria-label", `Cross references for ${book.en} ${chapter}:${verse}`);
-  button.innerHTML = `
+  setRowIconButtonContent(button, `
     <svg viewBox="0 0 24 24" aria-hidden="true">
       <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
       <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
     </svg>
-  `;
+  `);
   button.addEventListener("click", (event) => {
     event.stopPropagation();
     showTskInSameColumn(panelState, bookId, chapter, verse);
@@ -6342,7 +6384,9 @@ function createEmbeddedTskTool(panelState) {
     appendTskVerseLines(verseText, verseEntry ? verseEntry[1] : {}, viewState.anchors);
   };
 
-  function buildResultRow(bookId, chapter, verse, chaptersByKey, translationOrder) {
+  // Returns { item, fill }, like buildTskResultRow: the row is built bare and
+  // fill(chapterData) draws its verse text once the chapter has loaded.
+  function buildResultRow(bookId, chapter, verse, translationOrder) {
     const book = manifest.books[bookId];
     const item = document.createElement("article");
     item.className = "search-result";
@@ -6362,19 +6406,20 @@ function createEmbeddedTskTool(panelState) {
     rowBody.className = "search-result-body";
     content.append(rowBody);
 
-    const chapterData = chaptersByKey.get(`${bookId}:${chapter}`);
-    const verseEntry = chapterData?.v.find(([v]) => v === verse);
-    const texts = verseEntry ? verseEntry[1] : {};
-    // This panel's own bold/italic/underline/text-color/hidden picks, read
-    // live -- the "..." popup's picks already refresh this pane (see
-    // applyChipModeChange's refreshTskCrossColumnTranslations call).
-    appendTranslationMatchLines(rowBody, texts, translationOrder, {
-      boldTranslations: panelState.boldTranslations,
-      italicTranslations: panelState.italicTranslations,
-      underlineTranslations: panelState.underlineTranslations,
-      translationTextColors: panelState.translationTextColors,
-      dimmedTranslations: panelHiddenTranslations(panelState),
-    });
+    const fill = (chapterData) => {
+      const verseEntry = chapterData?.v.find(([v]) => v === verse);
+      const texts = verseEntry ? verseEntry[1] : {};
+      // This panel's own bold/italic/underline/text-color/hidden picks, read
+      // live -- the "..." popup's picks already refresh this pane (see
+      // applyChipModeChange's refreshTskCrossColumnTranslations call).
+      appendTranslationMatchLines(rowBody, texts, translationOrder, {
+        boldTranslations: panelState.boldTranslations,
+        italicTranslations: panelState.italicTranslations,
+        underlineTranslations: panelState.underlineTranslations,
+        translationTextColors: panelState.translationTextColors,
+        dimmedTranslations: panelHiddenTranslations(panelState),
+      });
+    };
 
     const actions = document.createElement("div");
     actions.className = "search-result-actions";
@@ -6382,7 +6427,7 @@ function createEmbeddedTskTool(panelState) {
     viewButton.type = "button";
     viewButton.className = "button button-primary icon-only-button search-result-action";
     viewButton.setAttribute("aria-label", `View ${book.en} ${chapter}:${verse}`);
-    viewButton.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"></path><path d="m13 6 6 6-6 6"></path></svg>`;
+    setRowIconButtonContent(viewButton, `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"></path><path d="m13 6 6 6-6 6"></path></svg>`);
     // Matches the standalone TSK/concordance dialogs' own move icon exactly
     // (see openTskResult/openConcordanceResult) -- this used to jump this
     // panel (and, if linked, every partner sharing its verse) straight to
@@ -6398,7 +6443,7 @@ function createEmbeddedTskTool(panelState) {
     copyButton.type = "button";
     copyButton.className = "button button-secondary icon-only-button search-result-action";
     copyButton.setAttribute("aria-label", `Copy ${book.en} ${chapter}:${verse}`);
-    copyButton.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="11" height="11" rx="2"></rect><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"></path></svg>`;
+    setRowIconButtonContent(copyButton, `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="11" height="11" rx="2"></rect><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"></path></svg>`);
     copyButton.addEventListener("click", async (event) => {
       event.stopPropagation();
       // Read live, like the lines above: this pane's versions are the
@@ -6409,7 +6454,7 @@ function createEmbeddedTskTool(panelState) {
     linkButton.type = "button";
     linkButton.className = "button button-secondary icon-only-button search-result-action";
     linkButton.setAttribute("aria-label", `Cross references for ${book.en} ${chapter}:${verse}`);
-    linkButton.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>`;
+    setRowIconButtonContent(linkButton, `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>`);
     linkButton.addEventListener("click", async (event) => {
       event.stopPropagation();
       // Drilling into a different reference's own cross references moves
@@ -6423,30 +6468,22 @@ function createEmbeddedTskTool(panelState) {
     reference.append(actions);
 
     item.append(content);
-    return item;
+    return { item, fill };
   }
 
+  // The list currently in this pane, if any: its hydrator is stopped when the
+  // list is rebuilt (another verse, a different set of versions).
+  let listHydrator = null;
+
   async function renderReferenceList() {
+    listHydrator?.dispose();
+    listHydrator = null;
     const anchors = viewState.anchors;
     if (!anchors.length) {
       showLookupEmpty(body, "No cross references found.");
       return;
     }
-    showLookupEmpty(body, "Loading…");
-    const chapterKeys = new Set();
-    for (const [, refs] of anchors) {
-      for (const [bookId, chapter] of refs) chapterKeys.add(`${bookId}:${chapter}`);
-    }
-    const chapterSettled = await Promise.allSettled(
-      [...chapterKeys].map(async (key) => {
-        const [bookId, chapter] = key.split(":").map(Number);
-        return [key, await getChapter(bookId, chapter)];
-      }),
-    );
     if (!element.isConnected) return;
-    const chaptersByKey = new Map(
-      chapterSettled.filter((result) => result.status === "fulfilled").map((result) => result.value),
-    );
     // Read once per render pass so every row this pass shows the same
     // version set, rather than re-reading (and risking a mid-render
     // change) once per row.
@@ -6460,6 +6497,14 @@ function createEmbeddedTskTool(panelState) {
     navRow.append(nav);
     const list = document.createElement("div");
     list.className = "tsk-anchor-list";
+    // The rows are built bare and each fills in as it nears the screen (see
+    // createLazyRowHydrator and renderTskReferenceList).
+    const hydrator = createLazyRowHydrator({
+      root: list,
+      isStillWanted: () => element.isConnected && list.isConnected,
+      load: loadChapterForRow,
+    });
+    listHydrator = hydrator;
     anchors.forEach(([anchor, refs], index) => {
       const anchorId = `embedded-tsk-anchor-${panelState.id}-${index}`;
       const navButton = document.createElement("button");
@@ -6485,7 +6530,9 @@ function createEmbeddedTskTool(panelState) {
       heading.textContent = anchor;
       section.append(heading);
       for (const [refBook, refChapter, refVerse] of refs) {
-        section.append(buildResultRow(refBook, refChapter, refVerse, chaptersByKey, translationOrder));
+        const row = buildResultRow(refBook, refChapter, refVerse, translationOrder);
+        hydrator.register(row.item, `${refBook}:${refChapter}`, row.fill);
+        section.append(row.item);
       }
       list.append(section);
     });
@@ -10399,8 +10446,210 @@ async function renderConcordanceSection(panelState, word, concordance, container
 // which share this exact same nested-scroll-container shape.
 function scrollListItemIntoView(list, target) {
   if (!target) return;
+  // Rows that fill in while the list is still gliding to its target would
+  // change the height of everything between here and there and leave it
+  // landing short; a list with lazily filled rows (createLazyRowHydrator) is
+  // told to wait until the glide has settled.
+  lazyRowHydrators.get(list)?.hold();
   const delta = target.getBoundingClientRect().top - list.getBoundingClientRect().top;
   list.scrollTo({ top: list.scrollTop + delta, behavior: "smooth" });
+}
+
+// A concordance or TSK list can touch hundreds of chapters, and a row's text
+// comes out of its chapter's own file (every version of that whole chapter --
+// and, for the concordance, the chapter's interlinear file too). Fetching all
+// of them before showing anything made a common word's list take many seconds
+// and well over a thousand requests (590 chapters for Elohim). Instead the
+// rows are built at once, bare -- a reference and its buttons -- and each row's
+// text is filled in only once it is within `lookahead` px of the visible part
+// of its scrolling list, a chapter at a time (every row of that chapter at
+// once, then nothing more to keep): the list is there immediately, and what is
+// scrolled to fills in a moment after.
+//
+// - `load(key)` fetches what the rows of one chapter need and resolves to it;
+//   each row's own `fill(data)` (see register) draws that row's text from it.
+// - Newly wanted chapters are served last-in first-out and dropped again if
+//   their rows scroll away before the fetch starts, so a quick scroll doesn't
+//   queue up the whole stretch it passed over. `concurrency` caps how many
+//   chapters are in flight.
+// - The margin is only below the visible part, so the rows being filled are
+//   the ones in view and below it -- except that a chapter fills all its rows
+//   at once, and some of them can be above. What grows above the row being
+//   read would push it down, so fillRows measures that row (the first one in
+//   view by more than a sliver) before and after and moves the scroll position
+//   along by however far it was pushed.
+// - hold() pauses new fetches and fills until the list has stopped scrolling
+//   (see scrollListItemIntoView).
+const lazyRowHydrators = new WeakMap();
+
+function createLazyRowHydrator({ root, load, isStillWanted = () => true, concurrency = 6, lookahead = 800 }) {
+  const rowsByKey = new Map();
+  const rowByElement = new Map();
+  const nearByKey = new Map();
+  const nearElements = new Set();
+  const status = new Map();
+  const waiting = [];
+  let active = 0;
+  let held = false;
+  let releaseTimer = 0;
+  let disposed = false;
+
+  // Rows that show less than this much of themselves above the top edge don't
+  // count as being read: a row grazing the edge by a pixel or two (a scroll
+  // position is whole pixels, so this happens) growing is not what should hold
+  // the scroll still.
+  const SLIVER = 8;
+
+  function fillRows(key, data) {
+    const rows = rowsByKey.get(key);
+    if (!rows) return;
+    const rootTop = root.getBoundingClientRect().top;
+    let anchor = null;
+    let anchorTop = Infinity;
+    for (const element of nearElements) {
+      if (!element.isConnected) continue;
+      const rect = element.getBoundingClientRect();
+      if (rect.bottom > rootTop + SLIVER && rect.top < anchorTop) {
+        anchor = element;
+        anchorTop = rect.top;
+      }
+    }
+    for (const row of rows) row.fill(data);
+    if (anchor) {
+      const shift = anchor.getBoundingClientRect().top - anchorTop;
+      if (Math.abs(shift) >= 0.5) root.scrollTop += shift;
+    }
+  }
+
+  function pump() {
+    while (!held && !disposed && active < concurrency && waiting.length) {
+      const key = waiting.pop();
+      if (status.get(key) !== "waiting") continue;
+      status.set(key, "loading");
+      active += 1;
+      Promise.resolve().then(() => load(key)).then(
+        (data) => finish(key, data),
+        () => finish(key, null),
+      );
+    }
+  }
+
+  function finish(key, data) {
+    active -= 1;
+    status.set(key, "done");
+    if (disposed) return;
+    if (!isStillWanted()) {
+      api.dispose();
+      return;
+    }
+    try {
+      fillRows(key, data);
+    } finally {
+      pump();
+    }
+  }
+
+  function want(key) {
+    if (status.has(key)) return;
+    status.set(key, "waiting");
+    waiting.push(key);
+    pump();
+  }
+
+  function unwant(key) {
+    if (status.get(key) !== "waiting") return;
+    status.delete(key);
+    const index = waiting.lastIndexOf(key);
+    if (index >= 0) waiting.splice(index, 1);
+  }
+
+  function onIntersect(entries) {
+    if (disposed) return;
+    for (const entry of entries) {
+      const row = rowByElement.get(entry.target);
+      if (!row) continue;
+      let near = nearByKey.get(row.key);
+      if (entry.isIntersecting) {
+        if (!near) nearByKey.set(row.key, near = new Set());
+        near.add(entry.target);
+        nearElements.add(entry.target);
+        want(row.key);
+      } else {
+        nearElements.delete(entry.target);
+        if (near) {
+          near.delete(entry.target);
+          if (!near.size) unwant(row.key);
+        }
+      }
+    }
+  }
+
+  const observer = typeof IntersectionObserver === "function"
+    ? new IntersectionObserver(onIntersect, { root, rootMargin: `0px 0px ${lookahead}px 0px` })
+    : null;
+
+  function release() {
+    held = false;
+    clearTimeout(releaseTimer);
+    pump();
+  }
+
+  root.addEventListener("scroll", () => {
+    if (!held) return;
+    clearTimeout(releaseTimer);
+    releaseTimer = setTimeout(release, 140);
+  }, { passive: true });
+
+  const api = {
+    register(element, key, fill) {
+      const row = { element, key, fill };
+      rowByElement.set(element, row);
+      if (!rowsByKey.has(key)) rowsByKey.set(key, []);
+      rowsByKey.get(key).push(row);
+      if (observer) observer.observe(element);
+      else want(key);
+    },
+    hold() {
+      held = true;
+      clearTimeout(releaseTimer);
+      releaseTimer = setTimeout(release, 600);
+    },
+    dispose() {
+      disposed = true;
+      observer?.disconnect();
+      waiting.length = 0;
+      clearTimeout(releaseTimer);
+      rowsByKey.clear();
+      rowByElement.clear();
+      nearByKey.clear();
+      nearElements.clear();
+      if (lazyRowHydrators.get(root) === api) lazyRowHydrators.delete(root);
+    },
+  };
+  lazyRowHydrators.set(root, api);
+  return api;
+}
+
+// What a TSK row needs: its chapter's text (a failed fetch leaves the row
+// without text rather than failing anything else).
+function loadChapterForRow(key) {
+  const [bookId, chapter] = key.split(":").map(Number);
+  return getChapter(bookId, chapter).catch(() => null);
+}
+
+// One <svg> icon button's markup, parsed once and then cloned: a long list
+// builds three of these per row, and parsing the same string thousands of
+// times was a noticeable part of building the list.
+const rowIconTemplates = new Map();
+
+function setRowIconButtonContent(button, html) {
+  let template = rowIconTemplates.get(html);
+  if (!template) {
+    template = document.createElement("template");
+    template.innerHTML = html;
+    rowIconTemplates.set(html, template);
+  }
+  button.append(template.content.cloneNode(true));
 }
 
 // code is the Strong's number being looked up (word.strongs) -- occurrences
@@ -10415,40 +10664,15 @@ async function renderConcordanceResults(container, occurrences, lang, isStillWan
     showLookupEmpty(container, "No occurrences for this form.");
     return;
   }
-  showLookupEmpty(container, "Loading…");
 
-  const chapterKeys = new Set();
-  for (const [bookId, chapter] of occurrences) chapterKeys.add(`${bookId}:${chapter}`);
-  // allSettled rather than all: a common word's concordance can span
-  // hundreds of distinct chapters fetched at once, and any single one
-  // hitting a transient network blip used to sink the whole batch,
-  // leaving this stuck on "Loading…" forever. buildConcordanceResultRow
-  // already handles a missing chaptersByKey/interlinearByKey entry
-  // gracefully (its inline KJV/GAE/original-word preview just doesn't show
-  // for that occurrence), so a failed chapter is simply left out rather
-  // than blocking every other row.
-  const [chapterSettled, interlinearSettled] = await Promise.all([
-    Promise.allSettled(
-      [...chapterKeys].map(async (key) => {
-        const [bookId, chapter] = key.split(":").map(Number);
-        return [key, await getChapter(bookId, chapter)];
-      }),
-    ),
-    Promise.allSettled(
-      [...chapterKeys].map(async (key) => {
-        const [bookId, chapter] = key.split(":").map(Number);
-        return [key, await getInterlinearChapter(bookId, chapter)];
-      }),
-    ),
-  ]);
-  if (!isStillWanted()) return;
-  const chaptersByKey = new Map(
-    chapterSettled.filter((result) => result.status === "fulfilled").map((result) => result.value),
-  );
-  const interlinearByKey = new Map(
-    interlinearSettled.filter((result) => result.status === "fulfilled").map((result) => result.value),
-  );
-
+  // The rows below are built bare and filled in lazily, a chapter at a time as
+  // they near the screen (see createLazyRowHydrator) -- a common word's
+  // concordance spans hundreds of chapters, each needing its text file and its
+  // interlinear file, so fetching them all before showing anything took many
+  // seconds. A chapter whose files fail to load just leaves its rows without
+  // the inline KJV/GAE/original-word preview, as it always did, and never
+  // holds up any other row.
+  //
   // The source dataset's occurrence order isn't chapter/verse order within a
   // book (it's some cross-book concordance ordinal), so sort each group.
   const byBook = new Map();
@@ -10490,6 +10714,24 @@ async function renderConcordanceResults(container, occurrences, lang, isStillWan
   const list = document.createElement("div");
   list.className = "concordance-list";
 
+  // One chapter's text file and its interlinear file, fetched together; either
+  // failing leaves just that half out (the row shows what it did get).
+  const hydrator = createLazyRowHydrator({
+    root: list,
+    isStillWanted: () => isStillWanted() && list.isConnected,
+    load: async (key) => {
+      const [bookId, chapter] = key.split(":").map(Number);
+      const [chapterResult, interlinearResult] = await Promise.allSettled([
+        getChapter(bookId, chapter),
+        getInterlinearChapter(bookId, chapter),
+      ]);
+      return {
+        chapter: chapterResult.status === "fulfilled" ? chapterResult.value : null,
+        interlinear: interlinearResult.status === "fulfilled" ? interlinearResult.value : null,
+      };
+    },
+  });
+
   const total = document.createElement("div");
   total.className = "concordance-nav-total";
   const totalName = document.createElement("span");
@@ -10524,10 +10766,12 @@ async function renderConcordanceResults(container, occurrences, lang, isStillWan
     group.className = "concordance-group";
     group.dataset.groupId = groupId;
     for (const verseGroup of groupByVerse(bookOccurrences)) {
-      group.append(buildConcordanceResultRow(
+      const row = buildConcordanceResultRow(
         verseGroup.bookId, verseGroup.chapter, verseGroup.verse, verseGroup.matches,
-        chaptersByKey, interlinearByKey, lang, panelState, side, code,
-      ));
+        lang, panelState, side, code,
+      );
+      hydrator.register(row.item, `${verseGroup.bookId}:${verseGroup.chapter}`, row.fill);
+      group.append(row.item);
     }
     list.append(group);
   }
@@ -11070,7 +11314,12 @@ function buildConcordanceOriginalLine(lang, forms) {
 // find this verse's own matching interlinear token(s) for the original-
 // language line -- the concordance data has no Greek/Hebrew text of its
 // own, only the KJV/GAE rendering (see export_englishmans.py).
-function buildConcordanceResultRow(bookId, chapter, verse, matches, chaptersByKey, interlinearByKey, lang, panelState, side, code) {
+//
+// Returns { item, fill }: the row is built bare -- its reference and buttons --
+// and fill({ chapter, interlinear }) draws its text (see createLazyRowHydrator
+// and renderConcordanceResults), called once, when this verse's chapter files
+// (either may be null: not loaded) have arrived.
+function buildConcordanceResultRow(bookId, chapter, verse, matches, lang, panelState, side, code) {
   const book = manifest.books[bookId];
   const item = document.createElement("article");
   item.className = "search-result";
@@ -11091,55 +11340,55 @@ function buildConcordanceResultRow(bookId, chapter, verse, matches, chaptersByKe
   body.className = "search-result-body";
   content.append(body);
 
-  // Grammatical form can vary occurrence to occurrence (a verb's tense, a
-  // noun's case, ...) even though every one of them shares this same
-  // Strong's root -- so this matches by code alone, not by exact original
-  // text, and shows each match's own actual form rather than assuming
-  // they're all identical.
-  const interlinearData = interlinearByKey.get(`${bookId}:${chapter}`);
-  const verseTokens = interlinearData?.v.find(([v]) => v === verse)?.[1] ?? [];
-  // Deduped by (word, translit) pair rather than by word alone -- the same
-  // original text can in principle carry more than one pronunciation
-  // reading, and this is meant to mirror the interlinear line's own
-  // per-token pronunciation, not collapse them into one.
-  const seenForms = new Set();
-  const originalForms = [];
-  for (const token of verseTokens) {
-    if (token[3] !== code) continue;
-    const key = `${token[0]}|${token[1]}`;
-    if (seenForms.has(key)) continue;
-    seenForms.add(key);
-    originalForms.push({ word: token[0], translit: token[1] });
-  }
-  const originalLine = buildConcordanceOriginalLine(lang, originalForms);
-  if (originalLine) body.append(originalLine);
+  const fill = ({ chapter: chapterData, interlinear: interlinearData } = {}) => {
+    // Grammatical form can vary occurrence to occurrence (a verb's tense, a
+    // noun's case, ...) even though every one of them shares this same
+    // Strong's root -- so this matches by code alone, not by exact original
+    // text, and shows each match's own actual form rather than assuming
+    // they're all identical.
+    const verseTokens = interlinearData?.v.find(([v]) => v === verse)?.[1] ?? [];
+    // Deduped by (word, translit) pair rather than by word alone -- the same
+    // original text can in principle carry more than one pronunciation
+    // reading, and this is meant to mirror the interlinear line's own
+    // per-token pronunciation, not collapse them into one.
+    const seenForms = new Set();
+    const originalForms = [];
+    for (const token of verseTokens) {
+      if (token[3] !== code) continue;
+      const key = `${token[0]}|${token[1]}`;
+      if (seenForms.has(key)) continue;
+      seenForms.add(key);
+      originalForms.push({ word: token[0], translit: token[1] });
+    }
+    const originalLine = buildConcordanceOriginalLine(lang, originalForms);
+    if (originalLine) body.append(originalLine);
 
-  const chapterData = chaptersByKey.get(`${bookId}:${chapter}`);
-  const verseEntry = chapterData?.v.find(([v]) => v === verse);
-  const texts = verseEntry?.[1];
-  // Each translation's own line only shows up when at least one of this
-  // verse's matches actually has a tagged phrase for it and that verse's
-  // own fetched text is available -- the two data sources (KJV/Strong's-
-  // morphology tagging, GAE's own Godpeople-sourced tagging) don't always
-  // agree on every occurrence, and showing an untagged translation here
-  // would just repeat the verse with nothing highlighted in it.
-  const englishPhrases = [...new Set(matches.map((match) => match.english).filter(Boolean))];
-  const koreanPhrases = [...new Set(matches.map((match) => match.korean).filter(Boolean))];
-  let shown = false;
-  if (englishPhrases.length && texts?.KJV) {
-    body.append(buildConcordanceMatchLine("KJV", "en", texts.KJV, englishPhrases, false));
-    shown = true;
-  }
-  if (koreanPhrases.length && texts?.GAE) {
-    body.append(buildConcordanceMatchLine("GAE", "ko", texts.GAE, koreanPhrases, true));
-    shown = true;
-  }
-  if (!shown && !originalLine) {
-    const empty = document.createElement("p");
-    empty.className = "empty-translation";
-    empty.textContent = "Verse text unavailable.";
-    body.append(empty);
-  }
+    const verseEntry = chapterData?.v.find(([v]) => v === verse);
+    const texts = verseEntry?.[1];
+    // Each translation's own line only shows up when at least one of this
+    // verse's matches actually has a tagged phrase for it and that verse's
+    // own fetched text is available -- the two data sources (KJV/Strong's-
+    // morphology tagging, GAE's own Godpeople-sourced tagging) don't always
+    // agree on every occurrence, and showing an untagged translation here
+    // would just repeat the verse with nothing highlighted in it.
+    const englishPhrases = [...new Set(matches.map((match) => match.english).filter(Boolean))];
+    const koreanPhrases = [...new Set(matches.map((match) => match.korean).filter(Boolean))];
+    let shown = false;
+    if (englishPhrases.length && texts?.KJV) {
+      body.append(buildConcordanceMatchLine("KJV", "en", texts.KJV, englishPhrases, false));
+      shown = true;
+    }
+    if (koreanPhrases.length && texts?.GAE) {
+      body.append(buildConcordanceMatchLine("GAE", "ko", texts.GAE, koreanPhrases, true));
+      shown = true;
+    }
+    if (!shown && !originalLine) {
+      const empty = document.createElement("p");
+      empty.className = "empty-translation";
+      empty.textContent = "Verse text unavailable.";
+      body.append(empty);
+    }
+  };
 
   const actions = document.createElement("div");
   actions.className = "search-result-actions";
@@ -11147,12 +11396,12 @@ function buildConcordanceResultRow(bookId, chapter, verse, matches, chaptersByKe
   viewButton.type = "button";
   viewButton.className = "button button-primary icon-only-button search-result-action";
   viewButton.setAttribute("aria-label", `View ${book.en} ${chapter}:${verse}`);
-  viewButton.innerHTML = `
+  setRowIconButtonContent(viewButton, `
     <svg viewBox="0 0 24 24" aria-hidden="true">
       <path d="M5 12h14"></path>
       <path d="m13 6 6 6-6 6"></path>
     </svg>
-  `;
+  `);
   viewButton.addEventListener("click", (event) => {
     event.stopPropagation();
     // Same move-picking flow either way now -- embedded (side given) used
@@ -11167,12 +11416,12 @@ function buildConcordanceResultRow(bookId, chapter, verse, matches, chaptersByKe
   copyButton.type = "button";
   copyButton.className = "button button-secondary icon-only-button search-result-action";
   copyButton.setAttribute("aria-label", `Copy ${book.en} ${chapter}:${verse}`);
-  copyButton.innerHTML = `
+  setRowIconButtonContent(copyButton, `
     <svg viewBox="0 0 24 24" aria-hidden="true">
       <rect x="8" y="8" width="11" height="11" rx="2"></rect>
       <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"></path>
     </svg>
-  `;
+  `);
   copyButton.addEventListener("click", (event) => {
     event.stopPropagation();
     copyConcordanceResult(bookId, chapter, verse);
@@ -11183,7 +11432,7 @@ function buildConcordanceResultRow(bookId, chapter, verse, matches, chaptersByKe
   reference.append(actions);
 
   item.append(content);
-  return item;
+  return { item, fill };
 }
 
 // Matches openSearchResult exactly: enter move-picking mode for this
@@ -11407,12 +11656,12 @@ function buildTskLinkButton(bookId, chapter, verse) {
   button.type = "button";
   button.className = "button button-secondary icon-only-button search-result-action";
   button.setAttribute("aria-label", `Cross references for ${book.en} ${chapter}:${verse}`);
-  button.innerHTML = `
+  setRowIconButtonContent(button, `
     <svg viewBox="0 0 24 24" aria-hidden="true">
       <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
       <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
     </svg>
-  `;
+  `);
   button.addEventListener("click", (event) => {
     event.stopPropagation();
     openTskFromResult(bookId, chapter, verse);
@@ -11507,7 +11756,11 @@ function appendTskVerseLines(container, texts, anchors) {
   }
 }
 
-function buildTskResultRow(bookId, chapter, verse, chaptersByKey) {
+// Returns { item, fill }: the row is built bare -- its reference and buttons --
+// and fill(chapterData) draws its verse text once that verse's chapter has
+// loaded (null if it failed: the row then shows no text). See
+// createLazyRowHydrator and renderTskReferenceList.
+function buildTskResultRow(bookId, chapter, verse) {
   const book = manifest.books[bookId];
   const item = document.createElement("article");
   item.className = "search-result";
@@ -11527,10 +11780,11 @@ function buildTskResultRow(bookId, chapter, verse, chaptersByKey) {
   body.className = "search-result-body";
   content.append(body);
 
-  const chapterData = chaptersByKey.get(`${bookId}:${chapter}`);
-  const verseEntry = chapterData?.v.find(([v]) => v === verse);
-  const texts = verseEntry ? verseEntry[1] : {};
-  appendTranslationMatchLines(body, texts, tskTranslationOrder, tskTranslationStyle);
+  const fill = (chapterData) => {
+    const verseEntry = chapterData?.v.find(([v]) => v === verse);
+    const texts = verseEntry ? verseEntry[1] : {};
+    appendTranslationMatchLines(body, texts, tskTranslationOrder, tskTranslationStyle);
+  };
 
   const actions = document.createElement("div");
   actions.className = "search-result-actions";
@@ -11538,12 +11792,12 @@ function buildTskResultRow(bookId, chapter, verse, chaptersByKey) {
   viewButton.type = "button";
   viewButton.className = "button button-primary icon-only-button search-result-action";
   viewButton.setAttribute("aria-label", `View ${book.en} ${chapter}:${verse}`);
-  viewButton.innerHTML = `
+  setRowIconButtonContent(viewButton, `
     <svg viewBox="0 0 24 24" aria-hidden="true">
       <path d="M5 12h14"></path>
       <path d="m13 6 6 6-6 6"></path>
     </svg>
-  `;
+  `);
   viewButton.addEventListener("click", (event) => {
     event.stopPropagation();
     openTskResult(bookId, chapter, verse);
@@ -11552,12 +11806,12 @@ function buildTskResultRow(bookId, chapter, verse, chaptersByKey) {
   copyButton.type = "button";
   copyButton.className = "button button-secondary icon-only-button search-result-action";
   copyButton.setAttribute("aria-label", `Copy ${book.en} ${chapter}:${verse}`);
-  copyButton.innerHTML = `
+  setRowIconButtonContent(copyButton, `
     <svg viewBox="0 0 24 24" aria-hidden="true">
       <rect x="8" y="8" width="11" height="11" rx="2"></rect>
       <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"></path>
     </svg>
-  `;
+  `);
   copyButton.addEventListener("click", (event) => {
     event.stopPropagation();
     copyTskResult(bookId, chapter, verse);
@@ -11566,51 +11820,43 @@ function buildTskResultRow(bookId, chapter, verse, chaptersByKey) {
   reference.append(actions);
 
   item.append(content);
-  return item;
+  return { item, fill };
 }
 
+// The list currently in #tsk-dialog-body, if any: its hydrator is stopped when
+// the list is rebuilt (another verse, another version set).
+let tskListHydrator = null;
+
 async function renderTskReferenceList() {
+  tskListHydrator?.dispose();
+  tskListHydrator = null;
   const anchors = tskViewState.anchors;
   if (!anchors.length) {
     showLookupEmpty(tskDialogBody, "No cross references found.");
     return;
   }
-  showLookupEmpty(tskDialogBody, "Loading…");
-
-  // Pre-fetch every distinct chapter these cross-references touch, in
-  // parallel, into a request-scoped map rather than relying on the shared
-  // chapterCache -- a single verse's cross-references can easily span more
-  // chapters than that cache's LRU cap, which would evict early fetches
-  // before this function gets a chance to read them back out. allSettled
-  // rather than all: any single one of those fetches hitting a transient
-  // network blip used to sink the whole batch, leaving this stuck on
-  // "Loading…" forever. buildTskResultRow already handles a missing
-  // chaptersByKey entry gracefully (its verse text just doesn't show for
-  // that reference), so a failed chapter is simply left out.
-  const chapterKeys = new Set();
-  for (const [, refs] of anchors) {
-    for (const [bookId, chapter] of refs) chapterKeys.add(`${bookId}:${chapter}`);
-  }
-  const chapterSettled = await Promise.allSettled(
-    [...chapterKeys].map(async (key) => {
-      const [bookId, chapter] = key.split(":").map(Number);
-      return [key, await getChapter(bookId, chapter)];
-    }),
-  );
-  if (!tskDialog.open) return;
-  const chaptersByKey = new Map(
-    chapterSettled.filter((result) => result.status === "fulfilled").map((result) => result.value),
-  );
 
   // Word-search-style master/detail: the left nav lists each anchored KJV
   // word with its reference count, and clicking one scrolls the matching
   // section (its first reference verse) into view on the right.
+  //
+  // The rows are built bare and each fills in as it nears the screen (see
+  // createLazyRowHydrator): a single verse's cross references can span dozens
+  // of chapters, and fetching every one of them before showing anything made
+  // the list wait on the slowest. A chapter that fails to load just leaves its
+  // rows without verse text, and never holds up the others.
   const results = document.createElement("div");
   results.className = "tsk-results";
   const nav = document.createElement("div");
   nav.className = "tsk-word-nav";
   const list = document.createElement("div");
   list.className = "tsk-anchor-list";
+  const hydrator = createLazyRowHydrator({
+    root: list,
+    isStillWanted: () => tskDialog.open && list.isConnected,
+    load: loadChapterForRow,
+  });
+  tskListHydrator = hydrator;
 
   anchors.forEach(([anchor, refs], index) => {
     const anchorId = `tsk-anchor-${index}`;
@@ -11638,7 +11884,9 @@ async function renderTskReferenceList() {
     heading.textContent = anchor;
     section.append(heading);
     for (const [bookId, chapter, verse] of refs) {
-      section.append(buildTskResultRow(bookId, chapter, verse, chaptersByKey));
+      const row = buildTskResultRow(bookId, chapter, verse);
+      hydrator.register(row.item, `${bookId}:${chapter}`, row.fill);
+      section.append(row.item);
     }
     list.append(section);
   });
@@ -12325,9 +12573,21 @@ searchWorker.addEventListener("message", (event) => {
   }
 });
 
+// A broad word can match thousands of verses (4,317 for 하나님 across four
+// versions), and building a result's row for every one of them at once held
+// the page up for seconds. The first rows are built immediately and the rest
+// as the list is scrolled toward its end; choosing a book from the list on the
+// left builds whatever is needed to reach it first.
+const SEARCH_RESULTS_CHUNK = 60;
+const SEARCH_RESULTS_JUMP_CHUNK = 150;
+// Identifies the results currently on screen, so a chunk or a jump left over
+// from an earlier search never adds rows to a newer one.
+let searchRenderToken = 0;
+
 function renderSearchResults(query, matches, bookCounts, totalTranslationMatches, elapsedMs) {
   searchBookList.replaceChildren();
   searchResults.replaceChildren();
+  const token = ++searchRenderToken;
   const grouped = new Map();
   for (const [translation, book, chapter, verse, text] of matches) {
     const key = `${book}:${chapter}:${verse}`;
@@ -12348,6 +12608,55 @@ function renderSearchResults(query, matches, bookCounts, totalTranslationMatches
     return;
   }
 
+  // The order of each row's version lines is the one in force when the search
+  // was shown, however much later a row ends up being built.
+  const translationOrder = [...searchTranslationOrder];
+  let rendered = 0;
+  const sentinel = document.createElement("div");
+  sentinel.className = "search-results-sentinel";
+  sentinel.setAttribute("aria-hidden", "true");
+  const observer = typeof IntersectionObserver === "function"
+    ? new IntersectionObserver((entries) => {
+      if (token === searchRenderToken && entries.some((entry) => entry.isIntersecting)) {
+        renderThrough(rendered + SEARCH_RESULTS_CHUNK);
+      }
+    }, { root: searchResults, rootMargin: "0px 0px 1500px 0px" })
+    : null;
+
+  // Builds rows [rendered, end) and moves the sentinel -- an empty block the
+  // observer watches -- to the end of what is built.
+  function renderThrough(end) {
+    if (token !== searchRenderToken) return;
+    const limit = observer ? Math.min(groups.length, end) : groups.length;
+    const fragment = document.createDocumentFragment();
+    for (; rendered < limit; rendered += 1) {
+      fragment.append(buildSearchResultItem(groups[rendered], query, translationOrder));
+    }
+    sentinel.remove();
+    searchResults.append(fragment);
+    if (rendered < groups.length) {
+      searchResults.append(sentinel);
+      // Observing it afresh reports where it stands now: it may still be within
+      // reach of the visible part of the list, which would otherwise go unnoticed.
+      observer.unobserve(sentinel);
+      observer.observe(sentinel);
+    } else {
+      observer?.disconnect();
+    }
+  }
+
+  async function renderThroughGroup(index) {
+    while (token === searchRenderToken && rendered <= index) {
+      renderThrough(rendered + SEARCH_RESULTS_JUMP_CHUNK);
+      if (rendered <= index) await new Promise((resolve) => requestAnimationFrame(resolve));
+    }
+  }
+
+  const firstGroupOfBook = new Map();
+  groups.forEach((result, index) => {
+    if (!firstGroupOfBook.has(result.book)) firstGroupOfBook.set(result.book, index);
+  });
+
   const total = document.createElement("div");
   total.className = "search-book-total";
   const totalName = document.createElement("span");
@@ -12366,98 +12675,102 @@ function renderSearchResults(query, matches, bookCounts, totalTranslationMatches
     link.className = "search-book-link";
     link.type = "button";
     link.textContent = `${book.en} ${book.ko} (${count.toLocaleString()})`;
-    link.addEventListener("click", () => {
+    link.addEventListener("click", async () => {
       searchBookList.querySelectorAll(".search-book-link").forEach((item) => {
         item.toggleAttribute("aria-current", item === link);
       });
+      // That book's first result may not be built yet.
+      await renderThroughGroup(firstGroupOfBook.get(bookIndex) ?? 0);
+      if (token !== searchRenderToken) return;
       const target = searchResults.querySelector(`.search-result[data-book="${bookIndex}"]`);
       target?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
     searchBookList.append(link);
   }
 
-  for (const result of groups) {
-    const item = document.createElement("article");
-    item.className = "search-result";
-    item.dataset.book = String(result.book);
-    const content = document.createElement("div");
-    content.className = "search-result-content";
-    const reference = document.createElement("div");
-    reference.className = "search-reference";
-    const referenceTitle = document.createElement("div");
-    referenceTitle.className = "search-reference-title";
-    const referenceText = document.createElement("span");
-    const resultLanguages = new Set(result.lines.map((line) => translationLanguage(line.translation)));
-    const book = manifest.books[result.book];
-    if (resultLanguages.size === 1 && resultLanguages.has("ko")) {
-      referenceText.lang = "ko";
-      referenceText.textContent = `${book.ko} ${result.chapter}:${result.verse}`;
-    } else if (resultLanguages.size === 1 && resultLanguages.has("en")) {
-      referenceText.lang = "en";
-      referenceText.textContent = `${book.en} ${result.chapter}:${result.verse}`;
-    } else {
-      referenceText.textContent = `${book.en} ${book.ko} ${result.chapter}:${result.verse}`;
-    }
-    referenceTitle.append(referenceText);
-    reference.append(referenceTitle);
-    content.append(reference);
+  renderThrough(SEARCH_RESULTS_CHUNK);
+}
 
-    const body = document.createElement("div");
-    body.className = "search-result-body";
-    content.append(body);
+function buildSearchResultItem(result, query, translationOrder) {
+  const item = document.createElement("article");
+  item.className = "search-result";
+  item.dataset.book = String(result.book);
+  const content = document.createElement("div");
+  content.className = "search-result-content";
+  const reference = document.createElement("div");
+  reference.className = "search-reference";
+  const referenceTitle = document.createElement("div");
+  referenceTitle.className = "search-reference-title";
+  const referenceText = document.createElement("span");
+  const resultLanguages = new Set(result.lines.map((line) => translationLanguage(line.translation)));
+  const book = manifest.books[result.book];
+  if (resultLanguages.size === 1 && resultLanguages.has("ko")) {
+    referenceText.lang = "ko";
+    referenceText.textContent = `${book.ko} ${result.chapter}:${result.verse}`;
+  } else if (resultLanguages.size === 1 && resultLanguages.has("en")) {
+    referenceText.lang = "en";
+    referenceText.textContent = `${book.en} ${result.chapter}:${result.verse}`;
+  } else {
+    referenceText.textContent = `${book.en} ${book.ko} ${result.chapter}:${result.verse}`;
+  }
+  referenceTitle.append(referenceText);
+  reference.append(referenceTitle);
+  content.append(reference);
 
-    const translationOrder = searchTranslationOrder;
-    result.lines.sort(
-      (a, b) => translationOrder.indexOf(a.translation) - translationOrder.indexOf(b.translation),
-    );
-    for (const line of result.lines) {
-      const row = document.createElement("div");
-      row.className = "search-match-line";
-      setTranslationColor(row, line.translation);
-      const label = document.createElement("span");
-      label.className = "search-match-label";
-      label.lang = translationLanguage(line.translation);
-      label.textContent = translationMeta(line.translation).label;
-      const text = document.createElement("span");
-      appendHighlighted(text, line.text, query);
-      row.append(label, text);
-      body.append(row);
-    }
-    const actions = document.createElement("div");
-    actions.className = "search-result-actions";
-    const viewButton = document.createElement("button");
-    viewButton.type = "button";
-    viewButton.className = "button button-primary icon-only-button search-result-action";
-    viewButton.setAttribute("aria-label", `View ${searchResultReferenceText(result)}`);
-    viewButton.innerHTML = `
+  const body = document.createElement("div");
+  body.className = "search-result-body";
+  content.append(body);
+
+  result.lines.sort(
+    (a, b) => translationOrder.indexOf(a.translation) - translationOrder.indexOf(b.translation),
+  );
+  for (const line of result.lines) {
+    const row = document.createElement("div");
+    row.className = "search-match-line";
+    setTranslationColor(row, line.translation);
+    const label = document.createElement("span");
+    label.className = "search-match-label";
+    label.lang = translationLanguage(line.translation);
+    label.textContent = translationMeta(line.translation).label;
+    const text = document.createElement("span");
+    appendHighlighted(text, line.text, query);
+    row.append(label, text);
+    body.append(row);
+  }
+  const actions = document.createElement("div");
+  actions.className = "search-result-actions";
+  const viewButton = document.createElement("button");
+  viewButton.type = "button";
+  viewButton.className = "button button-primary icon-only-button search-result-action";
+  viewButton.setAttribute("aria-label", `View ${searchResultReferenceText(result)}`);
+  setRowIconButtonContent(viewButton, `
       <svg viewBox="0 0 24 24" aria-hidden="true">
         <path d="M5 12h14"></path>
         <path d="m13 6 6 6-6 6"></path>
       </svg>
-    `;
-    viewButton.addEventListener("click", (event) => {
-      event.stopPropagation();
-      openSearchResult(result);
-    });
-    const copyButton = document.createElement("button");
-    copyButton.type = "button";
-    copyButton.className = "button button-secondary icon-only-button search-result-action";
-    copyButton.setAttribute("aria-label", `Copy ${searchResultReferenceText(result)}`);
-    copyButton.innerHTML = `
+    `);
+  viewButton.addEventListener("click", (event) => {
+    event.stopPropagation();
+    openSearchResult(result);
+  });
+  const copyButton = document.createElement("button");
+  copyButton.type = "button";
+  copyButton.className = "button button-secondary icon-only-button search-result-action";
+  copyButton.setAttribute("aria-label", `Copy ${searchResultReferenceText(result)}`);
+  setRowIconButtonContent(copyButton, `
       <svg viewBox="0 0 24 24" aria-hidden="true">
         <rect x="8" y="8" width="11" height="11" rx="2"></rect>
         <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"></path>
       </svg>
-    `;
-    copyButton.addEventListener("click", (event) => {
-      event.stopPropagation();
-      copySearchResult(result);
-    });
-    actions.append(viewButton, copyButton, buildTskLinkButton(result.book, result.chapter, result.verse));
-    reference.append(actions);
-    item.append(content);
-    searchResults.append(item);
-  }
+    `);
+  copyButton.addEventListener("click", (event) => {
+    event.stopPropagation();
+    copySearchResult(result);
+  });
+  actions.append(viewButton, copyButton, buildTskLinkButton(result.book, result.chapter, result.verse));
+  reference.append(actions);
+  item.append(content);
+  return item;
 }
 
 // Each space-separated term in `query` (see search-worker.js's matching)
@@ -12528,7 +12841,7 @@ function escapeHtml(value) {
 
 async function init() {
   try {
-    const response = await fetch(`./data/manifest.json?v=${ASSET_VERSION}`, { cache: "no-store" });
+    const response = await fetch(`./data/manifest.json?v=${ASSET_VERSION}`);
     if (!response.ok) throw new Error(`Could not load site data (${response.status})`);
     manifest = await response.json();
     state = loadState();
