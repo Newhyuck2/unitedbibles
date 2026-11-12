@@ -8756,6 +8756,17 @@ const linkVisibilityAnimationTokens = new Map();
 // under the show they just asked for.
 const linkVisibilityTargetHidden = new Map();
 
+// Whether panelState is hidden by its group's hide-linked-panels toggle --
+// already, or on its way there (its collapse animation still running, see
+// animateLinkedPanelHide). Read from the same target state as above rather
+// than panel.hidden, which only flips once that animation ends, so what a
+// linked group measures (see equalizeGroupRowHeights) already treats the
+// panel as gone from the moment the toggle is pressed.
+function isLinkedPanelHidden(panelState) {
+  if (linkVisibilityTargetHidden.has(panelState.id)) return linkVisibilityTargetHidden.get(panelState.id);
+  return Boolean(panelElements.get(panelState.id)?.panel.hidden);
+}
+
 function nextLinkVisibilityAnimationToken(panelId) {
   const token = (linkVisibilityAnimationTokens.get(panelId) ?? 0) + 1;
   linkVisibilityAnimationTokens.set(panelId, token);
@@ -9077,12 +9088,22 @@ function endSuppressingGroupScrollSync(id) {
 // one of them actually needs the most room for it, so cumulative height
 // up to any verse -- and so scroll position -- stays identical across the
 // whole group.
+//
+// Only the members showing take part. One that a partner's hide-linked-panels
+// toggle has hidden (see isLinkedPanelHidden) isn't on screen to line up with,
+// and its frozenRowHeights below -- the one thing a hidden member can still
+// add, since its own rows measure 0 -- would keep stretching the rows of the
+// panel left showing to heights only that hidden partner ever needed: blank
+// lines under every verse. The panels showing are matched among themselves,
+// and a lone one left over has nothing to match, so its rows just go back to
+// their own natural height.
 function equalizeGroupRowHeights(groupId) {
   if (groupId == null) return;
   const members = state.panels.filter((panel) => panel.linkGroupId === groupId);
   if (members.length < 2) return;
+  const showing = members.filter((panel) => !isLinkedPanelHidden(panel));
   const rowSets = [];
-  for (const panelState of members) {
+  for (const panelState of showing) {
     const elements = panelElements.get(panelState.id);
     if (!elements) continue;
     rowSets.push(elements.content.querySelectorAll(".verse-group[data-verse]"));
@@ -9094,6 +9115,7 @@ function equalizeGroupRowHeights(groupId) {
   for (const rows of rowSets) {
     for (const row of rows) row.style.removeProperty("min-height");
   }
+  if (showing.length < 2) return;
   const maxHeightByVerse = new Map();
   for (const rows of rowSets) {
     for (const row of rows) {
@@ -9111,7 +9133,7 @@ function equalizeGroupRowHeights(groupId) {
   // here instead. Without this, the other linked panels' own rows would
   // shrink (and visibly jump/rescroll) the moment this one stopped
   // contributing, even though nothing about their own content changed.
-  for (const panelState of members) {
+  for (const panelState of showing) {
     const frozen = panelState.frozenRowHeights;
     if (!panelState.activeStudyTool || !frozen || frozen.book !== panelState.book || frozen.chapter !== panelState.chapter) {
       continue;
@@ -9139,19 +9161,22 @@ function equalizeGroupRowHeights(groupId) {
 // panel's .panel-content down on screen relative to its siblings, even
 // though scrollTop and each verse row's own height (see
 // equalizeGroupRowHeights) both stay perfectly in sync -- the same verse
-// ends up visibly offset between panels by exactly that difference.
+// ends up visibly offset between panels by exactly that difference. Same
+// membership rule as equalizeGroupRowHeights: only the panels showing.
 function equalizeGroupHeaderHeights(groupId) {
   if (groupId == null) return;
   const members = state.panels.filter((panel) => panel.linkGroupId === groupId);
   if (members.length < 2) return;
+  const showing = members.filter((panel) => !isLinkedPanelHidden(panel));
   const rows = [];
-  for (const panelState of members) {
+  for (const panelState of showing) {
     const row = panelElements.get(panelState.id)?.panel.querySelector(".panel-translation-controls");
     if (row) rows.push(row);
   }
   // Cleared before any height is read back -- same reasoning as
   // equalizeGroupRowHeights's own clear-before-measure pass.
   for (const row of rows) row.style.removeProperty("min-height");
+  if (showing.length < 2) return;
   let max = 0;
   for (const row of rows) {
     const height = row.getBoundingClientRect().height;
