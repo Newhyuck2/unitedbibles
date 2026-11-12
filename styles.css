@@ -415,7 +415,8 @@ p {
   width: 100%;
 }
 
-.translation-list-scrollbar {
+.translation-list-scrollbar,
+.translation-list-scrollbar-reach {
   display: none;
 }
 
@@ -460,6 +461,36 @@ p {
     min-width: 24px;
     background: var(--scrollbar-thumb-warm);
     border-radius: 2px;
+  }
+
+  /* An invisible second drag surface (same drag as the bar's own -- see
+     setupHorizontalDragScrollbar in app.js): a strip 20px tall hanging from the
+     bar's bottom edge, over the same horizontal span, down across the
+     header's own bottom padding and into the first lines of the verse text. A
+     thumb pressing the thin bar lands low far more often than high, and the
+     bar's own box can't simply grow downward -- .panel-translation-controls
+     clips everything past its bottom edge, and (its brightness(1) filter
+     makes it the containing block of anything absolutely positioned inside
+     it) would clip this strip too, so the strip is a direct child of
+     .panel-header instead (see index.html), which is positioned and also keeps
+     the strip above the verse text. top stays auto: the strip sits at its
+     static position, right under the chip row, wherever the row is. Its left
+     edge and width are the bar's, measured by setupHorizontalDragScrollbar,
+     which also adds --visible while the row overflows -- so the strip is gone
+     whenever the bar is -- and reading mode (which hides the row) hides it
+     below. touch-action: none keeps the verse text from scrolling under a
+     finger that starts here. */
+  .translation-list-scrollbar-reach--visible {
+    position: absolute;
+    left: var(--reach-left, 0);
+    display: block;
+    width: var(--reach-width, 0);
+    height: 20px;
+    touch-action: none;
+  }
+
+  .bible-panel.reading-mode-active .translation-list-scrollbar-reach {
+    display: none;
   }
 
   /* This row now has its own drag-to-scroll bar above, so the native

@@ -2538,12 +2538,36 @@ const horizontalScrollbarSyncs = new WeakMap();
 // easier target for a fingertip than a thumb that can narrow to a sliver
 // once there are many chips, and dragging anywhere on it jumps the scroll
 // position to directly under the finger, matching a typical mobile slider.
-function setupHorizontalDragScrollbar({ list, track, thumb }) {
+// `reach` is a second, invisible drag surface: a strip running on from the
+// bar's bottom edge down into the verse text below it, over the same
+// horizontal span (see .translation-list-scrollbar-reach in styles.css). The
+// bar's own box can't grow downward -- the row it sits in clips everything
+// past its bottom edge -- and a thumb pressing the thin bar lands low far more
+// often than high.
+function setupHorizontalDragScrollbar({ list, track, thumb, reach }) {
   if (!list || !track || !thumb) return;
+
+  // The strip hangs right under the chip row (its static position, so it
+  // follows the row up and down) and only its horizontal span needs measuring:
+  // the bar's, relative to the header the strip is positioned in.
+  const syncReach = () => {
+    if (!reach) return;
+    const header = reach.parentElement;
+    const headerRect = header.getBoundingClientRect();
+    const trackRect = track.getBoundingClientRect();
+    const measured = {
+      "--reach-left": `${trackRect.left - headerRect.left - header.clientLeft}px`,
+      "--reach-width": `${trackRect.width}px`,
+    };
+    for (const [name, value] of Object.entries(measured)) {
+      if (reach.style.getPropertyValue(name) !== value) reach.style.setProperty(name, value);
+    }
+  };
 
   const sync = () => {
     const overflowing = list.scrollWidth > list.clientWidth + 1;
     track.classList.toggle("translation-list-scrollbar--visible", overflowing);
+    reach?.classList.toggle("translation-list-scrollbar-reach--visible", overflowing);
     if (!overflowing) return;
     const trackWidth = track.clientWidth;
     const thumbWidth = Math.min(trackWidth, Math.max(24, Math.round((trackWidth * list.clientWidth) / list.scrollWidth)));
@@ -2552,14 +2576,17 @@ function setupHorizontalDragScrollbar({ list, track, thumb }) {
     const ratio = maxScrollLeft > 0 ? list.scrollLeft / maxScrollLeft : 0;
     thumb.style.width = `${thumbWidth}px`;
     thumb.style.left = `${Math.round(maxThumbLeft * ratio)}px`;
+    syncReach();
   };
 
   list.addEventListener("scroll", sync);
   window.addEventListener("resize", sync);
 
-  track.addEventListener("pointerdown", (event) => {
+  const startDrag = (event) => {
+    // Whichever of the two surfaces was pressed keeps the pointer for the drag.
+    const surface = event.currentTarget;
     const pointerId = event.pointerId;
-    track.setPointerCapture(pointerId);
+    surface.setPointerCapture(pointerId);
     // Each drag step below sets scrollLeft directly to an exact position, with
     // no momentum of its own. Left alone, .translation-list's scroll-snap-type
     // (see .translation-chip's scroll-snap-align) treats every one of those as
@@ -2585,16 +2612,18 @@ function setupHorizontalDragScrollbar({ list, track, thumb }) {
     };
     const finish = (finishEvent) => {
       if (finishEvent.pointerId !== pointerId) return;
-      if (track.hasPointerCapture(pointerId)) track.releasePointerCapture(pointerId);
-      track.removeEventListener("pointermove", move);
-      track.removeEventListener("pointerup", finish);
-      track.removeEventListener("pointercancel", finish);
+      if (surface.hasPointerCapture(pointerId)) surface.releasePointerCapture(pointerId);
+      surface.removeEventListener("pointermove", move);
+      surface.removeEventListener("pointerup", finish);
+      surface.removeEventListener("pointercancel", finish);
       list.style.scrollSnapType = previousScrollSnapType;
     };
-    track.addEventListener("pointermove", move, { passive: false });
-    track.addEventListener("pointerup", finish);
-    track.addEventListener("pointercancel", finish);
-  });
+    surface.addEventListener("pointermove", move, { passive: false });
+    surface.addEventListener("pointerup", finish);
+    surface.addEventListener("pointercancel", finish);
+  };
+  track.addEventListener("pointerdown", startDrag);
+  reach?.addEventListener("pointerdown", startDrag);
 
   horizontalScrollbarSyncs.set(list, sync);
   sync();
@@ -4332,6 +4361,7 @@ function createPanelElement(panelState) {
   const translationListEl = fragment.querySelector(".panel-translation-list");
   const translationListScrollbarEl = fragment.querySelector(".translation-list-scrollbar");
   const translationListScrollbarThumbEl = fragment.querySelector(".translation-list-scrollbar-thumb");
+  const translationListScrollbarReachEl = fragment.querySelector(".translation-list-scrollbar-reach");
   const verseLayoutStackedEl = fragment.querySelector(".panel-verse-layout-stacked");
   const verseLayoutColumnsEl = fragment.querySelector(".panel-verse-layout-columns");
   const columnHeaderEl = fragment.querySelector(".panel-column-header");
@@ -4474,6 +4504,7 @@ function createPanelElement(panelState) {
     list: translationListEl,
     track: translationListScrollbarEl,
     thumb: translationListScrollbarThumbEl,
+    reach: translationListScrollbarReachEl,
   });
   const translationControl = setupDialogTranslationControl({
     picker: translationPickerEl,
