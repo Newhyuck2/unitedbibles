@@ -617,9 +617,10 @@ const chipColorCells = [];
 let chipModeTarget = null;
 let chipModeAnchorRect = null;
 let chipModePanelEl = null;
-// Nonzero while a pronunciation/gloss toggle's own re-render is still
-// settling (see toggleChipModePart) -- the chip mode popup's scroll-close
-// listener skips those scrolls, since the popup itself caused them.
+// Nonzero while the re-render of a pick made in the popup (a style, color or
+// pronunciation/gloss pick -- see holdChipModeScrollClose) is still settling --
+// the chip mode popup's scroll-close listener skips the scrolls that re-render
+// makes, since the popup itself caused them.
 let chipModeScrollCloseSuppressed = 0;
 // ---- Note dialog -- same shape as the highlight dialog above (range
 // row, version picker, showModal/populate/close), minus the color picker
@@ -4555,20 +4556,19 @@ function createPanelElement(panelState) {
     suggestions: strongsNavSuggestions,
     searchButton: strongsNavSearchButton,
   });
-  // Each of this popup's own items closes it first, same as the app-level
-  // "..." menu's own items already do (see panelOptionsHighlightButton and
-  // its siblings) -- a mode-entering click (reading mode, link-picking)
+  // The reading-mode and link icons close the popup first, same as the
+  // app-level "..." menu's own items already do (see panelOptionsHighlightButton
+  // and its siblings) -- a mode-entering click (reading mode, link-picking)
   // leaving a stray popup sitting open over the changed screen would read
-  // as broken, and closing unconditionally for the name toggle too keeps
-  // all three consistent rather than two closing and one not.
-  verseLayoutStackedEl.addEventListener("click", () => {
-    closePanelMoreMenu();
-    setPanelVerseLayout(panelState, "stacked");
-  });
-  verseLayoutColumnsEl.addEventListener("click", () => {
-    closePanelMoreMenu();
-    setPanelVerseLayout(panelState, "columns");
-  });
+  // as broken. The layout pair and the name toggle are the other kind: each
+  // only flips a display preference of this panel, applied on the spot, so
+  // they leave the popup open (showing its new state in it) -- trying the
+  // other layout, or hiding and showing the names again, doesn't mean
+  // reopening the popup each time, the same way the version chips' own
+  // style popup stays open through its picks. An outside press or Escape
+  // closes it then (see the pointerdown/keydown handlers below).
+  verseLayoutStackedEl.addEventListener("click", () => setPanelVerseLayout(panelState, "stacked"));
+  verseLayoutColumnsEl.addEventListener("click", () => setPanelVerseLayout(panelState, "columns"));
   readingModeToggleEl.addEventListener("click", () => {
     closePanelMoreMenu();
     toggleReadingMode(panelState);
@@ -4577,10 +4577,7 @@ function createPanelElement(panelState) {
     closePanelMoreMenu();
     toggleLinkMode(panelState);
   });
-  translationNameToggleEl.addEventListener("click", () => {
-    closePanelMoreMenu();
-    toggleTranslationNamesShown(panelState);
-  });
+  translationNameToggleEl.addEventListener("click", () => toggleTranslationNamesShown(panelState));
   moreToggleEl.addEventListener("click", () => togglePanelMoreMenu(panelState));
   linkVisibilityToggleEl.addEventListener("click", () => toggleLinkedPartnersVisibility(panelState));
   readingBookPrev.addEventListener("click", () => navigateReadingBook(panelState, -1));
@@ -8391,6 +8388,48 @@ function hideChipModePopup() {
   chipModePanelEl = null;
 }
 
+// How long a pick's own re-render keeps the popup's scroll-close off (see
+// holdChipModeScrollClose): until this many animation frames in a row have
+// gone by with nothing scrolling, but never for more frames than the second.
+const CHIP_MODE_SETTLE_QUIET_FRAMES = 3;
+const CHIP_MODE_SETTLE_MAX_FRAMES = 30;
+
+// A pick in the popup re-renders its panel (renderPanelBody), and in a linked
+// group that sets off more than the panel itself: scheduleGroupRowHeightSync
+// clears and re-applies every member's row min-heights one frame later (a
+// panel scrolled near the end of its text is clamped to a shorter scrollTop
+// and put back) and restores each member's verse anchor -- real scroll events
+// on both panels' .panel-content over the next couple of frames, none of them
+// a reader's own. The popup's document-wide scroll-close listener can't tell
+// them apart, so it used to shut the popup the moment anything was picked in a
+// linked group. This keeps that listener off until the re-render has stopped
+// moving things: a few frames in a row without any scroll event (counting all
+// of them, since one panel's scroll syncing the other's can run on for more
+// frames than any fixed number would cover), with an upper bound so a reader
+// who really does scroll right after a pick still closes it.
+function holdChipModeScrollClose() {
+  chipModeScrollCloseSuppressed += 1;
+  let scrolled = false;
+  let quietFrames = 0;
+  let frames = 0;
+  const noteScroll = () => {
+    scrolled = true;
+  };
+  document.addEventListener("scroll", noteScroll, true);
+  const settle = () => {
+    frames += 1;
+    quietFrames = scrolled ? 0 : quietFrames + 1;
+    scrolled = false;
+    if (quietFrames >= CHIP_MODE_SETTLE_QUIET_FRAMES || frames >= CHIP_MODE_SETTLE_MAX_FRAMES) {
+      document.removeEventListener("scroll", noteScroll, true);
+      chipModeScrollCloseSuppressed -= 1;
+      return;
+    }
+    requestAnimationFrame(settle);
+  };
+  requestAnimationFrame(settle);
+}
+
 // A B/I/U button's own click (see toggleTranslationTextStyle) -- an
 // independent toggle, not a mutually-exclusive pick like the palette's
 // cells, so this re-renders in place and leaves the popup open rather than
@@ -8406,7 +8445,9 @@ function toggleChipModeStyle(style) {
 
 // After a pick: a dialog's own style just restyles that dialog's list (see
 // showChipModePopup's onChange); a panel's is saved and re-rendered, along
-// with its embedded TSK pane, which shows the same picks.
+// with its embedded TSK pane, which shows the same picks. The popup stays open
+// through that re-render, including the scrolls a linked group makes while it
+// settles (see holdChipModeScrollClose).
 function applyChipModeChange() {
   const { panelState, onChange } = chipModeTarget;
   if (onChange) {
@@ -8414,6 +8455,7 @@ function applyChipModeChange() {
     return;
   }
   saveState();
+  holdChipModeScrollClose();
   renderPanelBody(panelState);
   refreshTskCrossColumnTranslations(panelState);
 }
@@ -8441,22 +8483,18 @@ function applyChipModeColor(color) {
 // row-height sync one frame later -- see scheduleGroupRowHeightSync) scrolls
 // .panel-content whenever it isn't already at the very top; left alone, that scroll
 // would reach the popup's own scroll-close listener and shut it right
-// after the click. Suppressed for two frames -- scroll events for a
-// frame's own scrollTop changes are dispatched before that next frame's
-// rAF callbacks, so the second one only runs once both have gone by -- and
-// counted rather than a plain flag, so a quick second click can't have
-// the first one's release end its own window early.
+// after the click. Held off until it has settled, the same as for the
+// style/color picks (see holdChipModeScrollClose, which counts rather than
+// flags, so a quick second click can't have the first one's release end its
+// own window early).
 function toggleChipModePart(part) {
   if (!chipModeTarget) return;
   const { panelState } = chipModeTarget;
   toggleOriginalLanguagePart(panelState, part);
   syncChipModePartSelection(panelState);
   saveState();
-  chipModeScrollCloseSuppressed += 1;
+  holdChipModeScrollClose();
   renderPanelBody(panelState);
-  requestAnimationFrame(() => requestAnimationFrame(() => {
-    chipModeScrollCloseSuppressed -= 1;
-  }));
 }
 
 // One per noted verse (not per translation -- see noteKey), sized to match
