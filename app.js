@@ -88,11 +88,18 @@ const PALETTE_COLORS = TEXT_COLOR_PALETTE.flat();
 // pick from it recolors the text only, while a pick from any other row also
 // recolors the translation's name label (see chromaticTextColor).
 const NEUTRAL_TEXT_COLORS = new Set(TEXT_COLOR_PALETTE[0]);
-// Row 1, column 1. Never stored: picking it removes the translation's entry
-// (see setTranslationTextColor), so its text goes back to the theme's own ink
-// -- dark on the light theme, near-white on the dark one -- rather than a
-// literal #000000 that would vanish into the dark page.
-const DEFAULT_TEXT_COLOR = TEXT_COLOR_PALETTE[0][0];
+// The two ends of the gray ramp -- black (row 1, column 1) and white (row 1,
+// column 10) -- both stand for the page's own text color, the one a
+// translation shows while it has no pick of its own: dark ink on the light
+// theme, near-white on the dark one. So neither is ever stored: picking one
+// (or loading one from a save) removes the translation's entry (see
+// setTranslationTextColor and normalizedTextColor) and its text simply follows
+// the theme, instead of a literal #000000 that would vanish into the dark page
+// or a literal #ffffff into the light one. The grid checks whichever end
+// matches the current theme (see themeTextColor).
+const BLACK_TEXT_COLOR = TEXT_COLOR_PALETTE[0][0];
+const WHITE_TEXT_COLOR = TEXT_COLOR_PALETTE[0][9];
+const THEME_TEXT_COLORS = new Set([BLACK_TEXT_COLOR, WHITE_TEXT_COLOR]);
 // What the old "gray" pick painted on the light theme (its dark-theme value
 // was a different token); a save that still holds it moves to the nearest
 // gray of the palette.
@@ -217,14 +224,17 @@ function nearestPaletteColor(hex, candidates) {
 }
 
 // A saved text-color pick as the palette stores it: the lowercase hex of one
-// of its cells, never the default black (that is the absence of an entry). A
-// save from before the palette existed holds "own" (the translation's own
-// color) or "gray" instead; each becomes the palette cell nearest to what it
-// used to paint -- a colored cell for "own" (rows 2-8, which is the
-// translation's own accent cell), a gray for "gray" -- so existing picks keep
-// their look. A hex that is no cell of this palette (a pick saved while an
-// earlier palette was in use) moves to the nearest cell, so the grid can always
-// show which color is applied. Anything else is dropped.
+// of its cells, never black or white (the page's own text color, which is the
+// absence of an entry -- so a white saved while the dark theme was on can't
+// turn invisible once the light theme is back). A save from before the
+// palette existed holds "own" (the translation's own color) or "gray"
+// instead; each becomes the palette cell nearest to what it used to paint --
+// a colored cell for "own" (rows 2-8, which is the translation's own accent
+// cell), a gray for "gray" -- so existing picks keep their look. A hex that is
+// no cell of this palette (a pick saved while an earlier palette was in use)
+// moves to the nearest cell, so the grid can always show which color is
+// applied: a gray to the nearest gray, anything else to the nearest of all.
+// Anything that isn't a hex is dropped.
 function normalizedTextColor(id, color) {
   if (color === "own") {
     return TRANSLATION_COLORS[id] ? nearestPaletteColor(TRANSLATION_COLORS[id], TEXT_COLOR_PALETTE.slice(1).flat()) : null;
@@ -233,16 +243,26 @@ function normalizedTextColor(id, color) {
   if (typeof color !== "string") return null;
   const hex = color.toLowerCase();
   if (!HEX_COLOR_PATTERN.test(hex)) return null;
-  const cell = PALETTE_COLORS.includes(hex) ? hex : nearestPaletteColor(hex, PALETTE_COLORS);
-  return cell === DEFAULT_TEXT_COLOR ? null : cell;
+  const grayHex = hex.slice(1, 3) === hex.slice(3, 5) && hex.slice(3, 5) === hex.slice(5, 7);
+  const cell = PALETTE_COLORS.includes(hex)
+    ? hex
+    : nearestPaletteColor(hex, grayHex ? TEXT_COLOR_PALETTE[0] : PALETTE_COLORS);
+  return THEME_TEXT_COLORS.has(cell) ? null : cell;
+}
+
+// The cell the grid checks for a translation with no pick of its own: the end
+// of the gray ramp that matches the text the page paints it in right now --
+// black on the light theme, white on the dark one.
+function themeTextColor() {
+  return state.theme === "dark" ? WHITE_TEXT_COLOR : BLACK_TEXT_COLOR;
 }
 
 // The part of a text-color pick that carries over to the translation's name
 // label (the "NIV" above its verse text): a pick from any colored cell --
 // everything but the colorless first row of black, grays and white -- repaints
-// the label too, while the default black and that row's grays and white leave
-// it in the translation's own accent color. Returns the pick when it carries
-// over, null when it doesn't.
+// the label too, while no pick at all and that row's grays leave it in the
+// translation's own accent color. Returns the pick when it carries over, null
+// when it doesn't.
 function chromaticTextColor(color) {
   return typeof color === "string" && HEX_COLOR_PATTERN.test(color) && !NEUTRAL_TEXT_COLORS.has(color) ? color : null;
 }
@@ -1877,13 +1897,15 @@ function toggleTranslationTextStyle(panelState, id, style) {
 }
 
 // The chip mode popup's color grid pick (a hex color of TEXT_COLOR_PALETTE) --
-// the default black is the baseline .translation-text color already, so it's
-// stored as the absence of an entry rather than an explicit value (see
-// buildTranslationLinesInto/applyTextColorPick's own reads of this), keeping
-// a freshly added translation's saved state exactly as small as before.
+// black and white, the page's own text color, are the baseline
+// .translation-text color already (dark ink on the light theme, near-white on
+// the dark one), so either is stored as the absence of an entry rather than an
+// explicit value (see buildTranslationLinesInto/applyTextColorPick's own reads
+// of this): the text then follows the theme on its own, and a freshly added
+// translation's saved state stays exactly as small as before.
 function setTranslationTextColor(panelState, id, color) {
   const colors = { ...panelState.translationTextColors };
-  if (color === DEFAULT_TEXT_COLOR) delete colors[id];
+  if (THEME_TEXT_COLORS.has(color)) delete colors[id];
   else colors[id] = color;
   panelState.translationTextColors = colors;
 }
@@ -1893,10 +1915,11 @@ function setTranslationTextColor(panelState, id, color) {
 // the picks chromaticTextColor lets through: `className` is the pick modifier
 // styles.css reads --pick-color/--pick-color-dark under -- the pick as chosen
 // for the light theme, and the lift of it the dark theme paints instead (see
-// darkThemeTextColor). No pick (the default black) clears all three, which
-// matters for a line restyled in place (see restyleTranslationMatchLines).
+// darkThemeTextColor). No pick (the page's own text color) clears all three,
+// which matters for a line restyled in place (see
+// restyleTranslationMatchLines).
 function applyTextColorPick(line, className, color) {
-  const picked = typeof color === "string" && HEX_COLOR_PATTERN.test(color) && color !== DEFAULT_TEXT_COLOR;
+  const picked = typeof color === "string" && HEX_COLOR_PATTERN.test(color) && !THEME_TEXT_COLORS.has(color);
   line.classList.toggle(className, picked);
   if (picked) {
     line.style.setProperty("--pick-color", color);
@@ -5758,8 +5781,8 @@ function buildTranslationLinesInto(pane, panelState, verseNumber, texts, list, b
     line.classList.toggle("translation-line--bold", boldList.includes(translation));
     line.classList.toggle("translation-line--italic", panelState.italicTranslations.includes(translation));
     line.classList.toggle("translation-line--underline", panelState.underlineTranslations.includes(translation));
-    // The default black (see setTranslationTextColor) takes no class:
-    // .translation-text's own base color already reads as that.
+    // No pick (black or white -- see setTranslationTextColor) takes no class:
+    // .translation-text's own base color already follows the theme.
     applyTextColorPick(line, "translation-line--color-pick", textColors[translation]);
     if (isOriginalLanguage) {
       const hiddenParts = panelState.originalLanguageHiddenParts ?? [];
@@ -7192,6 +7215,9 @@ function applyTheme() {
   themeToggleButton.querySelector(".theme-toggle-moon").toggleAttribute("hidden", !isDark);
   const themeColorMeta = document.querySelector('meta[name="theme-color"]');
   if (themeColorMeta) themeColorMeta.content = THEME_COLOR_BY_THEME[state.theme];
+  // An open chip popup's grid checks the end of its gray row that matches the
+  // theme (see themeTextColor), which has just changed.
+  if (chipModeTarget) syncChipModeColorSelection(chipModeTarget.panelState, chipModeTarget.id);
 }
 
 function toggleTheme() {
@@ -7977,7 +8003,9 @@ for (const row of TEXT_COLOR_PALETTE) {
     cell.className = "chip-color-cell";
     cell.dataset.color = hex;
     cell.dataset.check = contrastRatio(hex, "#ffffff") >= contrastRatio(hex, "#25231f") ? "light" : "dark";
-    cell.dataset.name = hex === DEFAULT_TEXT_COLOR ? "Black (default)" : hex;
+    cell.dataset.name = hex === BLACK_TEXT_COLOR ? "Black (default on the light theme)"
+      : hex === WHITE_TEXT_COLOR ? "White (default on the dark theme)"
+        : hex;
     cell.setAttribute("role", "menuitemradio");
     cell.setAttribute("aria-checked", "false");
     cell.setAttribute("aria-label", cell.dataset.name);
@@ -8005,20 +8033,23 @@ function syncChipModeStyleSelection(panelState, id) {
 // Where the current text color shows: the color circle (painted in the
 // translation's pick -- lifted for the dark theme the same way its text is --
 // or left to the theme's own ink while none is picked) and the palette's
-// check mark on the cell holding that color (none when a saved color isn't one
-// of the palette's cells). Separately from the pick, the cell that is the
-// translation's own accent color always carries a ring (.theme), whether or
-// not it is the one applied. Kept right even while the grid is shut, since
-// the circle is always showing.
+// check mark on the cell holding that color. While there is no pick that is
+// the end of the gray ramp matching the theme's own text -- black on the light
+// theme, white on the dark one (see themeTextColor) -- so the check follows
+// the theme when it is switched (applyTheme re-runs this for an open popup).
+// Separately from the pick, the cell that is the translation's own accent
+// color always carries a ring (.theme), whether or not it is the one applied.
+// Kept right even while the grid is shut, since the circle is always showing.
 function syncChipModeColorSelection(panelState, id) {
   const saved = panelState.translationTextColors[id];
-  const color = typeof saved === "string" && HEX_COLOR_PATTERN.test(saved) ? saved : DEFAULT_TEXT_COLOR;
-  if (color === DEFAULT_TEXT_COLOR) {
-    chipModePopup.style.removeProperty("--chip-mode-color");
-    chipModePopup.style.removeProperty("--chip-mode-color-dark");
-  } else {
+  const picked = typeof saved === "string" && HEX_COLOR_PATTERN.test(saved) && !THEME_TEXT_COLORS.has(saved);
+  const color = picked ? saved : themeTextColor();
+  if (picked) {
     chipModePopup.style.setProperty("--chip-mode-color", color);
     chipModePopup.style.setProperty("--chip-mode-color-dark", darkThemeTextColor(color));
+  } else {
+    chipModePopup.style.removeProperty("--chip-mode-color");
+    chipModePopup.style.removeProperty("--chip-mode-color-dark");
   }
   const themeColor = TRANSLATION_COLORS[id];
   for (const cell of chipColorCells) {

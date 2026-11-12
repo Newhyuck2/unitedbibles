@@ -8475,15 +8475,17 @@ body * {
 
 /* The text-color palette (TEXT_COLOR_PALETTE in app.js): a second floating
    card right under .chip-mode-popup, on the same chrome and z-index, with
-   one circular cell per color -- 10 columns by 8 rows, the first (black)
-   cell standing for "no color picked" (see DEFAULT_TEXT_COLOR). The circles
-   are packed close: each 20px swatch sits in a 22px cell with no gap between
-   cells, so neighbouring circles are 2px apart both across and down. The
-   applied color's cell carries a check mark and the cell that is the
-   translation's own accent color (.theme -- see syncChipModeColorSelection)
-   a ring just inside its edge, both drawn in whichever of white or dark ink
-   reads better on that color (data-check, set when the cells are built);
-   there is deliberately no other selected look. */
+   one circular cell per color -- 10 columns by 8 rows. The two ends of the
+   first row, black and white, both stand for "no color picked" (the page's
+   own text color -- see THEME_TEXT_COLORS in app.js), and the grid checks
+   the one matching the theme. The circles are packed close: each 20px swatch
+   sits in a 22px cell with no gap between cells, so neighbouring circles are
+   2px apart both across and down. The applied color's cell carries a check
+   mark and the cell that is the translation's own accent color (.theme --
+   see syncChipModeColorSelection) a thick ring flush with the circle's edge,
+   both drawn in whichever of white or dark ink reads better on that color
+   (data-check, set when the cells are built); there is deliberately no other
+   selected look. */
 .chip-color-popup {
   position: fixed;
   z-index: 30;
@@ -8523,10 +8525,15 @@ body * {
   background-size: 12px 12px;
 }
 
+/* inset: 0 puts the ring against the swatch's own 1px outline -- the padding
+   box it is positioned in starts right inside that border -- so the ring sits
+   on the circle's edge with no band of the cell's color outside it. 3px is as
+   thick as it can get with the check mark (12px box, about 9px of ink) still
+   fitting inside it when the translation's own color is the applied one. */
 .chip-color-cell.theme .chip-color-swatch::after {
   position: absolute;
-  inset: 1.5px;
-  border: 1.5px solid #fff;
+  inset: 0;
+  border: 3px solid #fff;
   border-radius: 50%;
   content: "";
 }
