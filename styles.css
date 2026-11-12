@@ -8475,17 +8475,18 @@ body * {
 
 /* The text-color palette (TEXT_COLOR_PALETTE in app.js): a second floating
    card right under .chip-mode-popup, on the same chrome and z-index, with
-   one circular cell per color -- 10 columns by 8 rows. The two ends of the
-   first row, black and white, both stand for "no color picked" (the page's
-   own text color -- see THEME_TEXT_COLORS in app.js), and the grid checks
-   the one matching the theme. The circles are packed close: each 20px swatch
-   sits in a 22px cell with no gap between cells, so neighbouring circles are
-   2px apart both across and down. The applied color's cell carries a check
-   mark and the cell that is the translation's own accent color (.theme --
-   see syncChipModeColorSelection) a thick ring flush with the circle's edge,
-   both drawn in whichever of white or dark ink reads better on that color
-   (data-check, set when the cells are built); there is deliberately no other
-   selected look. */
+   one circular cell per color -- 10 columns by 8 rows. Of the two ends of the
+   first row, the one matching the theme (black on the light theme, white on
+   the dark one -- see themeTextColor in app.js) stands for "no color picked",
+   the page's own text color, and is what the grid checks while there is no
+   pick; the other end is an ordinary pick. The circles are packed close:
+   each 20px swatch sits in a 22px cell with no gap between cells, so
+   neighbouring circles are 2px apart both across and down. The applied
+   color's cell carries a check mark and the cell that is the translation's
+   own accent color (.theme -- see syncChipModeColorSelection) a thick ring
+   flush with the circle's edge, both drawn in whichever of white or dark ink
+   reads better on that color (data-check, set when the cells are built);
+   there is deliberately no other selected look. */
 .chip-color-popup {
   position: fixed;
   z-index: 30;
