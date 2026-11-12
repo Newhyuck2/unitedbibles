@@ -9445,9 +9445,10 @@ const STRONGS_FIELDS_TOGGLE_ICONS = {
 
 // A long Strong's entry (a many-line Definition, say) leaves the Englishman's
 // Concordance below it little room, so the Original Word row carries a
-// chevron button, right of Bible Hub, that folds every field under it away
-// (and the concordance moves up into the room) -- the row itself stays, so
-// the button is still there to bring them back. `fields` is the
+// chevron button, right of Bible Hub, that folds the whole entry away -- every
+// field, the Original Word's own label and word included -- leaving just
+// Bible Hub and this button (so it is still there to bring the entry back)
+// while the concordance moves up into the room. `fields` is the
 // .word-dictionary-fields container the Original Word row sits in;
 // `details.collapsed` is where the view remembers the choice, so the next
 // word looked up in the same view (which builds a fresh container) comes up

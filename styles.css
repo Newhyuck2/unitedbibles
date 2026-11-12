@@ -42,6 +42,13 @@
   --heading-warm: #5f4630;
   --verse-font-size: 14px;
   --toolbar-icon-gap: 4px;
+  /* The gap between the controls of a Strong's nav row (the dialog's
+     .strongs-nav, a panel's .panel-strongs-selectors) -- e.g. the
+     transliteration field to the search button -- and so also between Bible
+     Hub and the fold toggle in the Original Word row right below it
+     (.lookup-original-word-tools), which are meant to read at the same
+     spacing as the controls above them. */
+  --strongs-nav-gap: 4px;
   --shadow: 0 18px 45px rgba(55, 45, 30, 0.1);
   --radius: 16px;
   font-family:
@@ -857,7 +864,7 @@ p {
   display: none;
   flex-wrap: nowrap;
   align-items: center;
-  gap: 4px;
+  gap: var(--strongs-nav-gap);
   margin-top: 0;
 }
 
@@ -2521,7 +2528,7 @@ mark {
   display: flex;
   flex-wrap: nowrap;
   align-items: center;
-  gap: 4px;
+  gap: var(--strongs-nav-gap);
   /* Matches .panel-header's own padding-top (the gap from the panel's own
      top border down to .panel-selectors, the book/chapter/verse row) --
      this row is this dialog's own de facto top bar, so the gap down to
@@ -2891,29 +2898,56 @@ mark {
    in app.js) travel as one group at the row's trailing edge -- positioned
    as a group, for the same reason Bible Hub alone used to be absolute (see
    the comment above). The toggle's own chrome is .dialog-history-arrow's
-   (32px, same height as Bible Hub). */
+   (32px, same height as Bible Hub). The group is anchored by its right edge
+   and the toggle is its last item, so the toggle sits at one fixed spot --
+   flush with the search button of the nav row above it -- whatever else
+   changes: the gap below (or Bible Hub being hidden for a word with no
+   entry) only moves Bible Hub. The gap between the two is the nav row's own
+   (--strongs-nav-gap: the same spacing as between the transliteration field
+   and the search button above). */
 .lookup-original-word-tools {
   position: absolute;
   top: 0;
   right: 0;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--strongs-nav-gap);
 }
 
-/* Room for the group above: Bible Hub (about 88px), the 6px gap and the 32px
-   toggle. */
+/* The toggle's chevron takes the accent green (--accent: the add-panel
+   button's own dark green on the light theme, the lighter mint the other
+   accent icons use on the dark one, where that dark green would vanish into
+   the button). The compound selector keeps this ahead of .dialog-history-
+   arrow's own ink color, which sits later in the file. */
+.dialog-history-arrow.lookup-fields-toggle {
+  color: var(--accent);
+}
+
+/* Room for the group above: Bible Hub (about 88px), the 4px gap and the 32px
+   toggle, with a little to spare. */
 .lookup-original-word-row .lookup-value {
   padding-right: 134px;
 }
 
-/* Folded: only the Original Word row stays (it holds the toggle that brings
-   the rest back); every other field -- and the note that can follow them --
-   goes, so the concordance below moves up into the room. The row is held to
-   the toggle's own 32px height meanwhile: the toggle is absolutely
-   positioned, so with the fields gone nothing else would keep the row tall
-   enough to contain it, and it would run into the concordance below. */
+/* Folded: nothing of the entry stays but the trailing group -- Bible Hub and
+   the toggle that brings the rest back. Every other field (and the note that
+   can follow them) goes, and so do the Original Word row's own label and
+   word, so the concordance below moves up into the room. The group stays
+   where it was, at the row's right edge: the row is the whole width once its
+   label is gone (hence the single-column grid), and is held to the toggle's
+   own 32px height meanwhile -- the group is absolutely positioned, so with
+   nothing else in the row nothing would keep it tall enough to contain it,
+   and it would run into the concordance below. */
 .word-dictionary-fields--collapsed > :not(.lookup-original-word-entry) {
+  display: none;
+}
+
+.word-dictionary-fields--collapsed .lookup-original-word-entry {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.word-dictionary-fields--collapsed .lookup-original-word-entry .lookup-label,
+.word-dictionary-fields--collapsed .lookup-original-word-row .lookup-value {
   display: none;
 }
 
@@ -3293,13 +3327,13 @@ mark {
 }
 
 /* The " / " between two original forms of one verse ("word (translit) /
-   word (translit)"): drawn larger than the words around it so it reads as a
-   real divider between them. line-height: 0 keeps the bigger glyph from
-   making the line (and so the row) taller than it is without one;
-   white-space: pre keeps the spaces inside it from collapsing at the edges of
-   a wrapped line. */
+   word (translit)"): drawn somewhat larger than the words around it so it
+   reads as a real divider between them (1.7x was too big, plain size too
+   small to notice). line-height: 0 keeps the bigger glyph from making the
+   line (and so the row) taller than it is without one; white-space: pre keeps
+   the spaces inside it from collapsing at the edges of a wrapped line. */
 .concordance-original-separator {
-  font-size: 1.7em;
+  font-size: 1.4em;
   font-style: normal;
   font-weight: 400;
   line-height: 0;
