@@ -6066,11 +6066,13 @@ body * {
    neither of which applies here (this lives in the page's own plain,
    unclipped top header), and its own left-edge math assumes the
    undropped-down ~270px default width rather than this one's own
-   deliberately narrower 108px, landing noticeably left of flush under the
-   input. Plain position: absolute, anchored to .combo's own position:
-   relative (the same base every other combo already falls back to
-   outside a dialog), puts it directly under and flush with the input
-   instead, reliably regardless of viewport size. */
+   deliberately narrow width (one cell and the menu's own padding), landing
+   noticeably left of flush under the input. Plain position: absolute,
+   anchored to .combo's own position: relative (the same base every other
+   combo already falls back to outside a dialog), puts it directly under
+   and flush with the input instead, reliably regardless of viewport size.
+   One column of square cells, 1 at the top down to the most splits there
+   are (see MAX_PANEL_FIT_COUNT in app.js). */
 .panel-fit-count-combo .combo-menu {
   position: absolute !important;
   top: calc(100% + 5px) !important;
@@ -6078,8 +6080,9 @@ body * {
   right: 0 !important;
   bottom: auto !important;
   display: grid;
-  width: 108px !important;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  width: auto !important;
+  grid-template-columns: 29px;
+  gap: 2px;
   /* .combo-menu's own base z-index (30) still loses to a panel's own
      .panel-header (26) here despite the higher number -- .panel-header
      establishes its own stacking context (position: relative + z-index),
@@ -6090,8 +6093,31 @@ body * {
   z-index: 90;
 }
 
+/* A square as wide as the [1]/[2] buttons beside the selector (29px), not the
+   taller 34px-high cell every other combo option has. Two classes deep for
+   the same reason as .combo-input above: the mobile .combo-option rules
+   would otherwise win the tie on min-height/padding. */
 .panel-fit-count-combo .combo-option {
+  display: grid;
+  width: 29px;
+  height: 29px;
+  min-height: 0;
+  padding: 0;
+  place-items: center;
+  line-height: 1;
   text-align: center;
+}
+
+/* A split whose panels wouldn't come out at least MIN_PANEL_WIDTH wide on
+   this window (see isDisabled in the selector's setupCombobox call). */
+.panel-fit-count-combo .combo-option[aria-disabled="true"] {
+  opacity: 0.28;
+  cursor: default;
+}
+
+.panel-fit-count-combo .combo-option[aria-disabled="true"]:hover {
+  background: transparent;
+  color: inherit;
 }
 
 @media (max-width: 820px), (max-width: 1366px) and (any-pointer: coarse) {

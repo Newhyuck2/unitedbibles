@@ -801,6 +801,15 @@ const tskCache = new Map();
 const panelElements = new Map();
 const searchWorker = new Worker(`./search-worker.js?v=${ASSET_VERSION}`);
 
+// The most panels the header's fit-count selector can split the screen into
+// (see setDesktopPanelMode): 1 is the single-panel preset, 2..this the
+// "fit N panels" one -- what panelFitCount holds and desktopPanelMode can be.
+const MAX_PANEL_FIT_COUNT = 6;
+
+function isPanelFitCount(value) {
+  return Number.isInteger(value) && value >= 2 && value <= MAX_PANEL_FIT_COUNT;
+}
+
 function freshState() {
   return {
     fontSize: 14,
@@ -942,13 +951,13 @@ function sanitizeState() {
     ? savedPanelCount
     : landscapeMobile.matches ? 2 : 1;
   const savedFitCount = Number(state.panelFitCount);
-  state.panelFitCount = [2, 3, 4].includes(savedFitCount) ? savedFitCount : 2;
+  state.panelFitCount = isPanelFitCount(savedFitCount) ? savedFitCount : 2;
   // "many" (a since-removed persisted mode -- see setDesktopPanelMode's own
   // history) never left a value Number() resolves to 1 or panelFitCount's
   // own {2,3,4} range, so a leftover save from before that change just
   // falls through to the same default an invalid/missing one already would.
   const savedDesktopMode = Number(state.desktopPanelMode);
-  state.desktopPanelMode = savedDesktopMode === 1 || [2, 3, 4].includes(savedDesktopMode)
+  state.desktopPanelMode = savedDesktopMode === 1 || isPanelFitCount(savedDesktopMode)
     ? savedDesktopMode
     : desktopLikePanels() ? 2 : null;
   state.panels = state.panels
@@ -1454,13 +1463,17 @@ function updatePanelCountControls() {
   const touchLike = desktop ? false : coarsePointer.matches;
   const oneSelected = desktop ? state.desktopPanelMode === 1 : touchLike && state.touchPanelCount === 1;
   // "Two" now means "the fit-count preset is active," whatever its own
-  // selector last chose (see panelFitCount) -- 2, 3, or 4 -- not literally
-  // just the number 2 anymore.
-  const twoSelected = desktop ? [2, 3, 4].includes(state.desktopPanelMode) : touchLike && state.touchPanelCount !== 1;
+  // selector last chose (see panelFitCount) -- 2 up to MAX_PANEL_FIT_COUNT --
+  // not literally just the number 2 anymore.
+  const twoSelected = desktop ? isPanelFitCount(state.desktopPanelMode) : touchLike && state.touchPanelCount !== 1;
   panelCountOneButton.classList.toggle("selected", oneSelected);
   panelCountTwoButton.classList.toggle("selected", twoSelected);
   panelCountOneButton.setAttribute("aria-pressed", String(oneSelected));
   panelCountTwoButton.setAttribute("aria-pressed", String(twoSelected));
+  // The selector shows the count the layout is on, so it follows the two icons
+  // however the layout changed -- including "1", which is the single-panel
+  // icon's own preset (see fitCountSelectorValue).
+  panelFitCountCombo?.setValue(fitCountSelectorValue());
   // Both the reading-mode and link-mode icons (see the "..." popup menu)
   // always show now, but link mode still only ever makes sense once a
   // second panel exists to link with (see updateLinkModeControls) --
@@ -1472,6 +1485,19 @@ function updatePanelCountControls() {
     updateReadingModeControls(panelState);
     updateLinkModeControls(panelState);
   }
+}
+
+// The fit-count selector's own handle (see setupCombobox's call in init) --
+// null until the page has started, which updatePanelCountControls guards.
+let panelFitCountCombo = null;
+
+// What the selector shows: the count the layout is on right now -- 1 while the
+// single-panel preset is active, otherwise the split that is -- and, with no
+// preset active (widths dragged by hand), the split last chosen, which is what
+// the fit icon would go back to (see panelFitCount).
+function fitCountSelectorValue() {
+  if (desktopLikePanels()) return state.desktopPanelMode || state.panelFitCount;
+  return coarsePointer.matches && state.touchPanelCount === 1 ? 1 : state.panelFitCount;
 }
 
 // Below this, the header's own history/selector/remove-button row (see
@@ -1586,7 +1612,7 @@ function applyDesktopPanelWidths() {
 }
 
 function setDesktopPanelMode(mode) {
-  if (mode !== 1 && mode !== 2 && mode !== 3 && mode !== 4) return;
+  if (mode !== 1 && !isPanelFitCount(mode)) return;
   panelTrack.classList.remove("fit-all-panels");
   state.desktopPanelMode = mode;
   applyDesktopPanelWidths();
@@ -3610,7 +3636,10 @@ function panelIndexAtViewportStart() {
   return closestIndex;
 }
 
-function setupCombobox({ input, menu, items, selectedValue, matches, onSelect, selectOnFocus = true }) {
+// isDisabled(item) marks options that are shown but can't be picked (faded, not
+// clickable, skipped by the arrow keys) -- re-asked every time the list is
+// rendered, so it can depend on the window's size at the moment it opens.
+function setupCombobox({ input, menu, items, selectedValue, matches, onSelect, selectOnFocus = true, isDisabled = () => false }) {
   let allItems = items;
   let selected = selectedValue;
   let filtered = [];
@@ -3761,6 +3790,7 @@ function setupCombobox({ input, menu, items, selectedValue, matches, onSelect, s
 
   function choose(item, notify = true) {
     if (!item) return;
+    if (notify && isDisabled(item)) return;
     selected = item.value;
     input.value = item.label;
     updateBookDisplay(item);
@@ -3804,6 +3834,15 @@ function setupCombobox({ input, menu, items, selectedValue, matches, onSelect, s
       option.className = "combo-option";
       option.setAttribute("role", "option");
       option.setAttribute("aria-selected", String(item.value === selected));
+      if (isDisabled(item)) {
+        // aria-disabled rather than the disabled attribute: a press on a
+        // disabled button is swallowed by the browser (and moves the focus
+        // off the input, after which Escape no longer reaches it), whereas
+        // this one is handled here -- choose() ignores it, and keeping the
+        // mousedown from taking the focus leaves the menu exactly as it was.
+        option.setAttribute("aria-disabled", "true");
+        option.addEventListener("mousedown", (event) => event.preventDefault());
+      }
       if (comboKind === "book" && item.en != null && item.ko != null) {
         const en = document.createElement("span");
         en.className = "combo-option-en";
@@ -3856,7 +3895,7 @@ function setupCombobox({ input, menu, items, selectedValue, matches, onSelect, s
     let bestIndex = null;
     let bestScore = Number.POSITIVE_INFINITY;
     for (const [index, option] of options.entries()) {
-      if (index === highlighted) continue;
+      if (index === highlighted || option.getAttribute("aria-disabled") === "true") continue;
       const rect = option.getBoundingClientRect();
       const x = rect.left + rect.width / 2;
       const y = rect.top + rect.height / 2;
@@ -13042,20 +13081,33 @@ async function init() {
     setupNoteRangeControls();
     // Same combobox as every book/chapter/verse selector (see
     // setupCombobox) -- picking a number here is immediate, exactly like
-    // picking a verse navigates immediately: it both updates panelFitCount
+    // picking a verse navigates immediately. 1 is the single-panel preset
+    // itself, so it does what the single-panel icon does, which is also what
+    // lights that icon up; 2 up to MAX_PANEL_FIT_COUNT updates panelFitCount
     // and (on desktop) activates the fit-count preset with it right away,
-    // which is also what turns the adjacent "two panels" button green (see
-    // updatePanelCountControls's own twoSelected check).
-    setupCombobox({
+    // which turns the adjacent "fit" button green (see
+    // updatePanelCountControls's own twoSelected check). A split whose panels
+    // would come out narrower than MIN_PANEL_WIDTH can't be had on this
+    // window (applyDesktopPanelWidths would drop it again at once), so its
+    // cell is shown faded and can't be picked.
+    panelFitCountCombo = setupCombobox({
       input: panelFitCountInput,
       menu: panelFitCountMenu,
-      items: [2, 3, 4].map((n) => ({ value: n, label: String(n) })),
-      selectedValue: state.panelFitCount,
+      items: Array.from({ length: MAX_PANEL_FIT_COUNT }, (_, index) => ({ value: index + 1, label: String(index + 1) })),
+      selectedValue: fitCountSelectorValue(),
       matches: (item, query) => !query.trim() || item.label.startsWith(query.trim()),
+      isDisabled: (item) => item.value > 1 && exactPanelFitWidth(item.value) < MIN_PANEL_WIDTH,
       onSelect: (n) => {
+        if (n === 1) {
+          if (desktopLikePanels()) setDesktopPanelMode(1);
+          else setTouchPanelCount(1);
+          return;
+        }
         state.panelFitCount = n;
+        // Off the desktop layouts (a narrow mouse window; a phone held upright
+        // shows no such control) two is the only split there is.
         if (desktopLikePanels()) setDesktopPanelMode(n);
-        else saveState();
+        else setTouchPanelCount(2);
       },
       selectOnFocus: false,
     });
