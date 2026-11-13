@@ -8519,8 +8519,9 @@ body * {
    theme's own ink while none is picked), lifted the same way the text
    itself is in the dark theme (--chip-mode-color-dark) -- a plain bar, no
    border or outline of any kind. The "A" is drawn the size of the letters of
-   the B/I/U toggles beside it (the U's letter, rule aside, is 10.75px tall):
-   its ink is about 10.4 x 10.75px. Pressing the button opens the palette
+   the B/I/U toggles beside it (the U's letter, rule aside, is 10.75px tall)
+   and a touch narrower than an A would naturally be: its ink is about 9.5 x
+   10.75px. Pressing the button opens the palette
    grid below the popup. Which color is applied is told by the grid's check
    mark, not by a state on this button, so the only state it takes is a
    neutral fill while that grid is open. (The highlight popup's own color
