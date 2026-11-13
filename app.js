@@ -543,7 +543,7 @@ const highlightManagePopup = document.querySelector("#highlight-manage-popup");
 const highlightManageSwatch = document.querySelector("#highlight-manage-swatch");
 const highlightManageRemoveButton = document.querySelector("#highlight-manage-remove");
 // The same palette as a floating card under the manage popup, opened by its
-// color circle -- the way .chip-mode-popup's circle opens its own grid.
+// color circle -- the way .chip-mode-popup's text-color icon opens its own grid.
 const highlightColorPopup = document.querySelector("#highlight-color-popup");
 let highlightColor = DEFAULT_HIGHLIGHT_COLOR;
 let highlightBook = 0;
@@ -589,13 +589,14 @@ let bookmarkManagePanelEl = null;
 // button (see showChipModePopup -- STR/TSK/NOTE's own button is disabled
 // outright, so this never opens for them) -- same floating-popup chrome as
 // highlightManagePopup/bookmarkManagePopup above, just anchored below the
-// chip instead, and offering bold/italic/underline toggles plus one color
-// circle (it paints the translation's current text color) that opens the
-// palette grid just below the popup. HEB/GRK also get chipModeParts' own two
-// pronunciation/gloss show-hide dots after the circle.
+// chip instead, and offering bold/italic/underline toggles plus one text-color
+// icon (an "A" over a bar painted in the translation's current text color)
+// that opens the palette grid just below the popup. HEB/GRK/LXX also get
+// chipModeParts' own two pronunciation/gloss show-hide labels (TRL, ENG) after
+// the color icon.
 const chipModePopup = document.querySelector("#chip-mode-popup");
 // The palette grid (see TEXT_COLOR_PALETTE) -- a second floating card of the
-// same chrome, shown right under the popup while the color circle is open.
+// same chrome, shown right under the popup while the color icon is open.
 // It follows the popup everywhere: into a modal dialog and back, and shut
 // whenever the popup is.
 const chipColorPopup = document.querySelector("#chip-color-popup");
@@ -2186,7 +2187,7 @@ function dialogTranslationStyleControls(style, getContainer) {
   };
 }
 
-// HEB/GRK's own chip mode popup's two extra dots (see chipModeParts) -- each
+// HEB/GRK's own chip mode popup's two extra labels (see chipModeParts) -- each
 // an independent show/hide toggle for one line of every interlinear word
 // block (see ORIGINAL_LANGUAGE_PARTS and buildTranslationLinesInto's own
 // translit-/gloss-hidden classes). Per panel rather than per id, same as
@@ -8331,7 +8332,7 @@ function syncChipModeStyleSelection(panelState, id) {
   }
 }
 
-// Where the current text color shows: the color circle (painted in the
+// Where the current text color shows: the color icon's bar (painted in the
 // translation's pick -- lifted for the dark theme the same way its text is --
 // or left to the theme's own ink while none is picked) and the palette's
 // check mark on the cell holding that color. While there is no pick that is
@@ -8341,7 +8342,7 @@ function syncChipModeStyleSelection(panelState, id) {
 // a saved pick, the opposite end of that row included, is checked as it is.
 // Separately from the pick, the cell that is the translation's own accent
 // color always carries a ring (.theme), whether or not it is the one applied.
-// Kept right even while the grid is shut, since the circle is always showing.
+// Kept right even while the grid is shut, since the bar is always showing.
 function syncChipModeColorSelection(panelState, id) {
   const saved = panelState.translationTextColors[id];
   const picked = typeof saved === "string" && HEX_COLOR_PATTERN.test(saved);
@@ -8367,8 +8368,8 @@ function syncChipModeColorSelection(panelState, id) {
   }
 }
 
-// HEB/GRK's own two extra dots (see chipModeParts): filled while that line
-// is showing, hollow (ring only) once it's hidden -- see
+// HEB/GRK/LXX's own two extra labels, TRL and ENG (see chipModeParts): at full
+// strength while that line is showing, faded once it's hidden -- see
 // .chip-mode-part.selected in styles.css.
 function syncChipModePartSelection(panelState) {
   const hiddenParts = panelState.originalLanguageHiddenParts ?? [];
@@ -8382,7 +8383,7 @@ function syncChipModePartSelection(panelState) {
 // Opened by a real translation or HEB/GRK chip's own "..." button (see
 // renderTranslationChipList -- STR/TSK/NOTE's own button is disabled
 // outright, so this is never reached for them). Syncs the B/I/U buttons' own
-// selected look and the color circle/palette check mark to whichever of
+// selected look and the color icon's bar/palette check mark to whichever of
 // those this translation already has on, since the popup is a shared
 // singleton reused across every chip. The palette grid always starts shut.
 // chipModeParts is shown only for HEB/GRK -- set before positioning below,
@@ -8508,7 +8509,7 @@ function applyChipModeColor(color) {
   applyChipModeChange();
 }
 
-// One of HEB/GRK's own pronunciation/gloss dots (see
+// One of HEB/GRK's own pronunciation/gloss labels (see
 // toggleOriginalLanguagePart) -- leaves the popup open, same as the B
 // button and swatches above. No TSK refresh needed: its cross-reference
 // list never shows HEB/GRK at all (see embeddedDefaultTranslations).
@@ -13220,7 +13221,7 @@ highlightColorPopup.addEventListener("mousedown", (event) => {
   if (event.target === highlightColorPopup) event.preventDefault();
 });
 highlightManageRemoveButton.addEventListener("click", removeHighlight);
-// The color circle opens/shuts the palette grid under the popup; a cell in
+// The color icon opens/shuts the palette grid under the popup; a cell in
 // the grid is the actual pick.
 highlightManageSwatch.addEventListener("click", () => {
   if (highlightManageTarget) setHighlightColorGridOpen(highlightColorPopup.hidden);
@@ -13270,7 +13271,7 @@ chipColorPopup.addEventListener("mousedown", (event) => {
 for (const button of chipModeStyleButtons) {
   button.addEventListener("click", () => toggleChipModeStyle(button.dataset.style));
 }
-// The color circle opens/shuts the palette grid under the popup; a cell in
+// The color icon opens/shuts the palette grid under the popup; a cell in
 // the grid is the actual pick.
 chipModeColorButton.addEventListener("click", () => {
   if (chipModeTarget) setChipColorGridOpen(chipColorPopup.hidden);

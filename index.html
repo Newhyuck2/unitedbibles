@@ -23,7 +23,7 @@
     <meta name="twitter:title" content="United Bibles" />
     <meta name="twitter:description" content="A compact multi-panel Bible reader" />
     <meta name="twitter:image" content="https://unitedbibles.org/icons/icon-512.png" />
-    <meta name="asset-version" content="20261001-43" />
+    <meta name="asset-version" content="20261001-44" />
     <meta name="theme-color" content="#284f43" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" /> 
@@ -32,7 +32,7 @@
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" type="image/png" href="./icons/icon-192.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="./icons/icon-180.png" />
-    <link rel="stylesheet" href="./styles.css?v=20261001-43" />
+    <link rel="stylesheet" href="./styles.css?v=20261001-44" />
     <!-- Applies the saved theme before first paint so a dark-theme visitor
          never sees a light-theme flash while app.js's module script (and
          its manifest.json fetch) is still loading. Reads the same
@@ -1633,20 +1633,23 @@
       <button type="button" class="chip-mode-style chip-mode-bold" id="chip-mode-bold" data-style="bold" aria-label="Bold" aria-pressed="false">B</button>
       <button type="button" class="chip-mode-style chip-mode-italic" id="chip-mode-italic" data-style="italic" aria-label="Italic" aria-pressed="false">I</button>
       <button type="button" class="chip-mode-style chip-mode-underline" id="chip-mode-underline" data-style="underline" aria-label="Underline" aria-pressed="false">U</button>
-      <!-- One circle painted in the translation's current text color; it
-           opens the palette grid (#chip-color-popup) right below this popup. -->
+      <!-- The text-color icon (the same look as Google Docs'): an "A" with a
+           thin bar under it painted in the translation's current text color
+           (.chip-mode-swatch); it opens the palette grid (#chip-color-popup)
+           right below this popup. -->
       <button type="button" class="chip-mode-color" id="chip-mode-color" aria-label="Text color" aria-haspopup="menu" aria-expanded="false" aria-controls="chip-color-popup">
+        <svg class="chip-mode-color-a" viewBox="0 0 16 14" aria-hidden="true">
+          <path d="M2.2 12.6 8 1.4l5.8 11.2M4.6 8.6h6.8"></path>
+        </svg>
         <span class="chip-mode-swatch"></span>
       </button>
-      <!-- HEB/GRK only (see showChipModePopup): show/hide the interlinear
-           row's own pronunciation and English gloss lines. -->
+      <!-- HEB/GRK/LXX only (see showChipModePopup): show/hide the interlinear
+           row's own pronunciation (TRL) and English gloss (ENG) lines -- each
+           label in the color of the line it controls, faded while that line
+           is hidden. -->
       <span class="chip-mode-parts" id="chip-mode-parts" hidden>
-        <button type="button" class="chip-mode-part chip-mode-part--translit" data-part="translit" title="Transliteration" aria-label="Transliteration" aria-pressed="true">
-          <span class="chip-mode-part-dot"></span>
-        </button>
-        <button type="button" class="chip-mode-part chip-mode-part--gloss" data-part="gloss" title="English meaning" aria-label="English meaning" aria-pressed="true">
-          <span class="chip-mode-part-dot"></span>
-        </button>
+        <button type="button" class="chip-mode-part chip-mode-part--translit" data-part="translit" title="Transliteration" aria-label="Transliteration" aria-pressed="true">TRL</button>
+        <button type="button" class="chip-mode-part chip-mode-part--gloss" data-part="gloss" title="English meaning" aria-label="English meaning" aria-pressed="true">ENG</button>
       </span>
     </div>
 
@@ -1670,6 +1673,6 @@
     </div>
 
     <noscript>JavaScript is required to display the Bible text.</noscript>
-    <script type="module" src="./app.js?v=20261001-43"></script>
+    <script type="module" src="./app.js?v=20261001-44"></script>
   </body>
 </html>

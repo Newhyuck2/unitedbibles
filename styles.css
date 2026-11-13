@@ -8386,10 +8386,10 @@ body * {
 }
 
 /* The highlight's own color (set inline by syncHighlightManageColor) -- the
-   button that opens its palette. Same 18px circle as .chip-mode-swatch, with
-   the same neutral 26px halo behind it on hover and while the palette is open
-   (.chip-mode-color's own fill), drawn as a spread shadow since the circle is
-   the button itself here. */
+   button that opens its palette: an 18px circle, with a neutral 26px halo
+   behind it on hover and while the palette is open, drawn as a spread shadow
+   since the circle is the button itself here. (.chip-mode-popup's own
+   text-color control is the "A over a bar" icon below instead.) */
 .highlight-manage-swatch {
   width: 18px;
   height: 18px;
@@ -8511,25 +8511,33 @@ body * {
   text-underline-offset: 2px;
 }
 
-/* The popup's single text-color circle (see syncChipModeColorSelection and
-   setChipColorGridOpen in app.js) -- a 26px button around an 18px swatch (the
-   highlight popup's color circle, .highlight-manage-swatch above, is the same
-   18px circle with the same halo). The swatch paints the
+/* The popup's text-color icon (see syncChipModeColorSelection and
+   setChipColorGridOpen in app.js): an "A" over a thin bar -- the look of
+   Google Docs' own text-color button -- in the same 26px rounded square as
+   the B/I/U toggles beside it. The bar (.chip-mode-swatch) paints the
    translation's current text color (--chip-mode-color, set per chip; the
    theme's own ink while none is picked), lifted the same way the text
-   itself is in the dark theme (--chip-mode-color-dark). Pressing it opens
-   the palette grid below the popup. Which color is applied is told by the
+   itself is in the dark theme (--chip-mode-color-dark); a faint outline keeps
+   a pale color visible against the popup. Pressing the button opens the
+   palette grid below the popup. Which color is applied is told by the
    grid's check mark, not by a state on this button, so the only state it
-   takes is a neutral fill while that grid is open. */
+   takes is a neutral fill while that grid is open. (The highlight popup's own
+   color circle, .highlight-manage-swatch above, is a different control and
+   stays a circle.) */
 .chip-mode-color {
-  display: grid;
-  place-items: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
   width: 26px;
   height: 26px;
   padding: 0;
   border: 0;
-  border-radius: 50%;
+  border-radius: 6px;
   background: none;
+  /* The "A"'s own ink: the resting color of the B/I/U letters beside it. */
+  color: var(--muted);
 }
 
 .chip-mode-color:hover,
@@ -8537,17 +8545,28 @@ body * {
   background: var(--hover-bg-strong);
 }
 
+.chip-mode-color-a {
+  display: block;
+  width: 16px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 .chip-mode-swatch {
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  border: 1px solid rgba(37, 35, 31, 0.18);
+  width: 16px;
+  height: 4px;
+  border-radius: 1px;
   background: var(--chip-mode-color, var(--ink));
+  box-shadow: 0 0 0 1px rgba(37, 35, 31, 0.16);
 }
 
 [data-theme="dark"] .chip-mode-swatch {
-  border-color: rgba(236, 231, 221, 0.3);
   background: var(--chip-mode-color-dark, var(--ink));
+  box-shadow: 0 0 0 1px rgba(236, 231, 221, 0.3);
 }
 
 /* The text-color palette (TEXT_COLOR_PALETTE in app.js): a second floating
@@ -8639,45 +8658,41 @@ body * {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2325231f' stroke-width='3.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5'/%3E%3C/svg%3E");
 }
 
-/* HEB/GRK only (see showChipModePopup in app.js): one show/hide toggle
+/* HEB/GRK/LXX only (see showChipModePopup in app.js): one show/hide toggle
    each for the interlinear row's own pronunciation and English gloss
-   lines (see toggleOriginalLanguagePart), right after the color circle
-   above. A bit smaller than it so they read as a separate, lighter
-   control rather than a second text-color pick, and painted in the
-   exact same token as the line each one hides (.interlinear-translit/
-   .interlinear-gloss), in either theme. Filled (.selected) while that
-   line is showing; ring only once it's hidden -- the border is there in
-   both states so the dot's own size never shifts between them. */
+   lines (see toggleOriginalLanguagePart), right after the text-color icon
+   above -- a short text label, TRL and ENG, painted in the exact same token
+   as the line each one hides (.interlinear-translit/.interlinear-gloss), in
+   either theme. At full strength (.selected) while that line is showing;
+   faded, the way a version's chip in the panel header fades when it is
+   hidden, once it isn't. */
 .chip-mode-parts {
   display: flex;
   align-items: center;
+  gap: 2px;
 }
 
 .chip-mode-part {
   display: grid;
   place-items: center;
-  width: 22px;
-  height: 22px;
-  padding: 0;
+  height: 26px;
+  padding: 0 5px;
   border: 0;
-  border-radius: 50%;
+  border-radius: 6px;
   background: none;
+  color: var(--chip-mode-part-color);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  line-height: 1;
 }
 
 .chip-mode-part:hover {
   background: var(--hover-bg-strong);
 }
 
-.chip-mode-part-dot {
-  width: 14px;
-  height: 14px;
-  border: 2px solid var(--chip-mode-part-color);
-  border-radius: 50%;
-  background: transparent;
-}
-
-.chip-mode-part.selected .chip-mode-part-dot {
-  background: var(--chip-mode-part-color);
+.chip-mode-part:not(.selected) {
+  opacity: 0.4;
 }
 
 .chip-mode-part--translit {
