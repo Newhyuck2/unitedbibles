@@ -6027,25 +6027,20 @@ function buildTranslationLinesInto(pane, panelState, verseNumber, texts, list, b
       if (tokens?.length) {
         line.append(buildInterlinearWordRow(tokens, translationLanguage(translation), (wordEl, word) => {
           selectInterlinearWord(panelState, verseNumber, wordEl, word);
-          // Live: if STR is enabled here (even dimmed, showing plain text
-          // instead) it switches to and shows this word immediately,
-          // without waiting for the word-actions bar's own dictionary
-          // button -- same as clicking the STR chip itself would, just
-          // triggered by the word instead. Any linked panel with STR
-          // enabled (see linkGroupPartners) gets the exact same treatment,
-          // since it's always showing this same verse too (see goToPassage's
-          // own group fan-out) -- reading a word in one shows it in every
-          // linked STR pane at once.
+          // Live: STR, here or in any linked panel that has it enabled (see
+          // linkGroupPartners -- they're always on this same verse too, see
+          // goToPassage's own group fan-out), takes this word as the one it
+          // shows, without waiting for the word-actions bar's own dictionary
+          // button. Clicking a word doesn't switch a panel over to STR,
+          // though -- only its chip does that. A panel already showing STR
+          // follows at once; one that isn't holds the word for its chip's
+          // next click (see pendingStrWord in renderPanelBody), since an STR
+          // pane that isn't on screen can't render an entry.
+          const clicked = { verse: verseNumber, ...word };
           for (const target of [panelState, ...linkGroupPartners(panelState)]) {
             if (!target.enabledTranslations.includes("STR")) continue;
-            if (target.activeStudyTool !== "STR") toggleTranslationChip(target, "STR");
-            getStudyToolInstance(target, "STR").showWord({ verse: verseNumber, ...word });
-            saveState();
-            renderPanelBody(target);
-            // A chip list long enough to overflow can have STR scrolled
-            // out of sight, same as a freshly-added chip -- bring it back
-            // into view now that it's the one actually showing.
-            panelElements.get(target.id)?.translationControl.revealChip("STR");
+            if (target.activeStudyTool === "STR") getStudyToolInstance(target, "STR").showWord(clicked);
+            else target.pendingStrWord = clicked;
           }
         }, ([original, , , strongs]) => (
           panelState.selectedWord?.verse === verseNumber
@@ -6291,6 +6286,9 @@ function getStudyToolInstance(panelState, toolId) {
 // cached instance along with it, instead of leaking a live one forever
 // with nothing left that could ever reactivate it.
 function pruneStudyToolInstances(panelState) {
+  // A word held for the STR chip's next click (see pendingStrWord) goes with
+  // the chip: nothing is left to hand it to.
+  if (!panelState.enabledTranslations.includes("STR")) panelState.pendingStrWord = null;
   const cache = panelState.studyToolInstances;
   if (!cache) return;
   for (const toolId of Object.keys(cache)) {
@@ -7148,10 +7146,12 @@ function renderPanelBody(panelState) {
     if (panelState.activeStudyTool === "TSK") {
       instance.goToVerse(panelState.book, panelState.chapter, panelState.verse);
     } else if (panelState.activeStudyTool === "STR" && panelState.pendingStrWord) {
-      // See addPanel's own comment -- a freshly inherited STR entry that
-      // clearWordLookup already erased from selectedWord before this
-      // instance was ever created, caught up here the first (and only;
-      // cleared right after) time it actually exists to receive it.
+      // The word last clicked in this panel's (or a linked panel's) text
+      // while STR wasn't on screen -- an STR pane that isn't mounted can't
+      // render an entry, so it was held (see the interlinear word click in
+      // buildTranslationLinesInto) for this, the first moment STR shows
+      // again (cleared right after). Also catches an instance that doesn't
+      // exist yet up on the word, instead of its H0001 fallback.
       instance.showWord(panelState.pendingStrWord);
       panelState.pendingStrWord = null;
     }
@@ -7243,23 +7243,17 @@ function renderPanelBody(panelState) {
       group.addEventListener("click", () => {
         selectVerse(panelState, verseNumber);
         // Live: if TSK is enabled here (even dimmed, showing plain text
-        // instead) it switches to and shows this verse's cross references
-        // immediately, without waiting for the verse-actions bar's own
-        // cross-references button -- same as clicking the TSK chip itself
-        // would, just triggered by the verse instead. Any linked panel
-        // with TSK enabled (see linkGroupPartners) gets the exact same
-        // treatment: activated here, before the one goToPassage call
-        // below, whose own group fan-out (and its own "TSK always
-        // follows" branch) is what actually carries this verse -- and the
-        // switch to showing it -- to each of them.
+        // instead) or in a linked panel (see linkGroupPartners), it takes
+        // this verse as the one whose cross references it shows, without
+        // waiting for the verse-actions bar's own cross-references button.
+        // TSK always mirrors the verse its panel is on (see renderPanelBody),
+        // so that's what the goToPassage call below sets -- and its own
+        // group fan-out (with its "TSK always follows" branch) carries the
+        // verse to every linked panel, a panel already showing TSK following
+        // at once. Clicking a verse doesn't switch a panel over to TSK,
+        // though -- only its chip does that, and shows this verse then.
         const targets = [panelState, ...linkGroupPartners(panelState)];
-        let anyTsk = false;
-        for (const target of targets) {
-          if (!target.enabledTranslations.includes("TSK")) continue;
-          anyTsk = true;
-          if (target.activeStudyTool !== "TSK") toggleTranslationChip(target, "TSK");
-        }
-        if (!anyTsk) return;
+        if (!targets.some((target) => target.enabledTranslations.includes("TSK"))) return;
         // Clicking a verse just to notify a linked TSK partner isn't a real
         // navigation for THIS panel -- the reader is already looking at
         // this verse (that's how they clicked it, and selectVerse above has
@@ -7281,14 +7275,6 @@ function renderPanelBody(panelState) {
           { book: panelState.book, chapter: panelState.chapter, verse: verseNumber },
           { record: true, scrollToTop: false },
         );
-        for (const target of targets) {
-          if (target.activeStudyTool !== "TSK") continue;
-          renderPanelBody(target);
-          // A chip list long enough to overflow can have TSK scrolled out
-          // of sight, same as a freshly-added chip -- bring it back into
-          // view now that it's the one actually showing.
-          panelElements.get(target.id)?.translationControl.revealChip("TSK");
-        }
       });
 
       buildTranslationLinesInto(
