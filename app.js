@@ -1471,10 +1471,6 @@ function updatePanelCountControls() {
   panelCountTwoButton.classList.toggle("selected", twoSelected);
   panelCountOneButton.setAttribute("aria-pressed", String(oneSelected));
   panelCountTwoButton.setAttribute("aria-pressed", String(twoSelected));
-  // The selector shows the count the layout is on, so it follows the two icons
-  // however the layout changed -- including "1", which is the single-panel
-  // icon's own preset (see fitCountSelectorValue).
-  panelFitCountCombo?.setValue(fitCountSelectorValue());
   // Both the reading-mode and link-mode icons (see the "..." popup menu)
   // always show now, but link mode still only ever makes sense once a
   // second panel exists to link with (see updateLinkModeControls) --
@@ -1486,19 +1482,6 @@ function updatePanelCountControls() {
     updateReadingModeControls(panelState);
     updateLinkModeControls(panelState);
   }
-}
-
-// The fit-count selector's own handle (see setupCombobox's call in init) --
-// null until the page has started, which updatePanelCountControls guards.
-let panelFitCountCombo = null;
-
-// What the selector shows: the count the layout is on right now -- 1 while the
-// single-panel preset is active, otherwise the split that is -- and, with no
-// preset active (widths dragged by hand), the split last chosen, which is what
-// the fit icon would go back to (see panelFitCount).
-function fitCountSelectorValue() {
-  if (desktopLikePanels()) return state.desktopPanelMode || state.panelFitCount;
-  return coarsePointer.matches && state.touchPanelCount === 1 ? 1 : state.panelFitCount;
 }
 
 // Below this, the header's own history/selector/remove-button row (see
@@ -13082,28 +13065,24 @@ async function init() {
     setupNoteRangeControls();
     // Same combobox as every book/chapter/verse selector (see
     // setupCombobox) -- picking a number here is immediate, exactly like
-    // picking a verse navigates immediately. 1 is the single-panel preset
-    // itself, so it does what the single-panel icon does, which is also what
-    // lights that icon up; 2 up to MAX_PANEL_FIT_COUNT updates panelFitCount
-    // and (on desktop) activates the fit-count preset with it right away,
-    // which turns the adjacent "fit" button green (see
-    // updatePanelCountControls's own twoSelected check). A split whose panels
-    // would come out narrower than MIN_PANEL_WIDTH can't be had on this
+    // picking a verse navigates immediately: it lists 2 up to
+    // MAX_PANEL_FIT_COUNT (one panel is the single-panel icon's own preset,
+    // not a split), updates panelFitCount and (on desktop) activates the
+    // fit-count preset with it right away, which turns the adjacent "fit"
+    // button green (see updatePanelCountControls's own twoSelected check).
+    // The selector keeps showing the split last chosen, whichever of the two
+    // icons is lit -- it is what the fit icon goes back to. A split whose
+    // panels would come out narrower than MIN_PANEL_WIDTH can't be had on this
     // window (applyDesktopPanelWidths would drop it again at once), so its
     // cell is shown faded and can't be picked.
-    panelFitCountCombo = setupCombobox({
+    setupCombobox({
       input: panelFitCountInput,
       menu: panelFitCountMenu,
-      items: Array.from({ length: MAX_PANEL_FIT_COUNT }, (_, index) => ({ value: index + 1, label: String(index + 1) })),
-      selectedValue: fitCountSelectorValue(),
+      items: Array.from({ length: MAX_PANEL_FIT_COUNT - 1 }, (_, index) => ({ value: index + 2, label: String(index + 2) })),
+      selectedValue: state.panelFitCount,
       matches: (item, query) => !query.trim() || item.label.startsWith(query.trim()),
-      isDisabled: (item) => item.value > 1 && exactPanelFitWidth(item.value) < MIN_PANEL_WIDTH,
+      isDisabled: (item) => exactPanelFitWidth(item.value) < MIN_PANEL_WIDTH,
       onSelect: (n) => {
-        if (n === 1) {
-          if (desktopLikePanels()) setDesktopPanelMode(1);
-          else setTouchPanelCount(1);
-          return;
-        }
         state.panelFitCount = n;
         // Off the desktop layouts (a narrow mouse window; a phone held upright
         // shows no such control) two is the only split there is.

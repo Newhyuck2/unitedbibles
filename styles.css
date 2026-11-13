@@ -6071,7 +6071,7 @@ body * {
    anchored to .combo's own position: relative (the same base every other
    combo already falls back to outside a dialog), puts it directly under
    and flush with the input instead, reliably regardless of viewport size.
-   One column of square cells, 1 at the top down to the most splits there
+   One column of square cells, 2 at the top down to the most splits there
    are (see MAX_PANEL_FIT_COUNT in app.js). */
 .panel-fit-count-combo .combo-menu {
   position: absolute !important;
