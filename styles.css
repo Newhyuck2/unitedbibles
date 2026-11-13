@@ -8517,13 +8517,15 @@ body * {
    the B/I/U toggles beside it. The bar (.chip-mode-swatch) paints the
    translation's current text color (--chip-mode-color, set per chip; the
    theme's own ink while none is picked), lifted the same way the text
-   itself is in the dark theme (--chip-mode-color-dark); a faint outline keeps
-   a pale color visible against the popup. Pressing the button opens the
-   palette grid below the popup. Which color is applied is told by the
-   grid's check mark, not by a state on this button, so the only state it
-   takes is a neutral fill while that grid is open. (The highlight popup's own
-   color circle, .highlight-manage-swatch above, is a different control and
-   stays a circle.) */
+   itself is in the dark theme (--chip-mode-color-dark) -- a plain bar, no
+   border or outline of any kind. The "A" is drawn the size of the letters of
+   the B/I/U toggles beside it (the U's letter, rule aside, is 10.75px tall):
+   its ink is about 10.4 x 10.75px. Pressing the button opens the palette
+   grid below the popup. Which color is applied is told by the grid's check
+   mark, not by a state on this button, so the only state it takes is a
+   neutral fill while that grid is open. (The highlight popup's own color
+   circle, .highlight-manage-swatch above, is a different control and stays a
+   circle.) */
 .chip-mode-color {
   display: flex;
   flex-direction: column;
@@ -8547,11 +8549,11 @@ body * {
 
 .chip-mode-color-a {
   display: block;
-  width: 16px;
-  height: 14px;
+  width: 12px;
+  height: 11px;
   fill: none;
   stroke: currentColor;
-  stroke-width: 1.9;
+  stroke-width: 1.6;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
@@ -8559,14 +8561,14 @@ body * {
 .chip-mode-swatch {
   width: 16px;
   height: 4px;
+  border: 0;
   border-radius: 1px;
   background: var(--chip-mode-color, var(--ink));
-  box-shadow: 0 0 0 1px rgba(37, 35, 31, 0.16);
+  box-shadow: none;
 }
 
 [data-theme="dark"] .chip-mode-swatch {
   background: var(--chip-mode-color-dark, var(--ink));
-  box-shadow: 0 0 0 1px rgba(236, 231, 221, 0.3);
 }
 
 /* The text-color palette (TEXT_COLOR_PALETTE in app.js): a second floating
