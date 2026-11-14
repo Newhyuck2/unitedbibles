@@ -4125,8 +4125,14 @@ function setupPanelSwipe(panel) {
   // own chip row overflows and needs the same horizontal drag to scroll
   // (or, starting on a chip's .drag-handle, to reorder it) instead of that
   // touch being stolen for a panel swipe before either can ever see it.
+  // The drag scrollbar that stands in for that row's own scrolling on a phone
+  // (.translation-list-scrollbar) and the invisible strip under it that drags
+  // the same bar (.translation-list-scrollbar-reach, see
+  // setupHorizontalDragScrollbar) are left out for the same reason: neither is
+  // inside .translation-list, and a horizontal drag on them moves that row's
+  // chips only, never the panel track.
   const shouldIgnoreSwipeStart = (target) => (
-    target.closest("button:not(.panel-move-overlay), input, textarea, select, .combo-menu, .panel-resize-handle, .translation-list")
+    target.closest("button:not(.panel-move-overlay), input, textarea, select, .combo-menu, .panel-resize-handle, .translation-list, .translation-list-scrollbar, .translation-list-scrollbar-reach")
   );
 
   panel.addEventListener("click", (event) => {
