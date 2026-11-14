@@ -2547,8 +2547,9 @@ const horizontalScrollbarSyncs = new WeakMap();
 // *horizontal* row of chips needs a horizontal drag too. `track` is the
 // full-width drag surface (not just `thumb`): a whole track is a much
 // easier target for a fingertip than a thumb that can narrow to a sliver
-// once there are many chips, and dragging anywhere on it jumps the scroll
-// position to directly under the finger, matching a typical mobile slider.
+// once there are many chips. A press anywhere on it holds the bar right where
+// it is -- nothing jumps to the finger -- and the thumb then travels exactly as
+// far as the finger does from the spot it pressed (see startDrag below).
 // `reach` is a second, invisible drag surface: a strip running on from the
 // bar's bottom edge down into the verse text below it, over the same
 // horizontal span (see .translation-list-scrollbar-reach in styles.css). The
@@ -2607,19 +2608,26 @@ function setupHorizontalDragScrollbar({ list, track, thumb, reach }) {
     // smoothly; it's restored on release so a plain swipe still snaps.
     const previousScrollSnapType = list.style.scrollSnapType;
     list.style.scrollSnapType = "none";
-    const scrollTo = (clientX) => {
-      const rect = track.getBoundingClientRect();
-      const thumbWidth = thumb.offsetWidth;
-      const maxThumbLeft = Math.max(1, rect.width - thumbWidth);
-      const x = Math.min(Math.max(clientX - rect.left - thumbWidth / 2, 0), maxThumbLeft);
-      const maxScrollLeft = list.scrollWidth - list.clientWidth;
-      list.scrollLeft = maxScrollLeft * (x / maxThumbLeft);
+    // The press itself moves nothing -- wherever it lands on the bar (or the
+    // strip under it) it only grabs the thumb where it is. The finger's spot and
+    // the row's scroll position right now are the origin for every later move,
+    // so the thumb ends up exactly as far from where it was as the finger is
+    // from where it pressed. The row clamps scrollLeft at its two ends while
+    // that distance keeps counting: a finger that runs on past an end has to
+    // come back that far before the thumb follows it again, as a native
+    // scrollbar's thumb does.
+    const startX = event.clientX;
+    const startScrollLeft = list.scrollLeft;
+    const dragTo = (clientX) => {
+      const maxScrollLeft = Math.max(0, list.scrollWidth - list.clientWidth);
+      // The same two widths sync() above lays the thumb out with.
+      const maxThumbLeft = Math.max(1, track.clientWidth - thumb.offsetWidth);
+      list.scrollLeft = startScrollLeft + (clientX - startX) * (maxScrollLeft / maxThumbLeft);
     };
-    scrollTo(event.clientX);
     const move = (moveEvent) => {
       if (moveEvent.pointerId !== pointerId) return;
       moveEvent.preventDefault();
-      scrollTo(moveEvent.clientX);
+      dragTo(moveEvent.clientX);
     };
     const finish = (finishEvent) => {
       if (finishEvent.pointerId !== pointerId) return;
