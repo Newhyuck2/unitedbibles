@@ -23,7 +23,7 @@
     <meta name="twitter:title" content="United Bibles" />
     <meta name="twitter:description" content="A compact multi-panel Bible reader" />
     <meta name="twitter:image" content="https://unitedbibles.org/icons/icon-512.png" />
-    <meta name="asset-version" content="20261001-56" />
+    <meta name="asset-version" content="20261001-57" />
     <meta name="theme-color" content="#284f43" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" /> 
@@ -32,7 +32,7 @@
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" type="image/png" href="./icons/icon-192.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="./icons/icon-180.png" />
-    <link rel="stylesheet" href="./styles.css?v=20261001-56" />
+    <link rel="stylesheet" href="./styles.css?v=20261001-57" />
     <!-- Applies the saved theme before first paint so a dark-theme visitor
          never sees a light-theme flash while app.js's module script (and
          its manifest.json fetch) is still loading. Reads the same
@@ -836,7 +836,12 @@
           </div>
         </div>
 
-        <div class="tsk-verse-text" id="tsk-verse-text"></div>
+        <!-- The verse text (KJV, then 개역개정) and, right under it, the fold bar
+             that hides it (added by setupTskControls): together one row of the
+             shell's grid. -->
+        <div class="tsk-verse-section" id="tsk-verse-section">
+          <div class="tsk-verse-text" id="tsk-verse-text"></div>
+        </div>
 
         <div class="lookup-body" id="tsk-dialog-body"></div>
       </div>
@@ -1698,6 +1703,6 @@
     </div>
 
     <noscript>JavaScript is required to display the Bible text.</noscript>
-    <script type="module" src="./app.js?v=20261001-56"></script>
+    <script type="module" src="./app.js?v=20261001-57"></script>
   </body>
 </html>

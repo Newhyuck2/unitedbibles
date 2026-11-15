@@ -44,10 +44,7 @@
   --toolbar-icon-gap: 4px;
   /* The gap between the controls of a Strong's nav row (the dialog's
      .strongs-nav, a panel's .panel-strongs-selectors) -- e.g. the
-     transliteration field to the search button -- and so also between Bible
-     Hub and the fold toggle in the Original Word row right below it
-     (.lookup-original-word-tools), which are meant to read at the same
-     spacing as the controls above them. */
+     transliteration field to the search button. */
   --strongs-nav-gap: 4px;
   --shadow: 0 18px 45px rgba(55, 45, 30, 0.1);
   --radius: 16px;
@@ -2613,12 +2610,17 @@ mark {
   flex-wrap: nowrap;
   align-items: center;
   gap: var(--strongs-nav-gap);
-  /* Matches .panel-header's own padding-top (the gap from the panel's own
-     top border down to .panel-selectors, the book/chapter/verse row) --
-     this row is this dialog's own de facto top bar, so the gap down to
-     Bible Hub below it (in the Original Word row) reads the same as that
-     other row-to-top-bar gap instead of some other distance of its own. */
-  margin-bottom: 9px;
+  /* This row is this dialog's own de facto top bar. The gap down to the
+     Original Word row below it (Bible Hub at its right) is this margin plus
+     the 6px of headroom .word-dictionary-fields keeps above its first row:
+     9px in all, which is .panel-header's own padding-top (the gap from a
+     panel's top border down to its first row) and what a panel's STR pane
+     leaves under its top bar (see .study-tool-pane .word-dictionary-shell).
+     It was 9px of margin, 15px in all, which left that row sitting low. Only
+     the margin gave: the headroom stays because the body's top edge is where
+     tall Hebrew and Greek diacritics get clipped (see
+     .word-dictionary-fields), and that edge moves up with this margin. */
+  margin-bottom: 3px;
 }
 
 .strongs-nav-arrow {
@@ -2902,7 +2904,7 @@ mark {
 }
 
 /* Same auto/1fr split as .lookup-shell's own grid (its two children here
-   are .word-dictionary-fields and .word-concordance) -- this is what
+   are .word-dictionary-section and .word-concordance) -- this is what
    actually lets the concordance section grow to fill the rest of the
    dialog's height, rather than being cut off at a fixed height partway
    down. Nested flexbox flex-grow/shrink was tried here first, but a flex
@@ -2911,7 +2913,13 @@ mark {
    doesn't have that ambiguity. */
 #strongs-dialog-body {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  /* minmax(0, auto), not auto: the first row (the entry and its fold bar, see
+     .word-dictionary-section) is as tall as its content, but may shrink below
+     that. An entry taller than the dialog then scrolls inside its own box
+     (see .word-dictionary-fields) rather than running on, with the bar under
+     it, past the bottom of the body, where overflow: hidden below would clip
+     the bar away with the end of the entry. */
+  grid-template-rows: minmax(0, auto) minmax(0, 1fr);
   grid-template-columns: minmax(0, 1fr);
   min-height: 0;
   overflow: hidden;
@@ -2925,10 +2933,43 @@ mark {
    .lookup-entry's own margin-top from the field before it), the glyph's
    own ink could poke past this container's top edge and get clipped by
    .lookup-body's overflow-y: auto (modal) or the embedded pane's own
-   scroll boundary (see .study-tool-pane .word-dictionary-fields below)
+   scroll boundary (see .study-tool-pane .word-dictionary-shell below)
    right where it's most visible -- the very first thing the dialog shows. */
 .word-dictionary-fields {
   padding-top: 6px;
+  /* Scrolls (never sideways) once the entry is taller than the room the
+     section gives it, the fold bar staying in sight below -- see
+     .word-dictionary-section. The longest and commonest entries (H7725, H3027,
+     H6440: a thousand characters of KJV renderings) are taller than a phone's
+     whole panel. flex: 0 1 auto -- its own height until the section runs out of
+     room, then shrinking; min-height: 0 lets it. */
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+
+/* The Strong's views' first row (see buildStrongsSection): the entry's rows
+   (.word-dictionary-fields) and, under them, the fold bar. A column, so the bar
+   keeps its own height and stays at the foot of the section while the rows
+   above it give way. In the dialog this is the grid item itself; in a panel's
+   STR pane it sits in .word-dictionary-slot, the pane's grid item. */
+.word-dictionary-section {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.word-dictionary-slot {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.word-dictionary-slot > .word-dictionary-section {
+  flex: 0 1 auto;
 }
 
 /* Label/value side by side on one row instead of stacked, so the Strong's
@@ -2960,16 +3001,15 @@ mark {
 }
 
 /* The Original Word field's own value cell (see appendOriginalWordField):
-   Bible Hub (with the fold toggle right of it -- see
-   .lookup-original-word-tools below) sits at this row's trailing edge, beside
-   the word itself, instead of the plain .lookup-value paragraph other fields
-   use alone -- absolutely positioned (see below) so it never moves the word
-   itself or ties the row's own height to its own fixed 32px. This row's
-   height is always just the word text's own line box, exactly like every
-   other (single-line) field's row, so the *next* field always sits the
-   normal field-to-field gap below this one's own visible text, same as
-   everywhere else. See .lookup-value's own reserved padding-right below, so
-   a long word doesn't run underneath Bible Hub. */
+   Bible Hub (see .lookup-original-word-tools below) sits at this row's
+   trailing edge, beside the word itself, instead of the plain .lookup-value
+   paragraph other fields use alone -- absolutely positioned (see below) so it
+   never moves the word itself or ties the row's own height to its own fixed
+   32px. This row's height is always just the word text's own line box,
+   exactly like every other (single-line) field's row, so the *next* field
+   always sits the normal field-to-field gap below this one's own visible
+   text, same as everywhere else. See .lookup-value's own reserved
+   padding-right below, so a long word doesn't run underneath Bible Hub. */
 .lookup-original-word-row {
   position: relative;
   display: flex;
@@ -2978,65 +3018,101 @@ mark {
   gap: 10px;
 }
 
-/* Bible Hub and, to its right, the fold toggle (see buildStrongsFieldsToggle
-   in app.js) travel as one group at the row's trailing edge -- positioned
-   as a group, for the same reason Bible Hub alone used to be absolute (see
-   the comment above). The toggle's own chrome is .dialog-history-arrow's
-   (32px, same height as Bible Hub). The group is anchored by its right edge
-   and the toggle is its last item, so the toggle sits at one fixed spot --
-   flush with the search button of the nav row above it -- whatever else
-   changes: the gap below (or Bible Hub being hidden for a word with no
-   entry) only moves Bible Hub. The gap between the two is the nav row's own
-   (--strongs-nav-gap: the same spacing as between the transliteration field
-   and the search button above). */
+/* Bible Hub, anchored by its right edge: flush with the search button of the
+   nav row above it, in the spot the fold chevron used to take at this row's
+   end (that control now lives in the fold bar under the entry -- see
+   .fold-bar below). Hidden for a word with no entry, which leaves the row
+   to the word alone. */
 .lookup-original-word-tools {
   position: absolute;
   top: 0;
   right: 0;
   display: flex;
   align-items: center;
-  gap: var(--strongs-nav-gap);
 }
 
-/* The toggle's chevron takes the accent green (--accent: the add-panel
-   button's own dark green on the light theme, the lighter mint the other
-   accent icons use on the dark one, where that dark green would vanish into
-   the button). The compound selector keeps this ahead of .dialog-history-
-   arrow's own ink color, which sits later in the file. */
-.dialog-history-arrow.lookup-fields-toggle {
+/* Room for Bible Hub (about 88px), with a little to spare. */
+.lookup-original-word-row .lookup-value {
+  padding-right: 98px;
+}
+
+/* The fold bar (see buildFoldBar in app.js): a hairline across the full width
+   with one button in the middle of it, closing a block that can be folded
+   away -- the Strong's entry in the Strong's views, the KJV and 개역개정 verse
+   text in the TSK ones. The button is the panel-move edge handle (.panel-move,
+   which shows at a panel's sides while panels are being reordered) laid on its
+   side: the same rounded plate, border, shadow, blur and green ink, 72px wide
+   by 24px high instead of 24 by 72, with a chevron where that has its
+   triangle -- up while the block shows (press to fold it), down once it is
+   folded (press to bring it back). It takes the handle's fully shown look
+   (its hover state's 0.92 plate). The chevron's ink is --accent, the green
+   the old fold chevron had: the add-panel button's own dark green on the
+   light theme, the lighter mint the other accent icons use on the dark one,
+   where that dark green would vanish into the plate. The line is two halves,
+   one each side of the button, rather than one line behind it, so nothing
+   shows through the plate. */
+.fold-bar {
+  display: flex;
+  align-items: center;
+}
+
+.fold-bar::before,
+.fold-bar::after {
+  content: "";
+  flex: 1 1 0;
+  height: 1px;
+  background: var(--line);
+}
+
+.fold-bar-button {
+  flex: 0 0 auto;
+  display: grid;
+  width: 72px;
+  height: 24px;
+  padding: 0;
+  place-items: center;
+  border: 1px solid rgba(40, 79, 67, 0.2);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 4px 12px rgba(37, 35, 31, 0.08);
+  backdrop-filter: blur(3px);
   color: var(--accent);
 }
 
-/* Room for the group above: Bible Hub (about 88px), the 4px gap and the 32px
-   toggle, with a little to spare. */
-.lookup-original-word-row .lookup-value {
-  padding-right: 134px;
+[data-theme="dark"] .fold-bar-button {
+  background: rgba(42, 38, 34, 0.92);
 }
 
-/* Folded: nothing of the entry stays but the trailing group -- Bible Hub and
-   the toggle that brings the rest back. Every other field (and the note that
-   can follow them) goes, and so do the Original Word row's own label and
-   word, so the concordance below moves up into the room. The group stays
-   where it was, at the row's right edge: the row is the whole width once its
-   label is gone (hence the single-column grid), and is held to the toggle's
-   own 32px height meanwhile -- the group is absolutely positioned, so with
-   nothing else in the row nothing would keep it tall enough to contain it,
-   and it would run into the concordance below. */
-.word-dictionary-fields--collapsed > :not(.lookup-original-word-entry) {
+/* 20px (a 10px-wide chevron): the old toggle's 16px read as small on a plate
+   this wide, beside the handle's bold triangle. */
+.fold-bar-button svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+
+/* In the Strong's views the bar closes the entry: 8px under its last row (the
+   field-to-field gap). Folded, nothing of the entry stays but the bar -- every
+   field and the note that can follow them go, the Original Word row (and
+   Bible Hub in it) included -- so the bar is the first thing in the section,
+   6px down: where the Original Word row's top sits, under .word-dictionary-
+   fields' headroom, while the entry shows. The concordance below moves up into
+   the room. */
+.word-dictionary-section > .fold-bar {
+  flex: 0 0 auto;
+  margin-top: 8px;
+}
+
+.word-dictionary-section--collapsed > .word-dictionary-fields {
   display: none;
 }
 
-.word-dictionary-fields--collapsed .lookup-original-word-entry {
-  grid-template-columns: minmax(0, 1fr);
-}
-
-.word-dictionary-fields--collapsed .lookup-original-word-entry .lookup-label,
-.word-dictionary-fields--collapsed .lookup-original-word-row .lookup-value {
-  display: none;
-}
-
-.word-dictionary-fields--collapsed .lookup-original-word-row {
-  min-height: 32px;
+.word-dictionary-section--collapsed > .fold-bar {
+  margin-top: 6px;
 }
 
 /* .lookup-entry's own align-items: baseline (base rule) works fine for
@@ -3113,7 +3189,10 @@ mark {
    book/chapter/verse selectors, the translation picker, the verse text)
    before the cross-reference list gets the remaining, scrollable space. */
 .tsk-dialog-shell {
-  grid-template-rows: auto auto auto auto minmax(0, 1fr);
+  /* The verse section (4th row, see .tsk-verse-section) is minmax(0, auto) so
+     verse text taller than the room left scrolls in its own box, the fold bar
+     staying in sight under it. */
+  grid-template-rows: auto auto auto minmax(0, auto) minmax(0, 1fr);
   max-height: min(760px, calc(100vh - 36px));
 }
 
@@ -3347,8 +3426,37 @@ mark {
   margin-bottom: 14px;
 }
 
-.tsk-verse-text {
+/* The verse text (KJV, then 개역개정) and the fold bar under it (see
+   appendTskVerseFoldBar) are one row of the shell's grid: the bar stands 8px
+   below the text, and the results 14px below the bar -- the gap the text
+   itself used to leave above them. Folded, the lines are gone and the bar is
+   all the section holds, so it is what stands at the top of the view. */
+.tsk-verse-section {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
   margin-bottom: 14px;
+}
+
+/* Scrolls (never sideways) when the text is taller than the room the section
+   has -- a long verse in a short window -- the fold bar staying in sight
+   under it. */
+.tsk-verse-text {
+  flex: 0 1 auto;
+  min-height: 0;
+  margin-bottom: 8px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+
+.tsk-verse-section > .fold-bar {
+  flex: 0 0 auto;
+}
+
+.tsk-verse-section--collapsed .tsk-verse-text {
+  display: none;
 }
 
 /* Compound with .translation-line so this keeps the gap between the KJV and
@@ -6848,7 +6956,18 @@ body * {
    nav row (see createEmbeddedStrongsTool), just fieldsSlot and .lookup-body,
    so the row template drops down to match. */
 .study-tool-pane .word-dictionary-shell {
-  grid-template-rows: auto minmax(0, 1fr);
+  /* minmax(0, auto) for the first row, for the reason given at
+     #strongs-dialog-body: an entry taller than the pane scrolls in its own
+     box with the fold bar in sight below it. */
+  grid-template-rows: minmax(0, auto) minmax(0, 1fr);
+  /* The shell's own 9px above (shared with the TSK pane, whose verse text is
+     its first row) plus .word-dictionary-fields' 6px of headroom put the
+     Original Word row, and Bible Hub with it, 15px under the panel's top bar,
+     which read as low. 3px here makes it 9px -- the same distance the
+     Strong's dialog leaves under its nav row (see .strongs-nav). The pane's
+     top edge, where tall diacritics would be clipped, stays 9px above that
+     row: more than the 6px of headroom alone. */
+  padding-top: 3px;
 }
 
 /* .word-concordance's own padding-top (base rule) separates it from the
@@ -6860,12 +6979,13 @@ body * {
 }
 
 /* A little more breathing room than fieldsSlot's own bare minimum leaves,
-   per explicit request -- added here (fieldsSlot's own row, sized to
-   content) rather than as margin-top on .word-concordance above, so it
-   grows that row's own auto height instead of pushing content further
-   into the fixed-height row below and reintroducing the overflow scroll
-   the margin-top: 0 above exists to avoid. */
-.study-tool-pane .word-dictionary-fields {
+   per explicit request -- under the section (the entry and its fold bar),
+   inside fieldsSlot's own row (sized to content), rather than as margin-top
+   on .word-concordance above, so it grows that row's own auto height instead
+   of pushing content further into the fixed-height row below and
+   reintroducing the overflow scroll the margin-top: 0 above exists to
+   avoid. */
+.study-tool-pane .word-dictionary-section {
   margin-bottom: 10px;
 }
 
@@ -6875,7 +6995,7 @@ body * {
    picker (see createEmbeddedTskTool), just the verse text and the results
    list, so the row template drops down to match. */
 .study-tool-pane .tsk-dialog-shell {
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: minmax(0, auto) minmax(0, 1fr);
 }
 
 /* The TSK/Strong's word-nav sidebar (.tsk-word-nav, .concordance-nav) and

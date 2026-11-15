@@ -729,6 +729,7 @@ const tskTranslationPickerToggle = document.querySelector("#tsk-translation-pick
 const tskTranslationPickerMenu = document.querySelector("#tsk-translation-picker-menu");
 const tskTranslationList = document.querySelector("#tsk-translations");
 const tskVerseText = document.querySelector("#tsk-verse-text");
+const tskVerseSection = document.querySelector("#tsk-verse-section");
 const siteBrand = document.querySelector("#site-brand");
 const panelOptionsToggle = document.querySelector("#panel-options-toggle");
 const panelOptionsDialog = document.querySelector("#panel-options-dialog");
@@ -6455,16 +6456,21 @@ function createEmbeddedTskTool(panelState) {
   // Embedded, this pane has no history or book/chapter/verse navigation of
   // its own -- it always mirrors this panel's own selector instead (see
   // goToVerse's call site in renderPanelBody), so nothing here is recorded
-  // to the shared TSK dialog history either. The results show/hide toggle
-  // lives at the right edge of the anchor-word nav row (see
-  // renderReferenceList) rather than a row of its own, right under the
-  // panel's own top bar since the KJV text above it starts the pane.
+  // to the shared TSK dialog history either. The KJV and 개역개정 text above
+  // the results starts the pane, right under the panel's own top bar; below
+  // it sits the fold bar that hides it (see appendTskVerseFoldBar), whose
+  // choice is held here -- this pane's own, like the STR pane's -- so a
+  // verse change, which redraws the text, leaves it as it was.
+  const verseSection = document.createElement("div");
+  verseSection.className = "tsk-verse-section";
   const verseText = document.createElement("div");
   verseText.className = "tsk-verse-text";
+  verseSection.append(verseText);
+  appendTskVerseFoldBar(verseSection, { collapsed: false });
   const body = document.createElement("div");
   body.className = "lookup-body";
 
-  shell.append(verseText, body);
+  shell.append(verseSection, body);
 
   // No picker of its own (see embeddedDefaultTranslations) -- the cross-
   // reference list's own versions always mirror whatever plain-language
@@ -7075,6 +7081,7 @@ function createEmbeddedStrongsTool(panelState) {
   // (often much longer) Englishman's Concordance list scrolls reads better
   // in a narrow column than the whole thing scrolling as one unit.
   const fieldsSlot = document.createElement("div");
+  fieldsSlot.className = "word-dictionary-slot";
   const body = document.createElement("div");
   body.className = "lookup-body";
 
@@ -7082,7 +7089,7 @@ function createEmbeddedStrongsTool(panelState) {
 
   let currentWord = null;
   // Whether this pane's Strong's fields are folded away (see
-  // buildStrongsFieldsToggle) -- held here, outside the fields every lookup
+  // buildStrongsSection) -- held here, outside the fields every lookup
   // rebuilds, so it carries over to the next word looked up in this pane.
   const details = { collapsed: false };
 
@@ -7119,14 +7126,14 @@ function createEmbeddedStrongsTool(panelState) {
     const fields = document.createElement("div");
     fields.className = "word-dictionary-fields";
     if (entry) {
-      appendOriginalWordField(fields, entry.lemma, biblehubLink, { lang: word.lang, details });
+      appendOriginalWordField(fields, entry.lemma, biblehubLink, { lang: word.lang });
       appendLookupField(fields, "Transliteration", entry.translit);
       appendLookupField(fields, "KJV", entry.kjv);
       appendStrongsLinkedField(fields, "Word Origin", entry.derivation, word.lang, goToCode);
       appendStrongsLinkedField(fields, "Definition", entry.def, word.lang, goToCode);
       appendLookupField(fields, "Morphology", wordMorphologyDisplay(word));
     } else if (word.gloss || word.transliteration) {
-      appendOriginalWordField(fields, word.original, biblehubLink, { lang: word.lang, details });
+      appendOriginalWordField(fields, word.original, biblehubLink, { lang: word.lang });
       appendLookupField(fields, "Transliteration", word.transliteration);
       appendLookupField(fields, "In This Verse", word.gloss);
       appendLookupField(fields, "Morphology", wordMorphologyDisplay(word));
@@ -7140,7 +7147,9 @@ function createEmbeddedStrongsTool(panelState) {
       empty.textContent = "No dictionary entry found.";
       fields.append(empty);
     }
-    fieldsSlot.replaceChildren(fields);
+    // Only an entry (or the fallback built from the interlinear's own tagging)
+    // has anything worth folding; "No dictionary entry found." doesn't.
+    fieldsSlot.replaceChildren(buildStrongsSection(fields, entry || word.gloss || word.transliteration ? details : null));
     await renderConcordanceSection(panelState, word, concordance, body, () => element.isConnected && currentWord === word, true);
   }
 
@@ -9891,7 +9900,7 @@ function showNoStrongsNumberEntry(container, word, biblehubLink, details) {
   }
   const fields = document.createElement("div");
   fields.className = "word-dictionary-fields";
-  appendOriginalWordField(fields, word.original, biblehubLink, { lang: word.lang, details });
+  appendOriginalWordField(fields, word.original, biblehubLink, { lang: word.lang });
   appendLookupField(fields, "Transliteration", word.transliteration);
   appendLookupField(fields, "In This Verse", word.gloss);
   appendLookupField(fields, "Morphology", wordMorphologyDisplay(word));
@@ -9899,13 +9908,14 @@ function showNoStrongsNumberEntry(container, word, biblehubLink, details) {
   note.className = "lookup-empty";
   note.textContent = "No Strong's number for this word.";
   fields.append(note);
-  container.replaceChildren(fields);
+  container.replaceChildren(buildStrongsSection(fields, details));
 }
 
-// `details` ({ collapsed }, one object per view that keeps the choice -- the
-// dialog's own, or one per panel's STR pane) adds the fold toggle right of
-// Bible Hub, in the same trailing group (see buildStrongsFieldsToggle).
-function appendOriginalWordField(container, value, biblehubLink, { lang, details } = {}) {
+// Bible Hub sits at the trailing edge of this row, flush with the right edge
+// of the nav row above it (the search button's) -- the spot the fold chevron
+// used to take beside it before that moved to the fold bar under the entry
+// (see buildStrongsSection).
+function appendOriginalWordField(container, value, biblehubLink, { lang } = {}) {
   if (!value) return;
   const block = document.createElement("div");
   block.className = "lookup-entry lookup-original-word-entry";
@@ -9921,48 +9931,96 @@ function appendOriginalWordField(container, value, biblehubLink, { lang, details
   const tools = document.createElement("div");
   tools.className = "lookup-original-word-tools";
   tools.append(biblehubLink);
-  if (details) tools.append(buildStrongsFieldsToggle(container, details));
   valueRow.append(valueEl, tools);
   block.append(labelEl, valueRow);
   container.append(block);
 }
 
-// The two states of the fold toggle: while the Strong's fields are showing
-// the chevron points up (pressing it folds them away), and once they are
-// folded it points down (pressing it brings them back).
-const STRONGS_FIELDS_TOGGLE_ICONS = {
+// The two states of a fold bar's chevron: while the block above it shows the
+// chevron points up (pressing it folds the block away), and once it is folded
+// it points down (pressing it brings the block back).
+const FOLD_BAR_ICONS = {
   expanded: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 15 6-6 6 6"></path></svg>',
   collapsed: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>',
 };
 
-// A long Strong's entry (a many-line Definition, say) leaves the Englishman's
-// Concordance below it little room, so the Original Word row carries a
-// chevron button, right of Bible Hub, that folds the whole entry away -- every
-// field, the Original Word's own label and word included -- leaving just
-// Bible Hub and this button (so it is still there to bring the entry back)
-// while the concordance moves up into the room. `fields` is the
-// .word-dictionary-fields container the Original Word row sits in;
-// `details.collapsed` is where the view remembers the choice, so the next
-// word looked up in the same view (which builds a fresh container) comes up
-// folded or open the same way.
-function buildStrongsFieldsToggle(fields, details) {
+// The fold bar (see .fold-bar in styles.css): a hairline across the full
+// width with one button in the middle of it, closing a block of content that
+// can be folded away -- the Strong's entry in the Strong's views, the KJV and
+// 개역개정 verse text in the TSK ones. While the block shows, the chevron
+// points up and the bar stands right under the block; pressing it hides the
+// block, which leaves the bar as the first thing in the view, at its top, with
+// the chevron pointing down; pressing it again brings the block back and the
+// bar drops to the foot of it.
+//
+// `state.collapsed` is where the view remembers the choice -- an object the
+// view owns, outside whatever it rebuilds on the next word or verse -- and
+// `apply(collapsed)` is the view's own way of showing it (a class on the
+// container, which the CSS keys on). The bar syncs once as it is built, so a
+// view that rebuilds comes back folded or open the way it was left.
+function buildFoldBar(state, { hideLabel, showLabel, apply }) {
+  const bar = document.createElement("div");
+  bar.className = "fold-bar";
   const button = document.createElement("button");
   button.type = "button";
-  button.className = "dialog-history-arrow lookup-fields-toggle";
+  button.className = "fold-bar-button";
   const sync = () => {
-    fields.classList.toggle("word-dictionary-fields--collapsed", details.collapsed);
-    const label = details.collapsed ? "Show Strong's details" : "Hide Strong's details";
+    apply(state.collapsed);
+    const label = state.collapsed ? showLabel : hideLabel;
     button.setAttribute("aria-label", label);
-    button.setAttribute("aria-expanded", String(!details.collapsed));
+    button.setAttribute("aria-expanded", String(!state.collapsed));
     button.title = label;
-    button.innerHTML = STRONGS_FIELDS_TOGGLE_ICONS[details.collapsed ? "collapsed" : "expanded"];
+    button.innerHTML = FOLD_BAR_ICONS[state.collapsed ? "collapsed" : "expanded"];
   };
   button.addEventListener("click", () => {
-    details.collapsed = !details.collapsed;
+    state.collapsed = !state.collapsed;
     sync();
   });
+  bar.append(button);
   sync();
-  return button;
+  return bar;
+}
+
+// The Strong's views' first row: an entry's rows (`fields`, the
+// .word-dictionary-fields container) with the fold bar right under them -- after
+// the Morphology row, or after the note that closes an entry the dictionary has
+// no text for. A long entry (a many-line Definition, say) leaves the
+// Englishman's Concordance below it little room, so the bar folds the whole
+// entry away -- every field, the Original Word row and Bible Hub included --
+// and the concordance moves up into the room. The bar is not inside `fields`
+// but beside it: an entry taller than the view scrolls on its own (see
+// .word-dictionary-fields), while the bar stays in sight below it instead of
+// being clipped off with the end of the entry.
+//
+// `details` ({ collapsed }, one object per view that keeps the choice -- the
+// dialog's own, or one per panel's STR pane) is where the view remembers it,
+// so the next word looked up in the same view (which builds a fresh section)
+// comes up folded or open the same way. Without it (nothing worth folding: "No
+// dictionary entry found.") there is no bar.
+function buildStrongsSection(fields, details) {
+  const section = document.createElement("div");
+  section.className = "word-dictionary-section";
+  section.append(fields);
+  if (details) {
+    section.append(buildFoldBar(details, {
+      hideLabel: "Hide Strong's details",
+      showLabel: "Show Strong's details",
+      apply: (collapsed) => section.classList.toggle("word-dictionary-section--collapsed", collapsed),
+    }));
+  }
+  return section;
+}
+
+// Under the verse text of a TSK view -- `section` is the .tsk-verse-section
+// that the dialog's, or a panel pane's, KJV and 개역개정 lines sit in. Folding
+// hides those lines, so the bar stands at the top of the view with the cross
+// references right below it.
+function appendTskVerseFoldBar(section, state) {
+  section.append(buildFoldBar(state, {
+    hideLabel: "Hide verse text",
+    showLabel: "Show verse text",
+    apply: (collapsed) => section.classList.toggle("tsk-verse-section--collapsed", collapsed),
+  }));
 }
 
 // Matches Strong's codes as they appear in derivation text (e.g. "G1615",
@@ -10510,7 +10568,7 @@ strongsNavNext.addEventListener("click", () => {
 });
 
 // Whether the dialog's Strong's fields are folded away (see
-// buildStrongsFieldsToggle) -- kept here, outside the content that every
+// buildStrongsSection) -- kept here, outside the content that every
 // lookup rebuilds, so it holds across words and across the dialog closing and
 // opening again. Each panel's own STR pane keeps one of its own instead.
 const strongsDialogDetails = { collapsed: false };
@@ -10545,14 +10603,15 @@ async function renderStrongsDialog(word, panelState, { record = true } = {}) {
   strongsBiblehubLink.hidden = !entry;
   if (entry) strongsBiblehubLink.href = biblehubUrl(word.strongs);
   // A dedicated wrapper (rather than appending fields straight into
-  // strongsDialogBody) keeps it down to exactly two children -- fields,
-  // then the concordance section -- so #strongs-dialog-body can use the
-  // same auto/1fr grid split as .lookup-shell to let the concordance
-  // section grow to fill the rest of the dialog's height.
+  // strongsDialogBody) keeps it down to exactly two children -- the entry
+  // (its fields and the fold bar under them, see buildStrongsSection), then
+  // the concordance section -- so #strongs-dialog-body can use the same
+  // auto/1fr grid split as .lookup-shell to let the concordance section grow
+  // to fill the rest of the dialog's height.
   const fields = document.createElement("div");
   fields.className = "word-dictionary-fields";
   if (entry) {
-    appendOriginalWordField(fields, entry.lemma, strongsBiblehubLink, { lang: word.lang, details: strongsDialogDetails });
+    appendOriginalWordField(fields, entry.lemma, strongsBiblehubLink, { lang: word.lang });
     appendLookupField(fields, "Transliteration", entry.translit);
     appendLookupField(fields, "KJV", entry.kjv);
     appendStrongsLinkedField(fields, "Word Origin", entry.derivation, word.lang);
@@ -10566,7 +10625,7 @@ async function renderStrongsDialog(word, panelState, { record = true } = {}) {
     // to what the interlinear tagging itself already gave us for this
     // word (see the token tuple in renderPanelBody/buildInterlinearWordRow)
     // instead of leaving the dialog looking empty.
-    appendOriginalWordField(fields, word.original, strongsBiblehubLink, { lang: word.lang, details: strongsDialogDetails });
+    appendOriginalWordField(fields, word.original, strongsBiblehubLink, { lang: word.lang });
     appendLookupField(fields, "Transliteration", word.transliteration);
     appendLookupField(fields, "In This Verse", word.gloss);
     appendLookupField(fields, "Morphology", wordMorphologyDisplay(word));
@@ -10580,7 +10639,11 @@ async function renderStrongsDialog(word, panelState, { record = true } = {}) {
     empty.textContent = "No dictionary entry found.";
     fields.append(empty);
   }
-  strongsDialogBody.replaceChildren(fields);
+  // Only an entry (or the fallback built from the interlinear's own tagging)
+  // has anything worth folding; "No dictionary entry found." doesn't.
+  strongsDialogBody.replaceChildren(
+    buildStrongsSection(fields, entry || word.gloss || word.transliteration ? strongsDialogDetails : null),
+  );
   strongsDialogBody.scrollTop = 0;
   await renderConcordanceSection(panelState, word, concordance);
 }
@@ -11763,6 +11826,11 @@ function setupTskControls() {
     },
   });
   tskTranslationControl.render();
+  // The KJV and 개역개정 lines above the results fold away behind a bar of
+  // their own (see appendTskVerseFoldBar). The dialog's choice lives in this
+  // one object and so holds across verses and across the dialog closing and
+  // opening again; each panel's TSK pane keeps one of its own instead.
+  appendTskVerseFoldBar(tskVerseSection, { collapsed: false });
 }
 
 function updateTskControls() {
