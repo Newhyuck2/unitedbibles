@@ -23,7 +23,7 @@
     <meta name="twitter:title" content="United Bibles" />
     <meta name="twitter:description" content="A compact multi-panel Bible reader" />
     <meta name="twitter:image" content="https://unitedbibles.org/icons/icon-512.png" />
-    <meta name="asset-version" content="20261001-54" />
+    <meta name="asset-version" content="20261001-55" />
     <meta name="theme-color" content="#284f43" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" /> 
@@ -32,7 +32,7 @@
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" type="image/png" href="./icons/icon-192.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="./icons/icon-180.png" />
-    <link rel="stylesheet" href="./styles.css?v=20261001-54" />
+    <link rel="stylesheet" href="./styles.css?v=20261001-55" />
     <!-- Applies the saved theme before first paint so a dark-theme visitor
          never sees a light-theme flash while app.js's module script (and
          its manifest.json fetch) is still loading. Reads the same
@@ -231,7 +231,12 @@
                 aria-label="Available search versions"
               ></div>
             </div>
-            <div class="translation-list" id="search-translation-list" aria-label="Search versions"></div>
+            <div class="translation-list-wrap">
+              <div class="translation-list" id="search-translation-list" aria-label="Search versions"></div>
+              <div class="translation-list-scrollbar" aria-hidden="true">
+                <div class="translation-list-scrollbar-thumb"></div>
+              </div>
+            </div>
           </div>
         </form>
 
@@ -350,7 +355,12 @@
                 aria-label="Available copy versions"
               ></div>
             </div>
-            <div class="translation-list copy-translation-options" id="copy-translations" aria-label="Copy versions"></div>
+            <div class="translation-list-wrap">
+              <div class="translation-list copy-translation-options" id="copy-translations" aria-label="Copy versions"></div>
+              <div class="translation-list-scrollbar" aria-hidden="true">
+                <div class="translation-list-scrollbar-thumb"></div>
+              </div>
+            </div>
             <div class="panel-reading-mode-control copy-reading-mode-control" role="group" aria-label="Reading mode">
               <button class="panel-reading-mode-toggle" id="copy-reading-mode-toggle" type="button" aria-label="Reading mode" aria-pressed="false">
                 <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -501,7 +511,12 @@
                 aria-label="Available highlight versions"
               ></div>
             </div>
-            <div class="translation-list copy-translation-options" id="highlight-translations" aria-label="Highlight versions"></div>
+            <div class="translation-list-wrap">
+              <div class="translation-list copy-translation-options" id="highlight-translations" aria-label="Highlight versions"></div>
+              <div class="translation-list-scrollbar" aria-hidden="true">
+                <div class="translation-list-scrollbar-thumb"></div>
+              </div>
+            </div>
           </div>
         </fieldset>
 
@@ -813,7 +828,12 @@
               aria-label="Available versions"
             ></div>
           </div>
-          <div class="translation-list" id="tsk-translations" aria-label="Selected versions"></div>
+          <div class="translation-list-wrap">
+            <div class="translation-list" id="tsk-translations" aria-label="Selected versions"></div>
+            <div class="translation-list-scrollbar" aria-hidden="true">
+              <div class="translation-list-scrollbar-thumb"></div>
+            </div>
+          </div>
         </div>
 
         <div class="tsk-verse-text" id="tsk-verse-text"></div>
@@ -901,7 +921,12 @@
               aria-label="Available versions"
             ></div>
           </div>
-          <div class="translation-list" id="bookmark-list-translations" aria-label="Selected versions"></div>
+          <div class="translation-list-wrap">
+            <div class="translation-list" id="bookmark-list-translations" aria-label="Selected versions"></div>
+            <div class="translation-list-scrollbar" aria-hidden="true">
+              <div class="translation-list-scrollbar-thumb"></div>
+            </div>
+          </div>
         </div>
         <div class="lookup-body" id="bookmark-list-body"></div>
       </div>
@@ -1366,7 +1391,7 @@
                   hidden
                 ></div>
               </div>
-              <div class="panel-translation-list-wrap">
+              <div class="panel-translation-list-wrap translation-list-wrap">
                 <div class="translation-list panel-translation-list" aria-label="Selected versions"></div>
                 <div class="translation-list-scrollbar" aria-hidden="true">
                   <div class="translation-list-scrollbar-thumb"></div>
@@ -1673,6 +1698,6 @@
     </div>
 
     <noscript>JavaScript is required to display the Bible text.</noscript>
-    <script type="module" src="./app.js?v=20261001-54"></script>
+    <script type="module" src="./app.js?v=20261001-55"></script>
   </body>
 </html>

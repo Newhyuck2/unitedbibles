@@ -381,16 +381,18 @@ p {
   border-radius: 8px;
 }
 
-/* Only the panel's own chip row needs this wrapper (see its own comment in
-   index.html) -- every chip in it is touch-action: none (see
-   .panel-translation-list .translation-chip below), so a touch-drag
-   anywhere on a chip always starts a reorder, never the row's own native
-   horizontal scroll, once the row overflows. .translation-list-scrollbar
-   is this wrapper's own substitute scroll affordance for that case --
-   hidden outside the mobile/coarse-pointer breakpoint below, where a mouse
-   or trackpad can still scroll the row directly (wheel/drag on its own
-   native thin scrollbar, untouched by any of this). */
-.panel-translation-list-wrap {
+/* Every translation chip row -- each panel's own, and those of the search,
+   copy, highlight, TSK and bookmark dialogs -- sits in this wrapper (see its
+   markup in index.html). Once the row overflows on a phone, every chip in it
+   is touch-action: none (see the media block below, and
+   .panel-translation-list .translation-chip further down for the panel's
+   own), so a touch-drag anywhere on a chip always starts a reorder, never
+   the row's own native horizontal scroll. .translation-list-scrollbar is
+   this wrapper's own substitute scroll affordance for that case -- hidden
+   outside the mobile/coarse-pointer breakpoint below, where a mouse or
+   trackpad can still scroll the row directly (wheel/drag on its own native
+   thin scrollbar, untouched by any of this). */
+.translation-list-wrap {
   display: flex;
   flex-direction: column;
   flex: 1 1 auto;
@@ -398,7 +400,7 @@ p {
   order: 1;
 }
 
-.panel-translation-list-wrap .translation-list {
+.translation-list-wrap .translation-list {
   order: unset;
   /* .dialog-translation-controls .translation-list's own align-self:
      flex-start (further down) was written for the row this list used to
@@ -463,6 +465,43 @@ p {
     border-radius: 2px;
   }
 
+  /* A panel's bar hangs over verse text, which its invisible strip below (see
+     the reach rule next) can overlay harmlessly. A dialog's bar has controls
+     close underneath -- the bookmark list's first row's buttons sit 3px under
+     the row, the highlight colors 10px -- that a strip overlaying them would
+     swallow taps from. So the dialogs' bar box itself runs 20px lower (the
+     strip's height), with the line (track and thumb) raised by as much: it
+     looks the same, a press landing as low under the line as the panel's strip
+     reaches still grabs the bar, and nothing under it is covered -- the
+     controls just sit those 20px further down. */
+  dialog .translation-list-scrollbar--visible {
+    height: 36px;
+  }
+
+  dialog .translation-list-scrollbar--visible::before,
+  dialog .translation-list-scrollbar-thumb {
+    bottom: 22px;
+  }
+
+  /* Room under that box, where the dialog's next control starts too close to
+     it: Chrome's touch adjustment snaps a press within about 10px of a button
+     onto the button, so a press on the box's lowest part never reached the
+     bar. The bookmark list's first row starts right under the chip row (its
+     buttons 3px below the box), the search results' book strip 5px below it,
+     the highlight colors 10px; the copy dialog's options (13px) and the TSK
+     dialog's verse text need nothing. Each gets what brings it to 13px. */
+  #bookmark-list-dialog .translation-list-scrollbar--visible {
+    margin-bottom: 10px;
+  }
+
+  #search-dialog .translation-list-scrollbar--visible {
+    margin-bottom: 8px;
+  }
+
+  #highlight-dialog .translation-list-scrollbar--visible {
+    margin-bottom: 3px;
+  }
+
   /* An invisible second drag surface (same drag as the bar's own -- see
      setupHorizontalDragScrollbar in app.js): a strip 20px tall hanging from the
      bar's bottom edge, over the same horizontal span, down across the
@@ -493,32 +532,42 @@ p {
     display: none;
   }
 
-  /* This row now has its own drag-to-scroll bar above, so the native
-     scrollbar (.dialog-translation-controls .translation-list, customized
-     for mouse/trackpad use further below) would otherwise paint a second,
-     non-draggable-on-touch bar right underneath it. The extra .translation-list
-     class here matches that rule's own specificity so this override wins
+  /* Every chip row in a wrapper (the panel's and the dialogs') now has its
+     own drag-to-scroll bar above, so the native scrollbar
+     (.dialog-translation-controls .translation-list, customized for
+     mouse/trackpad use further below) would otherwise paint a second,
+     non-draggable-on-touch bar right underneath it. The extra wrapper class
+     here matches that rule's own specificity plus one so this override wins
      regardless of the two rules' order in the file. */
-  .panel-translation-controls .translation-list.panel-translation-list {
+  .dialog-translation-controls .translation-list-wrap .translation-list {
     scrollbar-width: none;
   }
 
-  .panel-translation-controls .translation-list.panel-translation-list::-webkit-scrollbar {
+  .dialog-translation-controls .translation-list-wrap .translation-list::-webkit-scrollbar {
     display: none;
   }
 
   /* .translation-list--overflowing (below) grows the row and pads its
-     bottom to leave room for the *native* scrollbar -- still needed by the
-     other dialogs sharing that class, but dead weight here now that the
-     panel's own native scrollbar is hidden just above and this bar (a
-     separate sibling box, not inside the row) handles scrolling instead.
-     Four classes outweighs that rule's three so this wins regardless of
-     file order. */
-  .panel-translation-controls .translation-list.panel-translation-list.translation-list--overflowing {
+     bottom to leave room for the *native* scrollbar -- dead weight here now
+     that the native scrollbar is hidden just above and this bar (a separate
+     sibling box, not inside the row) handles scrolling instead. Four classes
+     outweighs that rule's three so this wins regardless of file order. */
+  .dialog-translation-controls .translation-list-wrap .translation-list.translation-list--overflowing {
     height: 32px;
     min-height: 32px;
     max-height: 32px;
     padding-bottom: 0;
+  }
+
+  /* The chip's whole body is the drag surface in every one of these rows --
+     the panel's own sets this for itself, unconditionally (see
+     .panel-translation-list .translation-chip below), so a drag along the row
+     reorders instead of scrolling it; the dialogs' rows get the same on the
+     phone-width layouts the bar above shows in. Wider ones, where the row's
+     own native scrollbar stays, keep their chips' pan-x and its swipe-to-
+     scroll. */
+  .dialog-translation-controls .translation-list-wrap .translation-chip {
+    touch-action: none;
   }
 }
 
@@ -5486,19 +5535,18 @@ body * {
   scroll-snap-align: start;
 }
 
-/* Panel chip row only (see renderTranslationChipList's own onOpenModePopup
+/* Panel chip row (see renderTranslationChipList's own onOpenModePopup
    branch, and setupTouchReorder's own handle: chip there): the whole chip
    body is the drag surface here, not just a dedicated ⠿ handle, so touch
    dragging needs full control over it rather than ceding horizontal pans to
-   native scrolling first the way the base rule above does for every other
+   native scrolling first the way the base rule above does for a plain
    (handle-only-drag) translation-chip list. A many-translation panel row
    that overflows can no longer be swipe-scrolled from on top of a chip as a
-   result -- only from the row's own edges/gaps between chips. The TSK and
-   Bookmark list dialogs' chips (whose "..." button works too now -- see
-   dialogTranslationStyleControls in app.js) keep the base pan-x instead,
-   so their row still swipe-scrolls from on top of a chip: a horizontal
-   swipe pans natively (cancelling the touch drag), and a drag that starts
-   vertically still reorders. */
+   result -- the row's drag-to-scroll bar (see .translation-list-scrollbar
+   above) is what scrolls it. The dialogs' chip rows (search, copy,
+   highlight, TSK, bookmark) get exactly this on phone-width layouts too --
+   the media block next to that bar -- and keep the base pan-x only where
+   their native scrollbar stays. */
 .panel-translation-list .translation-chip {
   touch-action: none;
 }
@@ -8831,14 +8879,16 @@ body * {
   font-size: 0;
 }
 
-/* Panel chip row on a phone held upright: where a tap on a chip lands.
-   A tap meant to hide or show a version (anywhere on the chip but its two
-   buttons) kept landing on the dots button just left of the name, or on the x
-   button just right of it. Two things did that: each button's 24px box sat
-   flush against the name's 4px gap, leaving a strip of under 30px between them
-   on a short name like NIV; and Chrome snaps a tap that lands within about
-   10px of a button onto that button, which cut the strip down to about 8px --
-   for the tap that is made far more often than either button's.
+/* Chip rows on a phone held upright -- the panel's, and the search, copy,
+   highlight, TSK and bookmark dialogs' (all sit in .translation-list-wrap):
+   where a tap on a chip lands. A tap meant to hide or show a version
+   (anywhere on the chip but its two buttons) kept landing on the dots button
+   just left of the name, or on the x button just right of it. Two things did
+   that: each button's 24px box sat flush against the name's 4px gap, leaving
+   a strip of under 30px between them on a short name like NIV; and Chrome
+   snaps a tap that lands within about 10px of a button onto that button,
+   which cut the strip down to about 8px -- for the tap that is made far more
+   often than either button's.
 
    The two boxes are now narrower on the name's side and reach out to the
    chip's own edge on the other (1px in from its border), so they begin and end
@@ -8866,18 +8916,18 @@ body * {
    no taps itself (pointer-events: none) -- isolation keeps it behind the icon.
    The desktop and landscape rules above are untouched. */
 @media (orientation: portrait) and (max-width: 599px) {
-  .panel-translation-list .translation-chip .chip-mode-toggle,
-  .panel-translation-list .translation-chip .chip-remove {
+  .translation-list-wrap .translation-chip .chip-mode-toggle,
+  .translation-list-wrap .translation-chip .chip-remove {
     position: relative;
     isolation: isolate;
   }
 
-  .panel-translation-list .translation-chip .chip-mode-toggle {
+  .translation-list-wrap .translation-chip .chip-mode-toggle {
     width: 20px;
     margin: 0 8px 0 -4px;
   }
 
-  .panel-translation-list .translation-chip .chip-remove {
+  .translation-list-wrap .translation-chip .chip-remove {
     width: 22px;
     margin: 0 -4px 0 6px;
   }
@@ -8886,17 +8936,17 @@ body * {
      once shifted back the cell's empty right column reaches 4px past the new
      box -- it takes no taps of its own, or the dots' area would still run to
      there. */
-  .panel-translation-list .translation-chip .chip-mode-toggle span {
+  .translation-list-wrap .translation-chip .chip-mode-toggle span {
     transform: translateX(8px);
     pointer-events: none;
   }
 
-  .panel-translation-list .translation-chip .chip-remove span {
+  .translation-list-wrap .translation-chip .chip-remove span {
     transform: translateX(-5px);
   }
 
-  .panel-translation-list .translation-chip .chip-mode-toggle::before,
-  .panel-translation-list .translation-chip .chip-remove::before {
+  .translation-list-wrap .translation-chip .chip-mode-toggle::before,
+  .translation-list-wrap .translation-chip .chip-remove::before {
     position: absolute;
     z-index: -1;
     top: 0;
@@ -8909,12 +8959,12 @@ body * {
   /* The old 24px boxes, in the new boxes' coordinates: the dots' began 4px in
      from the new left edge and ended 8px past the new right one; the x's began
      6px before the new left edge and ended 4px short of the new right one. */
-  .panel-translation-list .translation-chip .chip-mode-toggle::before {
+  .translation-list-wrap .translation-chip .chip-mode-toggle::before {
     right: -8px;
     left: 4px;
   }
 
-  .panel-translation-list .translation-chip .chip-remove::before {
+  .translation-list-wrap .translation-chip .chip-remove::before {
     right: 4px;
     left: -6px;
   }
@@ -8925,25 +8975,25 @@ body * {
      therefore did nothing at all. Here the dots take no taps, and the chip
      under them handles the tap like the rest of its body (hide/show, or
      switch to the tool); the button itself is as disabled as before. */
-  .panel-translation-list .translation-chip .chip-mode-toggle:disabled {
+  .translation-list-wrap .translation-chip .chip-mode-toggle:disabled {
     pointer-events: none;
   }
 
   /* The hover tints themselves are unchanged (see .chip-mode-toggle and
      .chip-remove above) -- only the thing they paint on moves. */
-  .panel-translation-list .translation-chip .chip-mode-toggle:not(:disabled):hover {
+  .translation-list-wrap .translation-chip .chip-mode-toggle:not(:disabled):hover {
     background: transparent;
   }
 
-  .panel-translation-list .translation-chip .chip-mode-toggle:not(:disabled):hover::before {
+  .translation-list-wrap .translation-chip .chip-mode-toggle:not(:disabled):hover::before {
     background: var(--hover-bg-strong);
   }
 
-  .panel-translation-list .translation-chip .chip-remove:hover {
+  .translation-list-wrap .translation-chip .chip-remove:hover {
     background: transparent;
   }
 
-  .panel-translation-list .translation-chip .chip-remove:hover::before {
+  .translation-list-wrap .translation-chip .chip-remove:hover::before {
     background: rgba(162, 79, 98, 0.14);
   }
 }

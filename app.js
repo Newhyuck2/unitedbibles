@@ -2248,16 +2248,18 @@ function applyTranslationOrder(panelState, order) {
 // finger on the chip's name, while the press's own coordinates stay the
 // finger's. That is how the dots and the x kept taking taps meant to hide or
 // show a version -- on a short name like NIV the two snaps left under 10px of
-// the chip for it. So in the panel's chip row on a phone held upright (where
-// styles.css sets up the two buttons' boxes for this: the dots' reaches from
-// the chip's left edge to just past the dots, the x's from just before the x to
-// its right edge), a press only counts as a button's when it began inside that
-// button's own box; any other press carries on as a press on the chip itself --
-// the touch drag that reorders it, and the click that hides or shows the
-// version (see renderTranslationChipList for how the click is handed over) --
-// exactly as it would had the browser not snapped it.
+// the chip for it. So in a chip row on a phone held upright -- the panel's, or
+// one of the dialogs' (search, copy, highlight, TSK, bookmark), all of which sit
+// in a .translation-list-wrap -- where styles.css sets up the two buttons' boxes
+// for this (the dots' reaches from the chip's left edge to just past the dots,
+// the x's from just before the x to its right edge), a press only counts as a
+// button's when it began inside that button's own box; any other press carries
+// on as a press on the chip itself -- the touch drag that reorders it, and the
+// click that hides or shows the version (see renderTranslationChipList for how
+// the click is handed over) -- exactly as it would had the browser not snapped
+// it.
 function chipButtonPressIsStray(list, button, event) {
-  if (!list.classList.contains("panel-translation-list") || !phonePortraitLayout.matches) return false;
+  if (!list.closest(".translation-list-wrap") || !phonePortraitLayout.matches) return false;
   const box = button.getBoundingClientRect();
   return event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom;
 }
@@ -2298,8 +2300,10 @@ function renderTranslationChipList({ list, order, getEmphasis, onToggleActive, o
     // shows the exact same dots -- per explicit request, purely for visual
     // consistency with the panel's own chips -- but keeps the plain
     // decorative handle and its own handle-gated touch-drag underneath
-    // them exactly as before: no click, no hover reaction, nothing to
-    // disable because there was never anything to fire in the first place.
+    // them (on the phone-width layouts the whole chip drags instead -- see
+    // bodyDrags at setupTouchReorder below): no click, no hover reaction,
+    // nothing to disable because there was never anything to fire in the
+    // first place.
     // U+2807 (BRAILLE PATTERN DOTS-123) is exactly the left column of the
     // old ⠿ (U+283F, dots 1-6) drag-handle glyph both branches used to draw
     // -- same font, same size, so it reads as "half of that handle," not a
@@ -2366,6 +2370,12 @@ function renderTranslationChipList({ list, order, getEmphasis, onToggleActive, o
     setupTouchReorder({
       item: chip,
       handle: onOpenModePopup ? chip : handle,
+      // On the phone-width layouts every chip row's whole chip is the drag
+      // surface, not just a row that has the "..." button: the chips are
+      // touch-action: none there (see the media block by
+      // .translation-list-scrollbar in styles.css) and the row scrolls by its
+      // own drag bar instead, the way the panel's always has.
+      bodyDrags: () => mobileLayout.matches,
       container: list,
       itemClass: "translation-chip",
       id,
@@ -2438,8 +2448,10 @@ function renderTranslationChipList({ list, order, getEmphasis, onToggleActive, o
 // item is lifted with a transform, elementFromPoint finds the item underneath
 // the finger, and the swap only happens once on release (mirroring the mouse
 // drop handler above). Touch drags start only on the ⠿ handle so that a swipe
-// on the item body stays a native scroll of the surrounding list.
-function setupTouchReorder({ item, handle, container, itemClass, id, getOrder, onReorder }) {
+// on the item body stays a native scroll of the surrounding list -- unless
+// bodyDrags() says the whole item drags (a chip row whose chips are
+// touch-action: none, with a drag bar of its own to scroll by).
+function setupTouchReorder({ item, handle, bodyDrags, container, itemClass, id, getOrder, onReorder }) {
   let suppressClick = false;
 
   item.addEventListener("click", (event) => {
@@ -2451,10 +2463,11 @@ function setupTouchReorder({ item, handle, container, itemClass, id, getOrder, o
 
   item.addEventListener("pointerdown", (event) => {
     if (event.pointerType !== "touch") return;
-    if (handle && !handle.contains(event.target)) return;
+    if (handle && !handle.contains(event.target) && !bodyDrags?.()) return;
     const pointerId = event.pointerId;
     const startX = event.clientX;
     const startY = event.clientY;
+    const previousScrollSnapType = container.style.scrollSnapType;
     let hoverTarget = null;
     let dragging = false;
 
@@ -2472,6 +2485,15 @@ function setupTouchReorder({ item, handle, container, itemClass, id, getOrder, o
         item.style.zIndex = "5";
         item.style.pointerEvents = "none";
         document.body.classList.add("reordering-chip");
+        // The row's mandatory scroll-snap (see .translation-list) would
+        // otherwise follow the dragged chip: its snap area moves with the
+        // transform below, so the row re-snaps to the nearest chip edge on
+        // every step -- sliding along with the finger and dropping the chip
+        // somewhere other than under it (most plainly when the chip at the
+        // row's start is the one being dragged). Suspended for the drag, as
+        // the drag bar suspends it for its own (see
+        // setupHorizontalDragScrollbar).
+        container.style.scrollSnapType = "none";
       }
       moveEvent.preventDefault();
       moveEvent.stopPropagation();
@@ -2495,6 +2517,7 @@ function setupTouchReorder({ item, handle, container, itemClass, id, getOrder, o
       item.style.zIndex = "";
       item.style.pointerEvents = "";
       item.style.transform = "";
+      container.style.scrollSnapType = previousScrollSnapType;
       document.body.classList.remove("reordering-chip");
       hoverTarget?.classList.remove("drag-over");
       // `dragging` latches true the moment the 6px move threshold is
@@ -2535,10 +2558,13 @@ function setupTouchReorder({ item, handle, container, itemClass, id, getOrder, o
 // Registered by setupHorizontalDragScrollbar, keyed by the scrolling list
 // itself -- renderTranslationChipList's own rAF callback looks a list up
 // here and re-syncs it after every re-render, with no-op for any list that
-// never had one set up (every caller except the panel's own chip row).
+// never had one set up (none of the chip rows today -- the panel's and the five
+// dialogs' all have one -- but a row added without markup for it would not).
 const horizontalScrollbarSyncs = new WeakMap();
 
-// A substitute scroll affordance for .panel-translation-list, needed only
+// A substitute scroll affordance for a chip row -- .panel-translation-list, and
+// (on phone-width layouts) the search, copy, highlight, TSK and bookmark
+// dialogs' rows too, see setupDialogChipRowScrollbar below -- needed only
 // because every one of its chips is touch-action: none (see
 // setupTouchReorder above and that rule in styles.css) so that a touch-drag
 // on a chip always reorders, never scrolls the row -- there's no direction
@@ -2593,6 +2619,12 @@ function setupHorizontalDragScrollbar({ list, track, thumb, reach }) {
 
   list.addEventListener("scroll", sync);
   window.addEventListener("resize", sync);
+  // A dialog's chip row only has a size while its dialog is open -- shut, the row
+  // reads 0 wide and a resize or a re-render in that time takes the bar away --
+  // so the bar has to be laid out again whenever the row's own box changes, the
+  // moment the dialog opens included. (A panel's row is always on screen; this
+  // only ever repeats what its resize listener above already does.)
+  if (typeof ResizeObserver === "function") new ResizeObserver(() => sync()).observe(list);
 
   const startDrag = (event) => {
     // Whichever of the two surfaces was pressed keeps the pointer for the drag.
@@ -2646,6 +2678,21 @@ function setupHorizontalDragScrollbar({ list, track, thumb, reach }) {
 
   horizontalScrollbarSyncs.set(list, sync);
   sync();
+}
+
+// Gives one of the dialogs' chip rows (search, copy, highlight, TSK, bookmark
+// list) the drag bar a panel's row has, from the bar markup that sits beside
+// the row in its .translation-list-wrap (see index.html). The bar only shows
+// on the phone-width layouts (see the media block at .translation-list-
+// scrollbar in styles.css); everywhere else the row keeps its native
+// scrollbar and this stays hidden.
+function setupDialogChipRowScrollbar(list) {
+  const wrap = list.closest(".translation-list-wrap");
+  setupHorizontalDragScrollbar({
+    list,
+    track: wrap?.querySelector(".translation-list-scrollbar"),
+    thumb: wrap?.querySelector(".translation-list-scrollbar-thumb"),
+  });
 }
 
 // Native-select feel for touch: a press that starts on `opener` opens the
@@ -11686,6 +11733,7 @@ function setupTskControls() {
     matches: (item, query) => !query.trim() || item.label.startsWith(query.trim()),
     onSelect: (verse) => goToTskPassage({ book: tskViewState.book, chapter: tskViewState.chapter, verse }),
   });
+  setupDialogChipRowScrollbar(tskTranslationList);
   tskTranslationControl = setupDialogTranslationControl({
     picker: tskTranslationPicker,
     toggle: tskTranslationPickerToggle,
@@ -12411,6 +12459,7 @@ let bookmarkListTranslationControl;
 const bookmarkListTranslationStyle = createDialogTranslationStyle();
 
 function setupBookmarkListControls() {
+  setupDialogChipRowScrollbar(bookmarkListTranslationList);
   bookmarkListTranslationControl = setupDialogTranslationControl({
     picker: bookmarkListTranslationPicker,
     toggle: bookmarkListTranslationPickerToggle,
@@ -13015,6 +13064,9 @@ async function init() {
     applyTouchPanelCount();
     applyFontSize();
     applyTheme();
+    setupDialogChipRowScrollbar(copyTranslations);
+    setupDialogChipRowScrollbar(searchTranslationList);
+    setupDialogChipRowScrollbar(highlightTranslations);
     copyTranslationControl = setupDialogTranslationControl({
       picker: copyTranslationPicker,
       toggle: copyTranslationPickerToggle,
