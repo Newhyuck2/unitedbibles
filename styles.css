@@ -1363,7 +1363,12 @@ input:focus {
   width: min(900px, calc(100vw - 28px));
   height: min(760px, calc(100vh - 36px));
   padding: 0;
+  /* clip, not just hidden (the fallback where clip isn't known): a hidden box
+     is still a scroll container, which focus, scrollIntoView or a selection
+     drag can scroll by whatever overflow it has -- sliding the dialog's own
+     content up under its top edge. clip makes no scroll container at all. */
   overflow: hidden;
+  overflow: clip;
   border: 1px solid var(--line);
   border-radius: 19px;
   background: var(--surface);
@@ -2502,7 +2507,9 @@ mark {
   width: min(520px, calc(100vw - 28px));
   max-height: min(640px, calc(100vh - 36px));
   padding: 0;
+  /* clip, not just hidden: see .search-dialog. */
   overflow: hidden;
+  overflow: clip;
   border: 1px solid var(--line);
   border-radius: 15px;
   background: var(--surface);
@@ -6848,6 +6855,7 @@ body * {
 
 .bible-panel.no-plain-text-column .panel-content {
   overflow: hidden;
+  overflow: clip;
 }
 
 /* .panel-content's own unconditional 68px (see the base .panel-content
@@ -6912,14 +6920,54 @@ body * {
    results, and so on -- is unchanged from the dialog's own CSS and needs
    no embedded-specific duplicate. The shell's own height/max-height is
    viewport-relative there, which means nothing in a panel, so it's
-   overridden to fill this wrapper's own height instead (set from
-   renderPanelBody, since neither % nor viewport units can reach "this
-   scroll container's own visible height" from CSS alone). */
+   overridden to fill this wrapper's own height instead. That height is the
+   panel content's own, whatever it is at the moment: the pane is the one grid
+   item of its .panel-content (see the rule just below), so it is as tall as
+   that box with nothing to measure or keep in step. (renderPanelBody used to
+   measure the box once and write the pane a px height. A window resize, a
+   zoom, a phone's address bar showing or hiding, or the header growing a row
+   as its chips wrap left that number stale; the pane then ran past its box,
+   and anything that scrolled the box -- a linked panel's scroll position
+   copied onto it, keyboard focus, a selection drag -- slid the pane up under
+   the header, cutting off its first rows.) */
 .study-tool-pane {
-  height: 0;
+  min-height: 0;
+  /* clip, not just hidden (which stays as the fallback where clip isn't
+     known): hidden still makes the pane a scroll container, one that a focus,
+     a scrollIntoView or a drag-selection can scroll all the same. clip makes
+     no scroll container at all, so the pane's scrollTop can only be 0. */
   overflow: hidden;
+  overflow: clip;
   container-type: inline-size;
   container-name: study-tool;
+}
+
+/* The panel content holding a pane is a one-row grid with the pane as its one
+   item: the row is the whole box (minmax(0, 1fr) of a height the panel's own
+   grid gives it), and the item stretches to it. Scoped with :has() to the
+   pane actually being in there -- reading mode, "Loading...", and errors
+   share the box while .study-tool-active may still be set on the panel, and
+   they are laid out as plain flow. Nothing in here scrolls (the pane manages
+   its own scrolling inside), so the box is clipped, not merely hidden, for the
+   reason given at .study-tool-pane: a scroll container that has nothing to
+   scroll can still be scrolled by whatever pushes it. */
+.panel-content:has(> .study-tool-pane) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  overflow: hidden;
+  overflow: clip;
+}
+
+/* A browser that doesn't know :has() would drop the rule above and leave the
+   pane with no height at all, so there the panel's own study-tool-active class
+   (set in the same render that mounts the pane) stands in for it. */
+@supports not selector(:has(*)) {
+  .bible-panel.study-tool-active .panel-content {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+  }
 }
 
 .study-tool-pane .lookup-shell {

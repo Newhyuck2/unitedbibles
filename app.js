@@ -5541,8 +5541,7 @@ function updateWordLookup(panelState) {
 // scope themselves to in that state (see the matching CSS), and
 // .panel-content's own padding-bottom -- reserved so those same floating
 // bars clear the last line of text -- has nothing left to reserve room for
-// either (see renderPanelBody's own height-calc, which needs this computed
-// *before* it runs so it sees the freed-up space that same render).
+// either, so the pane reaches the panel's true bottom edge.
 function hasNoPlainTextColumn(panelState) {
   return Boolean(panelState.activeStudyTool);
 }
@@ -7410,26 +7409,19 @@ function renderPanelBody(panelState) {
   for (const icon of elements.content.querySelectorAll(".verse-note-icon--pending")) {
     finalizeVerseNoteIconPlacement(icon, enabled.length);
   }
-  // A study tool's own shell (see .study-tool-pane in styles.css) needs an
-  // explicit height to fill -- its height: 100% only means something once
-  // this wrapper has a real height of its own, and only this can reach
-  // "this scroll container's own visible height," the same way
-  // syncDialogHeightToPanel measures it for the modal dialogs.
+  // A study tool's pane fills .panel-content exactly, and that is CSS's job
+  // (see .panel-content:has(> .study-tool-pane) in styles.css): the pane is the
+  // one grid item of a one-row grid, so it is as tall as the box is at every
+  // moment. This used to measure the box here, once, and write the pane a px
+  // height. Any layout change after the render -- a window resize, a zoom, a
+  // phone's address bar showing or hiding, the header growing a row as its
+  // chips wrap -- left that number stale, and a pane taller than its box was
+  // clipped at the bottom and slid up under the header the moment anything
+  // scrolled the box (a linked panel's scroll copied onto it, keyboard focus, a
+  // selection drag), cutting off its first rows.
   elements.panel.classList.toggle("no-plain-text-column", hasNoPlainTextColumn(panelState));
   elements.panel.classList.toggle("study-tool-active", Boolean(panelState.activeStudyTool));
   elements.panel.classList.toggle("panel-no-translations", panelHasNoTranslations(panelState));
-  // clientHeight includes .panel-content's own vertical padding, but a pane
-  // is a child living inside that padding box -- sizing it to the raw
-  // clientHeight leaves it exactly that much taller than the room actually
-  // available, forcing .panel-content itself to scroll despite each pane
-  // already managing its own internal scrolling.
-  const contentStyle = getComputedStyle(elements.content);
-  const paneHeight = elements.content.clientHeight
-    - Number.parseFloat(contentStyle.paddingTop)
-    - Number.parseFloat(contentStyle.paddingBottom);
-  for (const pane of elements.content.querySelectorAll(".study-tool-pane")) {
-    pane.style.height = `${paneHeight}px`;
-  }
   if (pendingScrollVerse != null) {
     scrollVerseToTop(panelState, pendingScrollVerse);
     if (!interlinearLoadPending) panelState.scrollTargetVerse = null;
@@ -9174,6 +9166,13 @@ function syncGroupScroll(sourcePanelState, scrollTop) {
   for (const partner of linkGroupPartners(sourcePanelState)) {
     const elements = panelElements.get(partner.id);
     if (!elements) continue;
+    // A partner showing STR/TSK has no verse text to scroll along with this
+    // one: its pane fills .panel-content and scrolls inside itself. Writing
+    // the scroll position onto .panel-content anyway slid the pane up under
+    // the header whenever the pane happened to overrun its box, and, with
+    // nothing left to scroll, never produced the scroll event that clears the
+    // echo target set just below.
+    if (partner.activeStudyTool) continue;
     groupScrollSyncTarget.set(partner.id, scrollTop);
     elements.content.scrollTop = scrollTop;
   }
@@ -10095,8 +10094,18 @@ function syncDialogHeightToPanel(dialogEl) {
   dialogEl.style.maxHeight = `${height}px`;
   const shell = dialogEl.querySelector(".lookup-shell, .search-shell");
   if (shell) {
-    shell.style.height = `${height}px`;
-    shell.style.maxHeight = `${height}px`;
+    // The shell lives inside the dialog's 1px border, so it takes the
+    // dialog's inner height, not the panel's whole border-box height. At the
+    // panel's it ran 2px past the dialog's inner box, which overflow: hidden
+    // turned into 2px of scrollable overflow -- and anything that scrolls
+    // such a box (focus or scrollIntoView near its bottom, a selection drag)
+    // slid the whole dialog up under its own top edge.
+    const dialogStyle = getComputedStyle(dialogEl);
+    const inner = height
+      - (Number.parseFloat(dialogStyle.borderTopWidth) || 0)
+      - (Number.parseFloat(dialogStyle.borderBottomWidth) || 0);
+    shell.style.height = `${inner}px`;
+    shell.style.maxHeight = `${inner}px`;
   }
 }
 
