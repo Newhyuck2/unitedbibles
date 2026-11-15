@@ -2675,6 +2675,19 @@ function setupHorizontalDragScrollbar({ list, track, thumb, reach }) {
   };
   track.addEventListener("pointerdown", startDrag);
   reach?.addEventListener("pointerdown", startDrag);
+  // Chrome's touch adjustment hands a press that lands within about 10px of a
+  // clickable thing (a chip, a button, a result row) to that thing -- the press
+  // itself, not only the click after it -- unless what the press landed on is
+  // clickable too. The bar answers only to pointerdown, which doesn't count, so
+  // a press on its slack above the line, or on its lowest part next to a
+  // control below, went to the chip or button beside it and never reached the
+  // bar. A listener that does nothing makes the bar (and the strip) a tap
+  // target of their own, so a press anywhere on them stays on them, however
+  // close the neighbour. It does nothing: a plain tap on the bar still does
+  // nothing.
+  const tapTarget = () => {};
+  track.addEventListener("click", tapTarget);
+  reach?.addEventListener("click", tapTarget);
 
   horizontalScrollbarSyncs.set(list, sync);
   sync();

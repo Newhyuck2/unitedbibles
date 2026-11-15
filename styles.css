@@ -430,14 +430,18 @@ p {
     display: block;
     position: relative;
     height: 16px;
-    margin: 4px 3px 0;
+    margin: 0 3px 0;
     /* This bar IS the drag surface (see setupHorizontalDragScrollbar in
        app.js) -- no native gesture of its own to leave room for. The box
        is taller than the visible line below needs, on purpose: that slack
        sits above the line (see the ::before/-thumb bottom anchor below),
        between it and the translation chips, so a thumb that lands a
-       little high still starts a drag instead of tapping a chip -- the
-       4px margin above adds a further, completely dead buffer before that. */
+       little high still starts a drag instead of tapping a chip. There
+       used to be a 4px dead margin above the box as well (the line sat
+       13px under the chips, now 9px): the bar being a tap target of its
+       own (see setupHorizontalDragScrollbar) is what keeps Chrome's touch
+       adjustment from handing a press in that slack to a chip, so the
+       slack no longer needs the distance to do it. */
     touch-action: none;
   }
 
@@ -483,13 +487,13 @@ p {
     bottom: 22px;
   }
 
-  /* Room under that box, where the dialog's next control starts too close to
-     it: Chrome's touch adjustment snaps a press within about 10px of a button
-     onto the button, so a press on the box's lowest part never reached the
-     bar. The bookmark list's first row starts right under the chip row (its
+  /* Room under that box, where the dialog's next control starts close to it:
+     the bookmark list's first row starts right under the chip row (its
      buttons 3px below the box), the search results' book strip 5px below it,
      the highlight colors 10px; the copy dialog's options (13px) and the TSK
-     dialog's verse text need nothing. Each gets what brings it to 13px. */
+     dialog's verse text need nothing. Each gets what brings it to 13px, so
+     the controls don't crowd the bar (and a fingertip on the box's lowest
+     part is no nearer a button than it needs to be). */
   #bookmark-list-dialog .translation-list-scrollbar--visible {
     margin-bottom: 10px;
   }
