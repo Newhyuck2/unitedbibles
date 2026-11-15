@@ -6866,6 +6866,23 @@ body * {
   border-bottom: 1px solid var(--line);
 }
 
+/* Phone width only. There the strip itself (.tsk-word-nav/.concordance-nav)
+   already carries the separator: the dialogs' own @media (max-width: 760px)
+   rule further up gives it padding-bottom: 8px and a border-bottom, and that
+   applies inside a panel as well. This wrapper's own padding and line under
+   it were then a second line 8px below the first, with a gap between the two
+   before the results began. Dropping them starts the results right under the
+   strip and its scrollbar, the way they do in the Strong's and TSK dialogs.
+   Wider than that the strip has no border of its own (the dialogs there turn
+   it into a side column), so the wrapper's line above stays the only one. */
+@media (max-width: 760px) {
+  .study-tool-pane .tsk-word-nav-row,
+  .study-tool-pane .concordance-nav-row {
+    padding-bottom: 0;
+    border-bottom: 0;
+  }
+}
+
 /* Height left auto (not fixed) so a horizontal scrollbar, once content
    overflows, adds its own extra height *below* the row of items instead of
    sharing that same height with them -- a fixed height here would force
