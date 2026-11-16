@@ -6376,8 +6376,32 @@ function getStudyToolInstance(panelState, toolId) {
     const factory = toolId === "STR" ? createEmbeddedStrongsTool : createEmbeddedTskTool;
     cache[toolId] = factory(panelState);
     cache[toolId].toolId = toolId;
+    rememberStudyToolScroll(cache[toolId]);
   }
   return cache[toolId];
+}
+
+// A browser drops the scroll offset of everything inside an element the moment
+// it leaves the document, and a panel's content is replaced whole on every
+// render (see renderPanelBody, and loadPanel's "Loading..." while a chapter
+// loads). The pane outlives those -- it is kept alive above -- but its lists
+// came back scrolled to the top, so a linked panel moving to another chapter
+// threw the Englishman's list away from the row being read. The pane remembers
+// what was scrolled as it happens (scroll events don't bubble, hence the
+// capturing listener) and renderPanelBody puts it back through restoreScroll
+// once the pane is mounted again.
+function rememberStudyToolScroll(instance) {
+  const offsets = new Map();
+  instance.element.addEventListener("scroll", (event) => {
+    const box = event.target;
+    if (box instanceof Element && instance.element.isConnected) offsets.set(box, [box.scrollTop, box.scrollLeft]);
+  }, true);
+  instance.restoreScroll = () => {
+    for (const [box, [top, left]] of offsets) {
+      if (!instance.element.contains(box)) offsets.delete(box);
+      else if (box.scrollTop !== top || box.scrollLeft !== left) box.scrollTo({ top, left, behavior: "instant" });
+    }
+  };
 }
 
 // Called on every render (see renderPanelBody) so a study tool chip that's
@@ -6406,21 +6430,64 @@ function destroyStudyToolInstances(panelState) {
 }
 
 // What the "cross references" link icon on a panel STR pane's Englishman's
-// Concordance row does (see buildConcordanceResultRow): a panel that already
-// has the TSK chip switches over to its own TSK view (showTskInSameColumn,
-// below), and any other panel gets the TSK popup on that reference -- it never
-// has a chip added and its view flipped over on its own.
-function openCrossReferencesFromPanel(panelState, book, chapter, verse) {
+// Concordance row does (see buildConcordanceResultRow), whichever of these
+// comes first: a panel that already has the TSK chip switches over to its own
+// TSK view (showTskInSameColumn, below); else a linked panel that has the chip
+// shows its TSK view there instead (linkedPanelForTsk), brought into sight if
+// it sits off screen; else the TSK popup opens on that reference. No chip is
+// ever added and no view flipped over on its own.
+async function openCrossReferencesFromPanel(panelState, book, chapter, verse) {
   if (panelState.enabledTranslations.includes("TSK")) {
     return showTskInSameColumn(panelState, book, chapter, verse);
   }
-  return openTskFromResult(book, chapter, verse, panelState);
+  const partner = linkedPanelForTsk(panelState);
+  if (!partner) return openTskFromResult(book, chapter, verse, panelState);
+  await showTskInSameColumn(partner, book, chapter, verse);
+  await scrollPanelIntoViewIfOffScreen(partner);
+}
+
+// The linked panel a cross reference from panelState's STR pane shows its TSK
+// view in: one already showing TSK if there is one, else the first with the TSK
+// chip. A partner the group's hide-linked-panels toggle has put out of the
+// picture is never picked -- its TSK view would change where nobody can see it.
+function linkedPanelForTsk(panelState) {
+  const candidates = linkGroupPartners(panelState).filter(
+    (partner) => partner.enabledTranslations.includes("TSK") && !isLinkedPanelLeftOut(partner),
+  );
+  return candidates.find((partner) => partner.activeStudyTool === "TSK") ?? candidates[0] ?? null;
+}
+
+// A phone in portrait shows one panel at a time, and a long row of panels runs
+// past the screen anywhere else, so a linked panel switched to TSK from another
+// one's STR pane can sit out of sight: slide the track to show it whole instead
+// of leaving the result waiting off to the side -- onto the panel's start on a
+// phone, like a swipe does, else just far enough from whichever side it sticks
+// out. Waits three frames first, and glides by hand (animateTrackScroll): every
+// render puts the track's scroll position back for two frames (see
+// restoreScrollLeft), which would undo a scroll started before they have
+// passed, and one landing mid-glide -- a panel's interlinear text arriving
+// late -- cuts a native smooth scroll short where this one re-asserts its place
+// on the next frame.
+async function scrollPanelIntoViewIfOffScreen(panelState) {
+  for (let frame = 0; frame < 3; frame += 1) await new Promise((resolve) => requestAnimationFrame(resolve));
+  const panel = panelElements.get(panelState.id)?.panel;
+  if (!panel || panel.hidden) return;
+  const track = panelTrack.getBoundingClientRect();
+  const rect = panel.getBoundingClientRect();
+  if (rect.left >= track.left - 2 && rect.right <= track.right + 2) return;
+  const alignStart = phonePortraitLayout.matches || rect.left < track.left;
+  const target = alignStart
+    ? panelScrollLeft(state.panels.indexOf(panelState))
+    : panel.offsetLeft + panel.offsetWidth + (Number.parseFloat(getComputedStyle(panelTrack).paddingRight) || 0) - panelTrack.clientWidth;
+  animateTrackScroll(Math.max(0, Math.min(target, panelTrack.scrollWidth - panelTrack.clientWidth)), 280);
 }
 
 // Switches this panel to its TSK view -- it must already have the TSK chip
 // (see openCrossReferencesFromPanel) -- and moves this panel's own selector to
 // the given reference, which TSK always mirrors (see goToVerse in
-// createEmbeddedTskTool).
+// createEmbeddedTskTool). A linked group moves to that reference together (see
+// goToPassage), so this is also how one panel's cross reference reaches a
+// linked panel's TSK view.
 async function showTskInSameColumn(panelState, book, chapter, verse) {
   if (panelState.activeStudyTool !== "TSK") toggleTranslationChip(panelState, "TSK");
   await goToPassage(panelState, { book, chapter, verse }, { record: true });
@@ -7451,6 +7518,10 @@ function renderPanelBody(panelState) {
     }
     panelState.frozenRowHeights = { book: panelState.book, chapter: panelState.chapter, heights };
   }
+  // The pane was just (re)mounted, which cost every list in it its scroll
+  // offset -- put back (see rememberStudyToolScroll), now that the classes
+  // above have settled the pane's size.
+  if (panelState.activeStudyTool) getStudyToolInstance(panelState, panelState.activeStudyTool).restoreScroll?.();
   if (panelState.linkGroupId != null) scheduleGroupRowHeightSync(panelState.linkGroupId);
   restoreScrollLeft();
 }
