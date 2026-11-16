@@ -1527,10 +1527,16 @@ function applyPanelWidth(panel, width, important = false) {
 function refreshTranslationListOverflow(panel) {
   const list = panel.querySelector(".panel-translation-list");
   if (!list) return;
+  // A row taken out of the layout has no scroll position any more, and when it
+  // comes back scroll snap picks one afresh -- a row the reader had scrolled
+  // sideways to reach STR or TSK landed on some other chip. So what it was
+  // scrolled to is put back.
+  const scrolledTo = list.scrollLeft;
   const previousDisplay = list.style.display;
   list.style.display = "none";
   void list.offsetHeight;
   list.style.display = previousDisplay;
+  if (scrolledTo) list.scrollLeft = scrolledTo;
 }
 
 function setAllDesktopPanelWidths(width, important = false) {
@@ -9057,6 +9063,21 @@ function reapplyPersistedPanelWidth(panel, panelState) {
   applyPanelWidth(panel, renderedWidth, mobileLayout.matches && !desktopLikePanels());
 }
 
+// The width-keeping half of what every render of an unlinked panel used to get
+// from clearLinkedPartnersHiding: the width a panel renders at follows the window
+// (see maximumPanelWidth), so after a resize or a rotation the next render put it
+// right. Kept, but only when the panel is actually off its width -- applying it
+// again unchanged takes the chip row out of the layout and back (see
+// refreshTranslationListOverflow) for nothing.
+function syncPersistedPanelWidth(panel, panelState) {
+  if (!panelState.width) return;
+  const renderedWidth = desktopLikePanels()
+    ? Math.min(panelState.width, maximumPanelWidth())
+    : panelState.width;
+  if (Math.abs(Number.parseFloat(panel.style.flexBasis) - renderedWidth) < 0.5) return;
+  reapplyPersistedPanelWidth(panel, panelState);
+}
+
 // Shared cleanup for both animateLinkedPanelHide/Show below: drops the
 // transition class and every inline style it drove, and -- once no other
 // panel in this same track is still mid-transition -- lets the track's
@@ -9293,6 +9314,19 @@ function toggleLinkedPartnersVisibility(panelState) {
   if (hidingLinkedPartners.has(panelState.id)) hidingLinkedPartners.delete(panelState.id);
   else hidingLinkedPartners.add(panelState.id);
   applyLinkedPartnersVisibility(panelState.linkGroupId, { centerPanelId: panelState.id });
+}
+
+// Whether clearLinkedPartnersHiding (below) has anything to undo for panelState:
+// it is hiding its partners, or is itself hidden, on its way to being hidden, or
+// still growing back (see isLinkedPanelLeftOut). A panel that was never in a
+// group, or is whole again, has none of that.
+function linkedHidingNeedsClearing(panelState) {
+  const elements = panelElements.get(panelState.id);
+  if (!elements) return false;
+  return hidingLinkedPartners.has(panelState.id)
+    || linkVisibilityTargetHidden.get(panelState.id) === true
+    || elements.panel.hidden
+    || elements.panel.classList.contains("panel-link-visibility-transition");
 }
 
 // Guarantees panelState itself is never left behind mid-hidden and never
@@ -9624,8 +9658,16 @@ function updateLinkModeControls(panelState) {
   // No longer linked -- there's no group left for this panel's own toggle
   // to be hiding, and if it still had that flag set (or partners still
   // hidden from an earlier click), both need clearing so nothing is left
-  // permanently hidden with no toggle left to reveal it.
-  if (!active) clearLinkedPartnersHiding(panelState);
+  // permanently hidden with no toggle left to reveal it. Only when there is
+  // something to clear, though: this runs on every render of every panel that
+  // isn't linked, and clearing puts the panel's width back (see
+  // reapplyPersistedPanelWidth), which takes its chip row out of the layout and
+  // back -- the row scrolled sideways to reach STR or TSK lost its place each
+  // time a chip was pressed.
+  if (!active) {
+    if (linkedHidingNeedsClearing(panelState)) clearLinkedPartnersHiding(panelState);
+    else syncPersistedPanelWidth(elements.panel, panelState);
+  }
 }
 
 // The link icon's own click is exactly the reading-mode toggle's own
