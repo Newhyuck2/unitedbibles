@@ -6405,18 +6405,23 @@ function destroyStudyToolInstances(panelState) {
   panelState.studyToolInstances = {};
 }
 
-// Shared by every "cross references" link icon on a verse-list row inside
-// an embedded STR/TSK pane (see buildConcordanceResultRow and
-// createEmbeddedTskTool's own buildResultRow): switches this panel to
-// TSK -- adding the chip first if it isn't enabled yet -- and moves this
-// panel's own selector to the given reference, which TSK always mirrors
-// (see goToVerse in createEmbeddedTskTool).
-async function showTskInSameColumn(panelState, book, chapter, verse) {
-  if (!panelState.enabledTranslations.includes("TSK")) {
-    const order = [...panelState.enabledTranslations];
-    insertTranslationInOrder(order, "TSK");
-    applyTranslationOrder(panelState, order);
+// What the "cross references" link icon on a panel STR pane's Englishman's
+// Concordance row does (see buildConcordanceResultRow): a panel that already
+// has the TSK chip switches over to its own TSK view (showTskInSameColumn,
+// below), and any other panel gets the TSK popup on that reference -- it never
+// has a chip added and its view flipped over on its own.
+function openCrossReferencesFromPanel(panelState, book, chapter, verse) {
+  if (panelState.enabledTranslations.includes("TSK")) {
+    return showTskInSameColumn(panelState, book, chapter, verse);
   }
+  return openTskFromResult(book, chapter, verse, panelState);
+}
+
+// Switches this panel to its TSK view -- it must already have the TSK chip
+// (see openCrossReferencesFromPanel) -- and moves this panel's own selector to
+// the given reference, which TSK always mirrors (see goToVerse in
+// createEmbeddedTskTool).
+async function showTskInSameColumn(panelState, book, chapter, verse) {
   if (panelState.activeStudyTool !== "TSK") toggleTranslationChip(panelState, "TSK");
   await goToPassage(panelState, { book, chapter, verse }, { record: true });
   await getStudyToolInstance(panelState, "TSK").goToVerse(book, chapter, verse);
@@ -6438,7 +6443,7 @@ function buildEmbeddedTskLinkButton(panelState, bookId, chapter, verse) {
   `);
   button.addEventListener("click", (event) => {
     event.stopPropagation();
-    showTskInSameColumn(panelState, bookId, chapter, verse);
+    openCrossReferencesFromPanel(panelState, bookId, chapter, verse);
   });
   return button;
 }
@@ -11934,10 +11939,11 @@ tskHistoryForwardButton.addEventListener("click", () => {
 // Shared by the link icon on every verse-list row (TSK, word search,
 // Englishman's concordance): jumps the TSK dialog to that reference's own
 // cross references, opening it first (matching openTskDialog's own setup)
-// if it isn't already open.
-async function openTskFromResult(bookId, chapter, verse) {
+// if it isn't already open. The dialog's versions and text styles start from
+// panelState -- the panel whose STR pane the icon is in (see
+// openCrossReferencesFromPanel), else whichever panel is active.
+async function openTskFromResult(bookId, chapter, verse, panelState = activeOrFirstPanel()) {
   if (!tskDialog.open) {
-    const panelState = activeOrFirstPanel();
     tskTranslationOrder = enabledTranslationIds(panelState).filter(isIndexableTranslationId);
     seedDialogTranslationStyle(tskTranslationStyle, panelState);
     tskTranslationControl?.render();
