@@ -1527,10 +1527,9 @@ function applyPanelWidth(panel, width, important = false) {
 function refreshTranslationListOverflow(panel) {
   const list = panel.querySelector(".panel-translation-list");
   if (!list) return;
-  // A row taken out of the layout has no scroll position any more, and when it
-  // comes back scroll snap picks one afresh -- a row the reader had scrolled
-  // sideways to reach STR or TSK landed on some other chip. So what it was
-  // scrolled to is put back.
+  // A row taken out of the layout has no scroll position any more, and it can
+  // come back somewhere other than where the reader had scrolled it sideways
+  // to reach STR or TSK. So what it was scrolled to is put back.
   const scrolledTo = list.scrollLeft;
   const previousDisplay = list.style.display;
   list.style.display = "none";
@@ -2506,7 +2505,6 @@ function setupTouchReorder({ item, handle, bodyDrags, container, itemClass, id, 
     const pointerId = event.pointerId;
     const startX = event.clientX;
     const startY = event.clientY;
-    const previousScrollSnapType = container.style.scrollSnapType;
     let hoverTarget = null;
     let dragging = false;
 
@@ -2524,15 +2522,6 @@ function setupTouchReorder({ item, handle, bodyDrags, container, itemClass, id, 
         item.style.zIndex = "5";
         item.style.pointerEvents = "none";
         document.body.classList.add("reordering-chip");
-        // The row's mandatory scroll-snap (see .translation-list) would
-        // otherwise follow the dragged chip: its snap area moves with the
-        // transform below, so the row re-snaps to the nearest chip edge on
-        // every step -- sliding along with the finger and dropping the chip
-        // somewhere other than under it (most plainly when the chip at the
-        // row's start is the one being dragged). Suspended for the drag, as
-        // the drag bar suspends it for its own (see
-        // setupHorizontalDragScrollbar).
-        container.style.scrollSnapType = "none";
       }
       moveEvent.preventDefault();
       moveEvent.stopPropagation();
@@ -2556,7 +2545,6 @@ function setupTouchReorder({ item, handle, bodyDrags, container, itemClass, id, 
       item.style.zIndex = "";
       item.style.pointerEvents = "";
       item.style.transform = "";
-      container.style.scrollSnapType = previousScrollSnapType;
       document.body.classList.remove("reordering-chip");
       hoverTarget?.classList.remove("drag-over");
       // `dragging` latches true the moment the 6px move threshold is
@@ -2670,15 +2658,6 @@ function setupHorizontalDragScrollbar({ list, track, thumb, reach }) {
     const surface = event.currentTarget;
     const pointerId = event.pointerId;
     surface.setPointerCapture(pointerId);
-    // Each drag step below sets scrollLeft directly to an exact position, with
-    // no momentum of its own. Left alone, .translation-list's scroll-snap-type
-    // (see .translation-chip's scroll-snap-align) treats every one of those as
-    // a settled scroll and immediately yanks it to the nearest chip edge,
-    // fighting the next step and making the drag feel like it's stuttering.
-    // Suspending snap for the drag's duration lets it track the finger/pointer
-    // smoothly; it's restored on release so a plain swipe still snaps.
-    const previousScrollSnapType = list.style.scrollSnapType;
-    list.style.scrollSnapType = "none";
     // The press itself moves nothing -- wherever it lands on the bar (or the
     // strip under it) it only grabs the thumb where it is. The finger's spot and
     // the row's scroll position right now are the origin for every later move,
@@ -2706,7 +2685,6 @@ function setupHorizontalDragScrollbar({ list, track, thumb, reach }) {
       surface.removeEventListener("pointermove", move);
       surface.removeEventListener("pointerup", finish);
       surface.removeEventListener("pointercancel", finish);
-      list.style.scrollSnapType = previousScrollSnapType;
     };
     surface.addEventListener("pointermove", move, { passive: false });
     surface.addEventListener("pointerup", finish);

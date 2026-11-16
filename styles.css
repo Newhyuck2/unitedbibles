@@ -372,7 +372,6 @@ p {
   min-width: 0;
   gap: 8px;
   overflow-x: auto;
-  scroll-snap-type: x mandatory;
   padding: 2px 3px 5px;
   scrollbar-width: thin;
   border-radius: 8px;
@@ -5000,7 +4999,6 @@ body * {
 
   .translation-chip {
     min-height: 32px;
-    scroll-snap-align: start;
   }
 
   .panel-track::-webkit-scrollbar {
@@ -5644,14 +5642,14 @@ body * {
 /* Translation order: a mouse can drag the whole chip; on touch the drag
    starts on the ⠿ handle, so a swipe on the chip body scrolls the list
    (with many translations the header row overflows on phones).
-   scroll-snap-align keeps that scrolling landing on a whole chip instead
-   of resting mid-chip -- .translation-list's own scroll-snap-type is what
-   turns this on. */
+   The row does not snap (no scroll-snap-type on .translation-list, no
+   scroll-snap-align here): whichever way it is scrolled -- wheel, native
+   scrollbar, swipe, the drag bar -- it stops exactly where the scroll
+   stops, mid-chip included, instead of sliding on to a chip's edge. */
 .translation-chip {
   cursor: grab;
   touch-action: pan-x;
   user-select: none;
-  scroll-snap-align: start;
 }
 
 /* Panel chip row (see renderTranslationChipList's own onOpenModePopup
