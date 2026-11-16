@@ -6430,70 +6430,73 @@ function destroyStudyToolInstances(panelState) {
 }
 
 // What the "cross references" link icon on a panel STR pane's Englishman's
-// Concordance row does (see buildConcordanceResultRow), whichever of these
-// comes first: a panel that already has the TSK chip switches over to its own
-// TSK view (showTskInSameColumn, below); else a linked panel that has the chip
-// shows its TSK view there instead (linkedPanelForTsk), brought into sight if
-// it sits off screen; else the TSK popup opens on that reference. No chip is
-// ever added and no view flipped over on its own.
+// Concordance row does (see buildConcordanceResultRow): a linked panel that is
+// showing its TSK view right now shows that reference there (brought into sight
+// if it sits off screen); when no linked panel is on TSK, the TSK popup opens on
+// the reference instead. A click never turns STR or TSK on in a panel -- no view
+// is switched over and no chip is added, so TSK only ever shows where it was
+// already showing. (The icon sits in this panel's own STR pane, so this panel
+// itself is never the one on TSK.)
 async function openCrossReferencesFromPanel(panelState, book, chapter, verse) {
-  if (panelState.enabledTranslations.includes("TSK")) {
-    return showTskInSameColumn(panelState, book, chapter, verse);
-  }
-  const partner = linkedPanelForTsk(panelState);
+  const partner = linkedPanelShowingTsk(panelState);
   if (!partner) return openTskFromResult(book, chapter, verse, panelState);
-  await showTskInSameColumn(partner, book, chapter, verse);
+  await showReferenceInTskPanel(partner, book, chapter, verse);
   await scrollPanelIntoViewIfOffScreen(partner);
 }
 
-// The linked panel a cross reference from panelState's STR pane shows its TSK
-// view in: one already showing TSK if there is one, else the first with the TSK
-// chip. A partner the group's hide-linked-panels toggle has put out of the
-// picture is never picked -- its TSK view would change where nobody can see it.
-function linkedPanelForTsk(panelState) {
-  const candidates = linkGroupPartners(panelState).filter(
-    (partner) => partner.enabledTranslations.includes("TSK") && !isLinkedPanelLeftOut(partner),
+// The linked panel a cross reference from panelState's STR pane shows in: one
+// of the group's other panels that is on its TSK view at the moment, preferring
+// one already in sight so nothing has to slide. A partner the group's
+// hide-linked-panels toggle has put out of the picture isn't showing anything to
+// anybody, so it is skipped -- as is a panel with the TSK chip that is showing
+// something else, and any panel that isn't linked.
+function linkedPanelShowingTsk(panelState) {
+  const showing = linkGroupPartners(panelState).filter(
+    (partner) => partner.activeStudyTool === "TSK" && !isLinkedPanelLeftOut(partner),
   );
-  return candidates.find((partner) => partner.activeStudyTool === "TSK") ?? candidates[0] ?? null;
+  return showing.find(isPanelInSight) ?? showing[0] ?? null;
+}
+
+// Whether all of the panel sits inside the stretch of the track that is on
+// screen (a hidden panel, or one with no element yet, doesn't).
+function isPanelInSight(panelState) {
+  const panel = panelElements.get(panelState.id)?.panel;
+  if (!panel || panel.hidden) return false;
+  const track = panelTrack.getBoundingClientRect();
+  const rect = panel.getBoundingClientRect();
+  return rect.left >= track.left - 2 && rect.right <= track.right + 2;
 }
 
 // A phone in portrait shows one panel at a time, and a long row of panels runs
-// past the screen anywhere else, so a linked panel switched to TSK from another
-// one's STR pane can sit out of sight: slide the track to show it whole instead
-// of leaving the result waiting off to the side -- onto the panel's start on a
-// phone, like a swipe does, else just far enough from whichever side it sticks
-// out. Waits three frames first, and glides by hand (animateTrackScroll): every
-// render puts the track's scroll position back for two frames (see
-// restoreScrollLeft), which would undo a scroll started before they have
-// passed, and one landing mid-glide -- a panel's interlinear text arriving
-// late -- cuts a native smooth scroll short where this one re-asserts its place
-// on the next frame.
+// past the screen anywhere else, so a linked panel showing TSK for another
+// one's cross reference can sit out of sight: slide the track to show it whole
+// instead of leaving the result waiting off to the side -- onto the panel's
+// start on a phone, like a swipe does, else just far enough from whichever side
+// it sticks out. Waits three frames first, and glides by hand
+// (animateTrackScroll): every render puts the track's scroll position back for
+// two frames (see restoreScrollLeft), which would undo a scroll started before
+// they have passed, and one landing mid-glide -- a panel's interlinear text
+// arriving late -- cuts a native smooth scroll short where this one re-asserts
+// its place on the next frame.
 async function scrollPanelIntoViewIfOffScreen(panelState) {
   for (let frame = 0; frame < 3; frame += 1) await new Promise((resolve) => requestAnimationFrame(resolve));
   const panel = panelElements.get(panelState.id)?.panel;
-  if (!panel || panel.hidden) return;
-  const track = panelTrack.getBoundingClientRect();
-  const rect = panel.getBoundingClientRect();
-  if (rect.left >= track.left - 2 && rect.right <= track.right + 2) return;
-  const alignStart = phonePortraitLayout.matches || rect.left < track.left;
+  if (!panel || panel.hidden || isPanelInSight(panelState)) return;
+  const alignStart = phonePortraitLayout.matches || panel.getBoundingClientRect().left < panelTrack.getBoundingClientRect().left;
   const target = alignStart
     ? panelScrollLeft(state.panels.indexOf(panelState))
     : panel.offsetLeft + panel.offsetWidth + (Number.parseFloat(getComputedStyle(panelTrack).paddingRight) || 0) - panelTrack.clientWidth;
   animateTrackScroll(Math.max(0, Math.min(target, panelTrack.scrollWidth - panelTrack.clientWidth)), 280);
 }
 
-// Switches this panel to its TSK view -- it must already have the TSK chip
-// (see openCrossReferencesFromPanel) -- and moves this panel's own selector to
-// the given reference, which TSK always mirrors (see goToVerse in
-// createEmbeddedTskTool). A linked group moves to that reference together (see
-// goToPassage), so this is also how one panel's cross reference reaches a
-// linked panel's TSK view.
-async function showTskInSameColumn(panelState, book, chapter, verse) {
-  if (panelState.activeStudyTool !== "TSK") toggleTranslationChip(panelState, "TSK");
+// Moves a panel that is on its TSK view to the given reference, which TSK always
+// mirrors (see goToVerse in createEmbeddedTskTool) -- the same two steps as
+// drilling into a row of its own list. A linked group moves to that reference
+// together (see goToPassage), so this is also how one panel's cross reference
+// reaches a linked panel's TSK view.
+async function showReferenceInTskPanel(panelState, book, chapter, verse) {
   await goToPassage(panelState, { book, chapter, verse }, { record: true });
   await getStudyToolInstance(panelState, "TSK").goToVerse(book, chapter, verse);
-  saveState();
-  renderPanelBody(panelState);
 }
 
 function buildEmbeddedTskLinkButton(panelState, bookId, chapter, verse) {
