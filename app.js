@@ -5766,26 +5766,28 @@ async function loadPanel(panelState, targetVerse = null) {
 // would try to fan out to the *same* group all over again.
 let syncingGroupNavigation = false;
 
-async function goToPassage(panelState, passage, { record = true, scrollToTop = true } = {}) {
+async function goToPassage(panelState, passage, { record = true } = {}) {
   const target = normalizePassage(passage.book, passage.chapter, passage.verse);
   const chapterChanged = panelState.book !== target.book || panelState.chapter !== target.chapter || !panelState.data;
   panelState.book = target.book;
   panelState.chapter = target.chapter;
   panelState.verse = target.verse;
+  // Moving the panel itself is what hands its TSK view back to the passage the
+  // panel is on: whatever a cross-reference link or a verse click had pointed TSK
+  // at instead (see tskPassageOf) is let go of.
+  panelState.tskPassage = null;
   saveState();
   let loaded = true;
   if (chapterChanged) {
     loaded = await loadPanel(panelState, target.verse);
   } else {
     updatePanelControls(panelState);
-    if (scrollToTop) scrollVerseToTop(panelState, target.verse);
+    scrollVerseToTop(panelState, target.verse);
     // Same-chapter navigation deliberately skips renderPanelBody (a plain
-    // verse-list panel just scrolls, its rows unchanged) -- but TSK always
-    // mirrors this panel's own selector (see renderPanelBody), so it still
-    // needs telling explicitly here, the one path that otherwise wouldn't.
-    if (panelState.activeStudyTool === "TSK") {
-      getStudyToolInstance(panelState, "TSK").goToVerse(target.book, target.chapter, target.verse);
-    }
+    // verse-list panel just scrolls, its rows unchanged) -- but a TSK view on
+    // screen follows the passage its panel is on (see renderPanelBody), so it
+    // still needs telling explicitly here, the one path that otherwise wouldn't.
+    syncTskPane(panelState);
   }
   if (!loaded) return false;
   if (record) recordPanelHistory(panelState, target);
@@ -5793,9 +5795,9 @@ async function goToPassage(panelState, passage, { record = true, scrollToTop = t
   saveState();
   // Linked panels always show the same passage (see linkGroupPartners) --
   // every navigation, however it got here (verse combo, chapter jump,
-  // history, a verse click's own TSK routing), fans out to the rest of
-  // this panel's own group the same way. Guarded so the fanned-out calls
-  // below don't each try to fan out all over again.
+  // history, a move), fans out to the rest of this panel's own group the same
+  // way. Guarded so the fanned-out calls below don't each try to fan out all
+  // over again.
   if (!syncingGroupNavigation) {
     // A partner already sitting on this exact passage (most commonly, the
     // panel just linked *to* -- see linkToPanel, whose target's own current
@@ -5804,25 +5806,22 @@ async function goToPassage(panelState, passage, { record = true, scrollToTop = t
     // chapter branch's scrollVerseToTop below, nudging its scroll to this
     // verse's top even though it was already showing it, however it had
     // scrolled there.
-    const partners = linkGroupPartners(panelState).filter(
+    const members = linkGroupPartners(panelState);
+    const partners = members.filter(
       (partner) => partner.book !== target.book || partner.chapter !== target.chapter || partner.verse !== target.verse,
     );
+    // The partners left out of that don't move, but their TSK view may be
+    // pointing somewhere else (a cross reference followed in it, a verse clicked
+    // in the group): the group is back on its passage, so TSK goes with it.
+    for (const member of members) {
+      if (!member.tskPassage || partners.includes(member)) continue;
+      member.tskPassage = null;
+      syncTskPane(member);
+    }
     if (partners.length) {
       syncingGroupNavigation = true;
       try {
-        // scrollToTop propagates as-is (not left to default back to true)
-        // so a verse click's own notify-only call (scrollToTop: false --
-        // see its own comment: this panel is already showing what was
-        // clicked, nothing to jump to) doesn't still yank every *other*
-        // linked partner's own scroll to this verse's top. A plain-text
-        // partner in a properly aligned group is already showing this
-        // verse in the right row (that's what equalizeGroupRowHeights and
-        // the live scrollTop mirror in createPanelElement are for) --
-        // forcing its scrollTop to "this verse at the very top" would only
-        // knock it out of alignment with a source panel that never moved.
-        // TSK's own goToVerse call below stays unconditional either way,
-        // so a linked TSK partner still catches up to the new verse.
-        await Promise.all(partners.map((partner) => goToPassage(partner, target, { record, scrollToTop })));
+        await Promise.all(partners.map((partner) => goToPassage(partner, target, { record })));
       } finally {
         syncingGroupNavigation = false;
       }
@@ -6412,6 +6411,10 @@ function pruneStudyToolInstances(panelState) {
   // A word held for the STR chip's next click (see pendingStrWord) goes with
   // the chip: nothing is left to hand it to.
   if (!panelState.enabledTranslations.includes("STR")) panelState.pendingStrWord = null;
+  // Likewise a passage TSK was pointed at (see tskPassageOf): with the chip gone
+  // there is no TSK view left to show it, and a chip added later starts on the
+  // panel's own passage.
+  if (!panelState.enabledTranslations.includes("TSK")) panelState.tskPassage = null;
   const cache = panelState.studyToolInstances;
   if (!cache) return;
   for (const toolId of Object.keys(cache)) {
@@ -6432,15 +6435,16 @@ function destroyStudyToolInstances(panelState) {
 // What the "cross references" link icon on a panel STR pane's Englishman's
 // Concordance row does (see buildConcordanceResultRow): a linked panel that is
 // showing its TSK view right now shows that reference there (brought into sight
-// if it sits off screen); when no linked panel is on TSK, the TSK popup opens on
-// the reference instead. A click never turns STR or TSK on in a panel -- no view
-// is switched over and no chip is added, so TSK only ever shows where it was
-// already showing. (The icon sits in this panel's own STR pane, so this panel
-// itself is never the one on TSK.)
+// if it sits off screen) -- its TSK view alone moves to it, while every panel,
+// this one and the linked ones, stays on the passage it is on; when no linked
+// panel is on TSK, the TSK popup opens on the reference instead. A click never
+// turns STR or TSK on in a panel -- no view is switched over and no chip is
+// added, so TSK only ever shows where it was already showing. (The icon sits in
+// this panel's own STR pane, so this panel itself is never the one on TSK.)
 async function openCrossReferencesFromPanel(panelState, book, chapter, verse) {
   const partner = linkedPanelShowingTsk(panelState);
   if (!partner) return openTskFromResult(book, chapter, verse, panelState);
-  await showReferenceInTskPanel(partner, book, chapter, verse);
+  await pointTskAt(partner, { book, chapter, verse });
   await scrollPanelIntoViewIfOffScreen(partner);
 }
 
@@ -6489,14 +6493,45 @@ async function scrollPanelIntoViewIfOffScreen(panelState) {
   animateTrackScroll(Math.max(0, Math.min(target, panelTrack.scrollWidth - panelTrack.clientWidth)), 280);
 }
 
-// Moves a panel that is on its TSK view to the given reference, which TSK always
-// mirrors (see goToVerse in createEmbeddedTskTool) -- the same two steps as
-// drilling into a row of its own list. A linked group moves to that reference
-// together (see goToPassage), so this is also how one panel's cross reference
-// reaches a linked panel's TSK view.
-async function showReferenceInTskPanel(panelState, book, chapter, verse) {
-  await goToPassage(panelState, { book, chapter, verse }, { record: true });
-  await getStudyToolInstance(panelState, "TSK").goToVerse(book, chapter, verse);
+// The passage a panel's TSK view shows: the one the panel itself is on, unless a
+// cross-reference link or a click on a verse of plain text has pointed TSK at
+// another (see pointTskAt) -- TSK then shows that one while the panel keeps its
+// own book/chapter/verse, selectors and scroll included. Held on the panel, not
+// in its TSK pane: a pane that isn't on screen can't be told anything, and one
+// that was never opened doesn't exist yet. Not saved with the panel -- like a
+// list's scroll it is how the reader got around, so a reload starts TSK on the
+// panel's own passage again. Let go of when the panel itself moves (see
+// goToPassage), which hands TSK back to the passage it moved to, and when the
+// TSK chip goes (see pruneStudyToolInstances).
+function tskPassageOf(panelState) {
+  return panelState.tskPassage ?? currentPassage(panelState);
+}
+
+// Points the TSK views of panelState's link group at a passage -- what following
+// a cross reference does (from a TSK pane's own list, or from a linked STR pane's
+// Englishman's row, see openCrossReferencesFromPanel) and what a click on a verse
+// of plain text does. Only TSK moves: no panel changes the passage it is on, so
+// the selectors, history and scroll of this panel and of every linked one stay as
+// they were. Every panel of the group with the TSK chip takes it, on TSK right now
+// or not -- a panel on plain text or STR shows it from the moment its chip is
+// pressed -- and a pane that is on screen redraws for it.
+function pointTskAt(panelState, passage) {
+  const picked = normalizePassage(passage.book, passage.chapter, passage.verse);
+  const group = [panelState, ...linkGroupPartners(panelState)].filter((member) => member.enabledTranslations.includes("TSK"));
+  for (const member of group) member.tskPassage = picked;
+  return Promise.all(group.map((member) => syncTskPane(member)));
+}
+
+// Brings a TSK pane that is on screen to the passage its panel points it at (see
+// tskPassageOf). A pane that is not (the panel shows something else, or is still
+// loading a chapter) is left alone: renderPanelBody does it the moment the pane is
+// mounted.
+function syncTskPane(panelState) {
+  if (panelState.activeStudyTool !== "TSK") return Promise.resolve();
+  const instance = getStudyToolInstance(panelState, "TSK");
+  if (!instance.element.isConnected) return Promise.resolve();
+  const { book, chapter, verse } = tskPassageOf(panelState);
+  return instance.goToVerse(book, chapter, verse);
 }
 
 function buildEmbeddedTskLinkButton(panelState, bookId, chapter, verse) {
@@ -6528,9 +6563,11 @@ function createEmbeddedTskTool(panelState) {
   element.append(shell);
 
   // Embedded, this pane has no history or book/chapter/verse navigation of
-  // its own -- it always mirrors this panel's own selector instead (see
-  // goToVerse's call site in renderPanelBody), so nothing here is recorded
-  // to the shared TSK dialog history either. The KJV and 개역개정 text above
+  // its own -- it shows whatever passage its panel points it at (see
+  // tskPassageOf and goToVerse's call site in renderPanelBody): the one the
+  // panel's own selector sits on, until a cross-reference link or a verse
+  // click points it at another without moving the panel (see pointTskAt).
+  // The KJV and 개역개정 text above
   // the results starts the pane, right under the panel's own top bar; below
   // it sits the fold bar that hides it (see appendTskVerseFoldBar), whose
   // choice is held here -- this pane's own, like the STR pane's -- so a
@@ -6551,7 +6588,8 @@ function createEmbeddedTskTool(panelState) {
   // translations this same panel currently has enabled, read fresh on
   // every render rather than a value this pane could set itself.
   const currentTranslationOrder = () => embeddedDefaultTranslations(panelState);
-  const viewState = { book: panelState.book, chapter: panelState.chapter, verse: panelState.verse, data: null, anchors: [] };
+  const start = tskPassageOf(panelState);
+  const viewState = { book: start.book, chapter: start.chapter, verse: start.verse, data: null, anchors: [] };
   // Whatever passage this panel already happened to be on when TSK first
   // turned on for it (its own starting viewState above) is a silent
   // default, same idea as the STR pane's own H0001 fallback -- it's not a
@@ -6640,12 +6678,12 @@ function createEmbeddedTskTool(panelState) {
     setRowIconButtonContent(linkButton, `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>`);
     linkButton.addEventListener("click", async (event) => {
       event.stopPropagation();
-      // Drilling into a different reference's own cross references moves
-      // this panel's own book/chapter/verse selector to match -- there's
-      // no separate "TSK position" of its own to drift from it (see
-      // goToVerse below), so the two always stay in sync.
-      await goToPassage(panelState, { book: bookId, chapter, verse }, { record: true });
-      await goToVerse(bookId, chapter, verse);
+      // Drilling into a different reference's own cross references changes
+      // only what this pane shows (see pointTskAt): the panel keeps the
+      // book/chapter/verse its selectors say, and so do the panels linked
+      // to it -- the TSK views of the group, this one included, are what
+      // go to the reference.
+      await pointTskAt(panelState, { book: bookId, chapter, verse });
     });
     actions.append(viewButton, copyButton, linkButton);
     reference.append(actions);
@@ -6723,39 +6761,62 @@ function createEmbeddedTskTool(panelState) {
     body.replaceChildren(results);
   }
 
+  // Bumped by every load, so one that finds a newer load started while it waited
+  // for its chapter gives up there instead of drawing over it -- a reference
+  // followed right after another one, with the earlier one's chapter arriving last.
+  let loadSerial = 0;
+  // The passage last asked for (see goToVerse). viewState.verse can differ from
+  // it: a verse number past the chapter's last is held to that last verse once the
+  // chapter has been read. Reset when a draw is given up because the pane is not
+  // on screen, so the call that follows draws it.
+  let requested = null;
+
   async function loadChapter() {
+    const serial = ++loadSerial;
+    const { book, chapter } = viewState;
     try {
-      viewState.data = await getChapter(viewState.book, viewState.chapter);
+      const data = await getChapter(book, chapter);
+      if (serial !== loadSerial) return;
+      viewState.data = data;
     } catch (error) {
-      showLookupEmpty(body, error.message);
+      if (serial === loadSerial) showLookupEmpty(body, error.message);
       return;
     }
-    if (!element.isConnected) return;
+    if (!element.isConnected) {
+      requested = null;
+      return;
+    }
     const verses = verseItems(viewState);
     const maxVerse = verses.at(-1)?.value ?? 1;
     viewState.verse = Math.max(1, Math.min(viewState.verse, maxVerse));
-    const tskChapterData = await getTskChapter(viewState.book, viewState.chapter);
-    if (!element.isConnected) return;
+    const tskChapterData = await getTskChapter(book, chapter);
+    if (serial !== loadSerial) return;
+    if (!element.isConnected) {
+      requested = null;
+      return;
+    }
     const verseTsk = tskChapterData.v.find(([verse]) => verse === viewState.verse);
     viewState.anchors = verseTsk ? verseTsk[1] : [];
     renderVerseText();
     await renderReferenceList();
   }
 
-  // Called every render (see renderPanelBody) with this panel's own current
-  // book/chapter/verse -- a no-op once already showing it, so the common
-  // case (nothing navigated, just some unrelated re-render) never re-fetches
-  // or re-records. Every *genuine* move (see hasNavigated above) joins the
-  // shared tskHistory the standalone popup's own history arrows page
-  // through too, whichever panel or the popup itself it happened in.
+  // Called every render (see renderPanelBody) with the passage this panel
+  // points TSK at (see tskPassageOf), and whenever a cross-reference link or a
+  // verse click points it somewhere else (see pointTskAt) -- a no-op once
+  // already showing it, so the common case (nothing navigated, just some
+  // unrelated re-render) never re-fetches or re-records. Compared against the
+  // passage asked for, not viewState: a reference past the end of its chapter
+  // would otherwise be redrawn by every render. Every *genuine* move (see
+  // hasNavigated above) joins the shared tskHistory the standalone popup's own
+  // history arrows page through too, whichever panel or the popup itself it
+  // happened in.
   async function goToVerse(book, chapter, verse) {
     const normalized = normalizePassage(book, chapter, verse);
-    if (viewState.data && viewState.book === normalized.book
-      && viewState.chapter === normalized.chapter && viewState.verse === normalized.verse) {
-      return;
-    }
+    if (viewState.data && samePassage(requested, normalized)) return;
     if (hasNavigated) recordTskHistory(normalized);
     hasNavigated = true;
+    requested = normalized;
     viewState.book = normalized.book;
     viewState.chapter = normalized.chapter;
     viewState.verse = normalized.verse;
@@ -7322,11 +7383,13 @@ function renderPanelBody(panelState) {
   if (panelState.activeStudyTool) {
     const instance = getStudyToolInstance(panelState, panelState.activeStudyTool);
     instance.element.className = studyToolPaneBaseClass(panelState.activeStudyTool);
-    // TSK has no nav of its own (see createEmbeddedTskTool) -- it always
-    // shows cross references for whatever book/chapter/verse this panel's
-    // own selector currently sits on.
+    // TSK has no nav of its own (see createEmbeddedTskTool) -- it shows cross
+    // references for whatever passage this panel points it at (see
+    // tskPassageOf): the book/chapter/verse its own selector sits on, unless a
+    // cross-reference link or a verse click has pointed it somewhere else.
     if (panelState.activeStudyTool === "TSK") {
-      instance.goToVerse(panelState.book, panelState.chapter, panelState.verse);
+      const { book, chapter, verse } = tskPassageOf(panelState);
+      instance.goToVerse(book, chapter, verse);
     } else if (panelState.activeStudyTool === "STR" && panelState.pendingStrWord) {
       // The word last clicked in this panel's (or a linked panel's) text
       // while STR wasn't on screen -- an STR pane that isn't mounted can't
@@ -7428,37 +7491,13 @@ function renderPanelBody(panelState) {
         // instead) or in a linked panel (see linkGroupPartners), it takes
         // this verse as the one whose cross references it shows, without
         // waiting for the verse-actions bar's own cross-references button.
-        // TSK always mirrors the verse its panel is on (see renderPanelBody),
-        // so that's what the goToPassage call below sets -- and its own
-        // group fan-out (with its "TSK always follows" branch) carries the
-        // verse to every linked panel, a panel already showing TSK following
-        // at once. Clicking a verse doesn't switch a panel over to TSK,
-        // though -- only its chip does that, and shows this verse then. That
-        // holds for every panel, whatever chips it has and whether or not it
-        // is linked to the one clicked.
-        const targets = [panelState, ...linkGroupPartners(panelState)];
-        if (!targets.some((target) => target.enabledTranslations.includes("TSK"))) return;
-        // Clicking a verse just to notify a linked TSK partner isn't a real
-        // navigation for THIS panel -- the reader is already looking at
-        // this verse (that's how they clicked it, and selectVerse above has
-        // already settled wherever it belongs, including its own
-        // revealVerseAboveActions nudge if one was needed) -- so
-        // goToPassage's own scrollVerseToTop (still needed so whichever
-        // linked partner's own view actually has to jump to this reference
-        // does) is skipped for this panel specifically via scrollToTop:
-        // false. An earlier version instead snapshotted this panel's own
-        // scrollTop and restored it right after -- but that raced against
-        // revealVerseAboveActions's own smooth-scroll animation (already
-        // in flight from selectVerse, above, whenever reduced-motion isn't
-        // on): the synchronous restore "won" for an instant, only for the
-        // still-running animation to carry scrollTop the rest of the way to
-        // its own target moments later, undoing it. Skipping the scroll
-        // outright avoids the race instead of trying to out-time it.
-        goToPassage(
-          panelState,
-          { book: panelState.book, chapter: panelState.chapter, verse: verseNumber },
-          { record: true, scrollToTop: false },
-        );
+        // Only what TSK shows changes (see pointTskAt): no panel moves, so
+        // this one keeps the book/chapter/verse its selectors say, and so does
+        // every linked partner -- a clicked verse is not a navigation. Nor does
+        // the click switch a panel over to TSK -- only its chip does that, and
+        // shows this verse then. That holds for every panel, whatever chips it
+        // has and whether or not it is linked to the one clicked.
+        pointTskAt(panelState, { book: panelState.book, chapter: panelState.chapter, verse: verseNumber });
       });
 
       buildTranslationLinesInto(
