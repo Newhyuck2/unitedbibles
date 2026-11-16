@@ -2265,7 +2265,44 @@ function chipButtonPressIsStray(list, button, event) {
   return event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom;
 }
 
+// The ids the chip row shows for `order`: an id with no metadata gets no chip
+// (see renderTranslationChipList).
+function translationChipIds(order) {
+  return order.filter((id) => translationMeta(id));
+}
+
+// Whether the row already holds exactly the chips `order` calls for, in that
+// order -- all it can then be out of date on is how each one reads (see
+// refreshTranslationChipEmphasis), which needs no chip to be replaced.
+function translationChipRowMatches(list, order) {
+  const ids = translationChipIds(order);
+  const chips = list.children;
+  return chips.length === ids.length && ids.every((id, index) => chips[index].dataset.translation === id);
+}
+
+// Brings each chip's faded look up to date with getEmphasis, in place: hiding or
+// showing a version, or a study tool taking over, changes nothing else about a chip.
+function refreshTranslationChipEmphasis(list, getEmphasis) {
+  for (const chip of list.children) {
+    chip.classList.toggle("chip-dimmed", (getEmphasis?.(chip.dataset.translation) ?? "normal") === "dim");
+  }
+}
+
+// Deferred a frame so a dialog opening in this same tick (showModal right
+// after render) has already become visible -- scrollWidth/clientWidth read
+// 0/0 on a still-hidden <dialog>, which would misjudge overflow.
+function scheduleChipRowOverflowSync(list) {
+  requestAnimationFrame(() => {
+    list.classList.toggle("translation-list--overflowing", list.scrollWidth > list.clientWidth + 1);
+    horizontalScrollbarSyncs.get(list)?.();
+  });
+}
+
 function renderTranslationChipList({ list, order, getEmphasis, onToggleActive, onOpenModePopup, onRemove, onMove }) {
+  // The row scrolls sideways once its chips overflow, and every chip is replaced
+  // below: what the reader had scrolled it to is put back afterwards, not left to
+  // whatever the browser makes of a row of brand-new chips.
+  const scrolledTo = list.scrollLeft;
   list.replaceChildren();
 
   // Everything else that
@@ -2435,13 +2472,8 @@ function renderTranslationChipList({ list, order, getEmphasis, onToggleActive, o
     list.append(chip);
   }
 
-  // Deferred a frame so a dialog opening in this same tick (showModal right
-  // after render) has already become visible — scrollWidth/clientWidth read
-  // 0/0 on a still-hidden <dialog>, which would misjudge overflow.
-  requestAnimationFrame(() => {
-    list.classList.toggle("translation-list--overflowing", list.scrollWidth > list.clientWidth + 1);
-    horizontalScrollbarSyncs.get(list)?.();
-  });
+  if (scrolledTo) list.scrollLeft = scrolledTo;
+  scheduleChipRowOverflowSync(list);
 }
 
 // Native HTML5 drag-and-drop (dragstart/dragover/drop) does not fire on touch
@@ -3065,6 +3097,20 @@ function setupDialogTranslationControl({
   };
 
   const render = () => {
+    const order = getOrder();
+    // The same chips in the same order -- what a chip press leaves, and what
+    // every panel render asks for again (see syncOriginalLanguageForTestament)
+    // -- keeps the row's elements as they are and only refreshes how each one
+    // reads. Replacing a row of chips that had not changed made some browsers
+    // choose its scroll position over again: a row scrolled sideways to reach STR
+    // or TSK jumped away the moment that chip was pressed. Nothing about an
+    // unchanged row needs a rebuild.
+    if (translationChipRowMatches(list, order)) {
+      refreshTranslationChipEmphasis(list, getEmphasis);
+      if (!menu.hidden) renderMenu();
+      scheduleChipRowOverflowSync(list);
+      return;
+    }
     // Rebuilding the chip row (list.replaceChildren, inside
     // renderTranslationChipList) destroys and recreates every chip element,
     // including whichever one was just clicked -- and some browsers nudge
@@ -3078,7 +3124,7 @@ function setupDialogTranslationControl({
     const savedScrollLeft = panelTrack.scrollLeft;
     renderTranslationChipList({
       list,
-      order: getOrder(),
+      order,
       getEmphasis,
       onToggleActive: onToggleActive && ((id) => {
         onToggleActive(id);
