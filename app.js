@@ -3061,8 +3061,8 @@ function setupDialogTranslationControl({
   let openedByTouchPress = false;
   const controls = picker.closest(".translation-controls");
 
-  // The chip x's own pointerdown never reaches the popup's outside-press
-  // closer (see renderTranslationChipList), so a popup open on the chip
+  // A chip removed with the keyboard (Enter on its x) makes no pointerdown
+  // for the popup's outside-press closer to see, so a popup open on the chip
   // being removed would otherwise stay up, applying picks to a translation
   // that's gone.
   const closeChipModePopupFor = (id) => {
@@ -3423,11 +3423,27 @@ mobileLayout.addEventListener("change", () => {
   syncTrackFreeScroll();
 });
 
-// Swallow the press that closed an open dropdown so it cannot reach — and
-// act on — whatever sits underneath (e.g. a verse tap starting copy mode).
-// Only that press's own click is swallowed: a new press or a short timeout
-// disarms the guard.
-function shieldOutsidePress(event) {
+// A press outside an open popup or dropdown closes it (each one has its own
+// listener for that), and what the press does besides depends on where it
+// landed:
+//  - on a panel's Bible text (anything inside .panel-content), on a dialog's
+//    backdrop, or on the control that opened the popup: nothing. The press is
+//    swallowed so it cannot reach -- and act on -- whatever sits underneath
+//    (a verse tap starting copy mode, a backdrop press closing the dialog the
+//    popup sits in, the opener opening again what the press just closed).
+//  - anywhere else -- a version chip and the buttons in it, a panel's "..."
+//    button, the book/chapter/verse boxes, another panel's buttons, the
+//    buttons outside the panels, a dialog's own controls: the press goes on
+//    to that control, which does what it does.
+// Only a swallowed press's own click is swallowed with it: a new press or a
+// short timeout disarms the guard.
+function pressOnlyDismisses(target) {
+  if (!(target instanceof Element)) return true;
+  return target.matches("dialog") || Boolean(target.closest(".panel-content"));
+}
+
+function shieldOutsidePress(event, { onOpener = false } = {}) {
+  if (!onOpener && !pressOnlyDismisses(event.target)) return;
   event.preventDefault();
   event.stopPropagation();
   const swallowClick = (clickEvent) => {
@@ -3447,27 +3463,29 @@ function shieldOutsidePress(event) {
 
 // A press outside an open book/chapter dropdown closes it; the input's text
 // snaps back to the current selection (the combo listens for combo-restore).
-// On touch the press is fully swallowed — it only dismisses the menu.
+// Like every popup, the press only dismisses the menu where it landed on a
+// panel's Bible text (see shieldOutsidePress); a control gets it too.
 document.addEventListener(
   "pointerdown",
   (event) => {
-    let closedByTouch = false;
+    let closed = false;
     for (const menu of document.querySelectorAll(".combo-menu:not([hidden])")) {
       const combo = menu.closest(".combo");
       if (!combo || combo.contains(event.target)) continue;
       const input = combo.querySelector(".combo-input");
-      if (event.pointerType === "touch") closedByTouch = true;
+      closed = true;
       if (document.activeElement === input) {
         // Blur closes the menu, restores the label, and puts the on-screen
-        // keyboard away; on desktop the focus shift does it naturally.
-        if (event.pointerType === "touch") input.blur();
+        // keyboard away. Not left to the focus shift of the press itself: a
+        // press that is swallowed moves no focus.
+        input.blur();
         continue;
       }
       menu.hidden = true;
       input.setAttribute("aria-expanded", "false");
       combo.dispatchEvent(new CustomEvent("combo-restore"));
     }
-    if (closedByTouch) shieldOutsidePress(event);
+    if (closed) shieldOutsidePress(event);
   },
   true,
 );
@@ -6938,6 +6956,7 @@ function createPanelStrongsNav(panelState, {
   const onDocPointerDown = (event) => {
     if (langMenu.hidden || langPicker.contains(event.target)) return;
     closeLangMenu();
+    shieldOutsidePress(event);
   };
   const onDocKeydown = (event) => {
     if (event.key === "Escape" && !langMenu.hidden) closeLangMenu();
@@ -8631,6 +8650,18 @@ function hideChipModePopup() {
   chipModeTarget = null;
   chipModeAnchorRect = null;
   chipModePanelEl = null;
+}
+
+// Whether `target` is in the "..." button of the very chip the popup is open
+// for -- the control that opened it. Found by what the popup was opened for (the
+// chip's version and the panel or dialog it sits in), not by the chip element,
+// which a re-render of the row may have replaced since.
+function isChipModeOpener(target) {
+  if (!chipModeTarget || !(target instanceof Element)) return false;
+  const dots = target.closest(".chip-mode-toggle");
+  const chipEl = dots?.closest(".translation-chip");
+  if (!chipEl || chipEl.dataset.translation !== chipModeTarget.id) return false;
+  return (dots.closest(".bible-panel") ?? dots.closest("dialog")) === chipModePanelEl;
 }
 
 // How long a pick's own re-render keeps the popup's scroll-close off (see
@@ -13554,6 +13585,11 @@ highlightColorPopup.addEventListener("click", (event) => {
   const cell = event.target.closest(".chip-color-cell");
   if (cell) setHighlightManageColor(cell.dataset.color);
 });
+// The four popups' outside-press closers below (highlight, bookmark, version
+// chip style, note) listen in the capture phase, like every other popup's. A
+// chip's own buttons stop their pointerdown (see renderTranslationChipList), so
+// a closer listening in the bubble phase never saw a press on a chip's dots or
+// x, and those left the popup open behind a press that had acted.
 document.addEventListener("pointerdown", (event) => {
   if (highlightManagePopup.hidden) return;
   if (highlightManagePopup.contains(event.target) || highlightColorPopup.contains(event.target)) return;
@@ -13562,7 +13598,7 @@ document.addEventListener("pointerdown", (event) => {
   // dismissed this popup shouldn't also land on whatever verse or button
   // happened to be underneath it.
   shieldOutsidePress(event);
-});
+}, true);
 // Capture phase: .panel-content's own scroll (like any nested scrollable
 // element) never bubbles to document, but a capturing listener still sees
 // it on the way down -- the simplest way to notice "the highlighted text
@@ -13581,7 +13617,7 @@ document.addEventListener("pointerdown", (event) => {
   if (bookmarkManagePopup.contains(event.target)) return;
   hideBookmarkManagePopup();
   shieldOutsidePress(event);
-});
+}, true);
 document.addEventListener("scroll", () => {
   if (!bookmarkManagePopup.hidden) hideBookmarkManagePopup();
 }, true);
@@ -13610,9 +13646,12 @@ for (const button of chipModeParts.querySelectorAll(".chip-mode-part")) {
 document.addEventListener("pointerdown", (event) => {
   if (chipModePopup.hidden) return;
   if (chipModePopup.contains(event.target) || chipColorPopup.contains(event.target)) return;
+  // The dots that opened the popup toggle it: a press there closes it for good
+  // instead of going on to open it again. Read before the popup forgets its chip.
+  const onOpener = isChipModeOpener(event.target);
   hideChipModePopup();
-  shieldOutsidePress(event);
-});
+  shieldOutsidePress(event, { onOpener });
+}, true);
 document.addEventListener("scroll", () => {
   if (!chipModePopup.hidden && !chipModeScrollCloseSuppressed) hideChipModePopup();
 }, true);
@@ -13631,7 +13670,7 @@ document.addEventListener("pointerdown", (event) => {
   if (noteViewPopup.contains(event.target)) return;
   hideNoteViewPopup();
   shieldOutsidePress(event);
-});
+}, true);
 document.addEventListener("scroll", () => {
   if (!noteViewPopup.hidden) hideNoteViewPopup();
 }, true);
