@@ -3053,16 +3053,17 @@ mark {
    away -- the Strong's entry in the Strong's views, the KJV and 개역개정 verse
    text in the TSK ones. The button is the panel-move edge handle (.panel-move,
    which shows at a panel's sides while panels are being reordered) laid on its
-   side: the same rounded plate, border, shadow, blur and green ink, 72px wide
-   by 24px high instead of 24 by 72, with a chevron where that has its
-   triangle -- up while the block shows (press to fold it), down once it is
-   folded (press to bring it back). It takes the handle's fully shown look
-   (its hover state's 0.92 plate). The chevron's ink is --accent, the green
-   the old fold chevron had: the add-panel button's own dark green on the
-   light theme, the lighter mint the other accent icons use on the dark one,
-   where that dark green would vanish into the plate. The line is two halves,
-   one each side of the button, rather than one line behind it, so nothing
-   shows through the plate. */
+   side: the same rounded plate, border, blur and green ink, 72px wide by 24px
+   high instead of 24 by 72, with a chevron where that has its triangle -- up
+   while the block shows (press to fold it), down once it is folded (press to
+   bring it back). It takes the handle's fully shown look (its hover state's
+   0.92 plate), minus the handle's drop shadow: the plate lies flat on the
+   page, with no shadow of its own in either theme. The chevron's ink is
+   --accent, the green the old fold chevron had: the add-panel button's own
+   dark green on the light theme, the lighter mint the other accent icons use
+   on the dark one, where that dark green would vanish into the plate. The
+   line is two halves, one each side of the button, rather than one line
+   behind it, so nothing shows through the plate. */
 .fold-bar {
   display: flex;
   align-items: center;
@@ -3086,7 +3087,7 @@ mark {
   border: 1px solid rgba(40, 79, 67, 0.2);
   border-radius: 7px;
   background: rgba(255, 255, 255, 0.92);
-  box-shadow: 0 4px 12px rgba(37, 35, 31, 0.08);
+  box-shadow: none;
   backdrop-filter: blur(3px);
   color: var(--accent);
 }
