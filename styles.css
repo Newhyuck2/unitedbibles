@@ -468,38 +468,44 @@ p {
   /* A panel's bar hangs over verse text, which its invisible strip below (see
      the reach rule next) can overlay harmlessly. A dialog's bar has controls
      close underneath -- the bookmark list's first row's buttons sit 3px under
-     the row, the highlight colors 10px -- that a strip overlaying them would
-     swallow taps from. So the dialogs' bar box itself runs 20px lower (the
-     strip's height), with the line (track and thumb) raised by as much: it
-     looks the same, a press landing as low under the line as the panel's strip
-     reaches still grabs the bar, and nothing under it is covered -- the
-     controls just sit those 20px further down. */
+     the row, the search results' book strip 5px, the copy dialog's options
+     13px, the highlight colors and the TSK verse text 14px -- that a strip
+     overlaying them would swallow taps from. So the dialogs' bar box carries
+     its reach itself, as little of it as fits in the gap: 9px of clear space
+     above the line (as everywhere), the 5px line, and 6px under it, the line
+     raised by those 6px. The panel's line has 9px of clear space under it
+     before its first line of text; a dialog's gets the same, because each
+     dialog's box is then pulled up or pushed down (margin-bottom, one value per
+     dialog, below) until that dialog's next control starts 3px under the box,
+     9px under the line. (The box used to be 36px with the line 22px above its
+     bottom and each control 13px further down: 35-39px of gap under the line,
+     against the 13-14px the row has under it when it has no bar.) */
   dialog .translation-list-scrollbar--visible {
-    height: 36px;
+    height: 20px;
   }
 
   dialog .translation-list-scrollbar--visible::before,
   dialog .translation-list-scrollbar-thumb {
-    bottom: 22px;
+    bottom: 6px;
   }
 
-  /* Room under that box, where the dialog's next control starts close to it:
-     the bookmark list's first row starts right under the chip row (its
-     buttons 3px below the box), the search results' book strip 5px below it,
-     the highlight colors 10px; the copy dialog's options (13px) and the TSK
-     dialog's verse text need nothing. Each gets what brings it to 13px, so
-     the controls don't crowd the bar (and a fingertip on the box's lowest
-     part is no nearer a button than it needs to be). */
-  #bookmark-list-dialog .translation-list-scrollbar--visible {
-    margin-bottom: 10px;
+  /* The box overlaps the empty space the dialog leaves under its row, by as
+     much as that space has over the 3px the next control is to start under the
+     box: the copy dialog's 13px by 10px, the highlight colors' and the TSK
+     verse text's 14px by 11px, the search results' 5px by 2px. Nothing in
+     that space takes a tap. The bookmark list's first row is already 3px
+     under the row and needs nothing. */
+  #copy-dialog .translation-list-scrollbar--visible {
+    margin-bottom: -10px;
+  }
+
+  #highlight-dialog .translation-list-scrollbar--visible,
+  #tsk-dialog .translation-list-scrollbar--visible {
+    margin-bottom: -11px;
   }
 
   #search-dialog .translation-list-scrollbar--visible {
-    margin-bottom: 8px;
-  }
-
-  #highlight-dialog .translation-list-scrollbar--visible {
-    margin-bottom: 3px;
+    margin-bottom: -2px;
   }
 
   /* An invisible second drag surface (same drag as the bar's own -- see
