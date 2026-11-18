@@ -1151,15 +1151,28 @@ function enabledTranslationIds(panelState) {
   return panelState ? panelState.enabledTranslations : [];
 }
 
-// Neither has any actual verse text of its own to search or index (Hebrew/
-// Greek are interlinear tokens, not sentence text; STR/TSK are study-tool
-// panes, not translations at all) -- shared by every "default this dialog's
-// own version list to whatever the source panel is showing" call site
-// (openTskFromResult, openTskPassage's own two branches, openSearch) so a
-// panel with either enabled never leaks it into a dialog whose own picker
-// was never offering it as a choice in the first place.
+// A translation with sentence text of its own: neither an original language
+// (Hebrew/Greek are interlinear tokens in a panel, word blocks rather than a
+// sentence) nor a study tool (STR/TSK are panes, not translations at all) nor
+// NOTE. Reading mode flows exactly one of these as prose, and the "..." style
+// popup of a panel's chip row is open to them -- which is all this still
+// decides. The windows with a chip row of their own (copy, highlight, TSK,
+// search, bookmarks) take the original languages too: see isDialogTranslationId.
 function isIndexableTranslationId(id) {
   return !ORIGINAL_LANGUAGE_IDS.includes(id) && !STUDY_TOOL_IDS.includes(id) && id !== "NOTE";
+}
+
+// Every id the copy, highlight, TSK, search and bookmark windows can hold in
+// their chip rows and show verse text for: a real translation, or HEB, GRK or
+// LXX -- whose text there is just the original words of the verse, with no
+// transliteration or English meaning under them (see getOriginalVerseTexts).
+// STR, TSK and NOTE carry no text of their own to list, so none of those
+// windows takes them. Shared by every "default this window's version list to
+// whatever the source panel is showing" call site (openCopyDialog,
+// openHighlightDialog, openTskFromResult, openTskDialog, openBookmarkListDialog,
+// openSearch) and by the TSK pane inside a panel (embeddedDefaultTranslations).
+function isDialogTranslationId(id) {
+  return !STUDY_TOOL_IDS.includes(id) && id !== "NOTE";
 }
 
 // Only excluded while linked: a linked group always shows the same passage
@@ -2048,7 +2061,15 @@ function applyTextColorPick(line, className, color) {
 // only filters it once the tool exits), hence the enabled filter.
 function panelHiddenTranslations(panelState) {
   const hidden = panelState.activeStudyTool ? (panelState.preStudyToolDimmed ?? []) : panelState.dimmedTranslations;
-  return hidden.filter((id) => isIndexableTranslationId(id) && panelState.enabledTranslations.includes(id));
+  const enabled = panelState.enabledTranslations;
+  // HEB/GRK is hidden by a flag of its own (see toggleTranslationChip), never by
+  // sitting in the list -- a study tool dims it there along with every other
+  // chip, which is not the reader's pick -- so only the flag counts for it.
+  const picked = hidden.filter((id) => isDialogTranslationId(id)
+    && !EXCLUSIVE_ORIGINAL_LANGUAGE_IDS.includes(id) && enabled.includes(id));
+  const exclusive = activeOriginalLanguageId(enabled);
+  if (exclusive && panelState.originalLanguageHidden) picked.push(exclusive);
+  return picked;
 }
 
 // The TSK and Bookmark list dialogs' own bold/italic/underline/text-color/
@@ -2101,7 +2122,7 @@ function toggleDialogTranslationHidden(style, id) {
 // a hidden one just carries [hidden], so a chip click or a style pick can
 // restyle the list in place (see restyleTranslationMatchLines) instead of
 // re-fetching and redrawing it, which would also lose its scroll position.
-function appendTranslationMatchLines(body, texts, order, style) {
+function appendTranslationMatchLines(body, texts, order, style, { book } = {}) {
   if (!order.length) {
     const empty = document.createElement("p");
     empty.className = "empty-translation";
@@ -2110,6 +2131,11 @@ function appendTranslationMatchLines(body, texts, order, style) {
     return;
   }
   for (const translation of order) {
+    // `book` (the verse's book index) is passed by the lists that mix both
+    // testaments (TSK, bookmarks): there HEB and LXX have nothing to say of a
+    // New Testament verse and GRK nothing of an Old Testament one, so that
+    // line is left out altogether instead of standing there as a bare label.
+    if (book != null && ORIGINAL_LANGUAGE_IDS.includes(translation) && !originalLanguageCovers(translation, book)) continue;
     const text = texts[translation];
     const hasContent = hasVerseText(text);
     const row = document.createElement("div");
@@ -2123,7 +2149,14 @@ function appendTranslationMatchLines(body, texts, order, style) {
     const textEl = document.createElement("span");
     textEl.className = "search-match-text";
     textEl.lang = translationLanguage(translation);
-    textEl.textContent = hasContent ? text : "";
+    if (ORIGINAL_LANGUAGE_IDS.includes(translation)) {
+      // The original words alone, whichever of the panel's lines a HEB/GRK/LXX
+      // chip shows there (see fillOriginalLanguageText).
+      if (hasContent) fillOriginalLanguageText(textEl, translation, text);
+      else if (translation === "HEB") textEl.dir = "rtl";
+    } else {
+      textEl.textContent = hasContent ? text : "";
+    }
     row.append(label, textEl);
     applyTranslationMatchLineStyle(row, style);
     body.append(row);
@@ -2840,7 +2873,10 @@ function buildTranslationPickerOption({ id, meta, isEnabled, disabled, onPick })
 // originalLanguageTestament, when provided, adds a second menu column for the
 // Hebrew/Greek interlinear "translations" — only the option matching the
 // panel's current testament is clickable; the other is shown disabled.
-function renderDialogTranslationPickerMenu({ menu, picker, getOrder, onToggle, originalLanguageTestament, showStudyTools }) {
+// offerOriginalLanguages adds the same column for a window that is not a panel
+// (copy, highlight, TSK, search, bookmarks): what it lists is not tied to one
+// book, so HEB, GRK and LXX are all clickable there, whatever the testament.
+function renderDialogTranslationPickerMenu({ menu, picker, getOrder, onToggle, originalLanguageTestament, offerOriginalLanguages, showStudyTools }) {
   // Rebuilding this menu (menu.replaceChildren just below) is the same
   // class of DOM churn as renderTranslationChipList's own -- it nudges the
   // shared outer panel-track's own horizontal scroll position as an
@@ -2863,18 +2899,19 @@ function renderDialogTranslationPickerMenu({ menu, picker, getOrder, onToggle, o
     });
   };
   menu.replaceChildren();
-  // Callers that never pass getOriginalLanguageTestament (TSK's own panes
-  // and dialogs) never render the second "Original languages" column
-  // below -- the menu would otherwise sit at its fixed two-column width
-  // with nothing but empty space where that column would have been.
-  menu.classList.toggle("translation-picker-menu--single-column", !originalLanguageTestament);
+  // A caller that offers no original languages never renders the second
+  // "Original" column below -- the menu would otherwise sit at its fixed
+  // two-column width with nothing but empty space where that column would
+  // have been.
+  const withOriginalLanguages = Boolean(originalLanguageTestament) || Boolean(offerOriginalLanguages);
+  menu.classList.toggle("translation-picker-menu--single-column", !withOriginalLanguages);
   if (!manifest) {
     restoreScrollLeft();
     return;
   }
   const order = getOrder();
   const rerender = () => {
-    renderDialogTranslationPickerMenu({ menu, picker, getOrder, onToggle, originalLanguageTestament, showStudyTools });
+    renderDialogTranslationPickerMenu({ menu, picker, getOrder, onToggle, originalLanguageTestament, offerOriginalLanguages, showStudyTools });
     positionTranslationPickerMenuFor(picker, menu);
   };
 
@@ -2910,7 +2947,7 @@ function renderDialogTranslationPickerMenu({ menu, picker, getOrder, onToggle, o
   }
   columns.append(mainColumn);
 
-  if (originalLanguageTestament) {
+  if (withOriginalLanguages) {
     const languageColumn = document.createElement("div");
     languageColumn.className = "translation-picker-column translation-picker-column-languages";
 
@@ -2922,7 +2959,8 @@ function renderDialogTranslationPickerMenu({ menu, picker, getOrder, onToggle, o
     originalGroup.append(heading);
     for (const id of ORIGINAL_LANGUAGE_IDS) {
       const isEnabled = order.includes(id);
-      const disabled = !isEnabled && ORIGINAL_LANGUAGE_META[id].testament !== originalLanguageTestament;
+      const disabled = Boolean(originalLanguageTestament)
+        && !isEnabled && ORIGINAL_LANGUAGE_META[id].testament !== originalLanguageTestament;
       const option = buildTranslationPickerOption({
         id,
         meta: translationMeta(id),
@@ -3055,11 +3093,21 @@ function setupDialogTranslationControl({
   // hide/show (see dialogTranslationStyleControls), not redraw it.
   onEmphasisChange,
   getOriginalLanguageTestament,
+  // A window that is not a panel (copy, highlight, TSK, search, bookmarks)
+  // lists the original languages in its picker too, with none of a panel's
+  // rules about them: see renderDialogTranslationPickerMenu and onToggle.
+  offerOriginalLanguages,
   showStudyTools,
 }) {
   let suppressClickUntil = 0;
   let openedByTouchPress = false;
   const controls = picker.closest(".translation-controls");
+  // Only a panel's own picker (the one that knows the testament of its book)
+  // keeps HEB and GRK to one at a time, each tied to its own testament -- see
+  // EXCLUSIVE_ORIGINAL_LANGUAGE_IDS. Everywhere else the three are plain
+  // chips: any of them can be added next to any other, and a chip click
+  // fades or unfades them like every other version's.
+  const exclusiveOriginals = Boolean(getOriginalLanguageTestament);
 
   // A chip removed with the keyboard (Enter on its x) makes no pointerdown
   // for the popup's outside-press closer to see, so a popup open on the chip
@@ -3076,6 +3124,7 @@ function setupDialogTranslationControl({
       getOrder,
       onToggle,
       originalLanguageTestament: getOriginalLanguageTestament?.(),
+      offerOriginalLanguages,
       showStudyTools,
     });
   };
@@ -3157,7 +3206,7 @@ function setupDialogTranslationControl({
       // Only HEB/GRK's exclusive pair evicts "the other" -- adding LXX
       // removes nothing (it's a full peer, see ORIGINAL_LANGUAGE_META), and
       // adding HEB/GRK doesn't remove LXX either.
-      if (EXCLUSIVE_ORIGINAL_LANGUAGE_IDS.includes(id)) {
+      if (exclusiveOriginals && EXCLUSIVE_ORIGINAL_LANGUAGE_IDS.includes(id)) {
         for (const other of EXCLUSIVE_ORIGINAL_LANGUAGE_IDS) {
           if (other === id) continue;
           const otherIndex = order.indexOf(other);
@@ -3183,7 +3232,9 @@ function setupDialogTranslationControl({
         // freshly added chip already starts outside dimmedTranslations (so
         // it reads as shown from the moment it's inserted above), and
         // calling this would instead immediately toggle it hidden.
-        if (STUDY_TOOL_IDS.includes(id) || EXCLUSIVE_ORIGINAL_LANGUAGE_IDS.includes(id)) onToggleActive?.(id, { isNewlyAdded: true });
+        // (Only a panel's own picker: in the other windows a freshly added
+        // HEB/GRK is an ordinary chip, shown from the moment it is inserted.)
+        if (STUDY_TOOL_IDS.includes(id) || (exclusiveOriginals && EXCLUSIVE_ORIGINAL_LANGUAGE_IDS.includes(id))) onToggleActive?.(id, { isNewlyAdded: true });
       }
     }
     render();
@@ -5474,7 +5525,12 @@ function fillInterlinearOriginal(element, text) {
 // language id these tokens came from) rides along on that reported word
 // only so wordMorphologyDisplay can tell LXX's own already-English
 // morphology field apart from HEB/GRK's compact codes -- see its comment.
-function buildInterlinearWordRow(tokens, lang, onWordClick, isSelected, translationId) {
+// `highlight` ({ fill, pick }) is the verse's highlight in this language (the
+// highlight dialog offers HEB, GRK and LXX like any version): each word's
+// original-language text is painted with it, the same inline mark a plain
+// translation's verse gets, while the transliteration and meaning lines under
+// and over it stay as they are.
+function buildInterlinearWordRow(tokens, lang, onWordClick, isSelected, translationId, highlight = null) {
   const row = document.createElement("div");
   row.className = "interlinear-word-row";
   row.dir = lang === "he" ? "rtl" : "ltr";
@@ -5491,7 +5547,15 @@ function buildInterlinearWordRow(tokens, lang, onWordClick, isSelected, translat
 
     const originalEl = document.createElement("span");
     originalEl.className = "interlinear-original";
-    fillInterlinearOriginal(originalEl, original);
+    if (highlight) {
+      const mark = document.createElement("span");
+      mark.className = "translation-text-highlight";
+      styleHighlightMark(mark, highlight.fill, highlight.pick);
+      fillInterlinearOriginal(mark, original);
+      originalEl.append(mark);
+    } else {
+      fillInterlinearOriginal(originalEl, original);
+    }
 
     const glossEl = document.createElement("span");
     glossEl.className = "interlinear-gloss";
@@ -6169,6 +6233,7 @@ function buildTranslationLinesInto(pane, panelState, verseNumber, texts, list, b
     line.append(label);
     if (isOriginalLanguage) {
       if (tokens?.length) {
+        const originalFill = state.highlights[highlightKey(translation, panelState.book, panelState.chapter, verseNumber)];
         line.append(buildInterlinearWordRow(tokens, translationLanguage(translation), (wordEl, word) => {
           selectInterlinearWord(panelState, verseNumber, wordEl, word);
           // Live: STR, here or in any linked panel that has it enabled (see
@@ -6192,7 +6257,7 @@ function buildTranslationLinesInto(pane, panelState, verseNumber, texts, list, b
           panelState.selectedWord?.verse === verseNumber
           && panelState.selectedWord?.original === original
           && panelState.selectedWord?.strongs === strongs
-        ), translation));
+        ), translation, originalFill ? { fill: originalFill, pick: textColors[translation] } : null));
       }
     } else {
       const text = document.createElement("p");
@@ -6387,12 +6452,13 @@ function studyToolPaneBaseClass(toolId) {
   return `study-tool-pane study-tool-${toolId.toLowerCase()}`;
 }
 
-// TSK's cross-reference list mirrors whatever plain-language versions this
-// same panel is currently showing -- it has no picker of its own (see
+// TSK's cross-reference list mirrors whatever versions this same panel is
+// currently showing (an original language among them, as just its words -- see
+// isDialogTranslationId) -- it has no picker of its own (see
 // createEmbeddedTskTool), so callers re-read this on every render rather
 // than snapshotting it once.
 function embeddedDefaultTranslations(panelState) {
-  return panelState.enabledTranslations.filter(isIndexableTranslationId);
+  return panelState.enabledTranslations.filter(isDialogTranslationId);
 }
 
 // renderPanelBody reuses the cached study-tool instance as-is (see
@@ -6676,8 +6742,7 @@ function createEmbeddedTskTool(panelState) {
     content.append(rowBody);
 
     const fill = (chapterData) => {
-      const verseEntry = chapterData?.v.find(([v]) => v === verse);
-      const texts = verseEntry ? verseEntry[1] : {};
+      const texts = verseTextsOf(chapterData, verse);
       // This panel's own bold/italic/underline/text-color/hidden picks, read
       // live -- the "..." popup's picks already refresh this pane (see
       // applyChipModeChange's refreshTskCrossColumnTranslations call).
@@ -6687,7 +6752,7 @@ function createEmbeddedTskTool(panelState) {
         underlineTranslations: panelState.underlineTranslations,
         translationTextColors: panelState.translationTextColors,
         dimmedTranslations: panelHiddenTranslations(panelState),
-      });
+      }, { book: bookId });
     };
 
     const actions = document.createElement("div");
@@ -6771,7 +6836,7 @@ function createEmbeddedTskTool(panelState) {
     const hydrator = createLazyRowHydrator({
       root: list,
       isStillWanted: () => element.isConnected && list.isConnected,
-      load: loadChapterForRow,
+      load: (key) => loadChapterForRow(key, translationOrder),
     });
     listHydrator = hydrator;
     anchors.forEach(([anchor, refs], index) => {
@@ -7870,14 +7935,13 @@ function openCopyDialog(panelState) {
   copySelectedVerseNumbersChapter = copyChapter;
 
   // Offer the translations currently shown in this panel, in their reading
-  // order. Hebrew/Greek copies the same way as any modern version now (see
-  // buildCopyVerseText), but defaults to unselected here -- unless it's the
-  // only thing enabled in the panel, in which case there's nothing else to
-  // default to. Whatever the panel has hidden (chip faded) starts out faded
-  // here too, and so isn't copied unless its chip is clicked back on.
+  // order -- HEB, GRK and LXX among them, copied as just the verse's original
+  // words (see buildCopyText). Whatever the panel has hidden (chip faded)
+  // starts out faded here too, and so isn't copied unless its chip is clicked
+  // back on.
   const enabled = enabledTranslationIds(panelState);
-  const modernEnabled = enabled.filter(isIndexableTranslationId);
-  setCopyTranslations(modernEnabled.length ? modernEnabled : enabled, panelHiddenTranslations(panelState));
+  const offered = enabled.filter(isDialogTranslationId);
+  setCopyTranslations(offered.length ? offered : enabled, panelHiddenTranslations(panelState));
   populateCopyDialogAndShow();
 }
 
@@ -8042,8 +8106,8 @@ function openHighlightDialog(panelState) {
   highlightSelectedVerseNumbersBook = highlightBook;
   highlightSelectedVerseNumbersChapter = highlightChapter;
   const enabled = enabledTranslationIds(panelState);
-  const modernEnabled = enabled.filter(isIndexableTranslationId);
-  highlightTranslationOrder = modernEnabled.length ? modernEnabled : enabled;
+  const offered = enabled.filter(isDialogTranslationId);
+  highlightTranslationOrder = offered.length ? offered : enabled;
   populateHighlightDialogAndShow();
 }
 
@@ -8104,9 +8168,15 @@ function highlightEffectiveVerseNumbers() {
 // same passage) should show the same highlight too.
 function applyHighlight() {
   if (!highlightPanelState) return;
-  const translations = [...highlightTranslationOrder];
+  // An original language only has text, and so only something to paint, in its
+  // own testament (HEB and LXX the Old, GRK the New): for a passage of the
+  // other one it is left out, rather than saving highlights nothing can show.
+  const chosen = [...highlightTranslationOrder];
+  const translations = chosen.filter((id) => !ORIGINAL_LANGUAGE_IDS.includes(id) || originalLanguageCovers(id, highlightBook));
   if (!translations.length) {
-    highlightStatus.textContent = "Select a version.";
+    highlightStatus.textContent = chosen.length
+      ? "Nothing to highlight here: HEB and LXX are Old Testament texts, GRK the New Testament's."
+      : "Select a version.";
     return;
   }
   for (const translation of translations) {
@@ -8629,10 +8699,14 @@ function showChipModePopup(chipEl, panelState, id, { onChange } = {}) {
   chipModeTarget = { panelState, id, onChange, chipEl };
   syncChipModeStyleSelection(panelState, id);
   syncChipModeColorSelection(panelState, id);
-  const isOriginalLanguage = ORIGINAL_LANGUAGE_IDS.includes(id);
-  chipModeParts.hidden = !isOriginalLanguage;
-  if (isOriginalLanguage) syncChipModePartSelection(panelState);
   const dialog = chipEl.closest("dialog");
+  // TRL and ENG switch off lines of a panel's interlinear word blocks. A
+  // window's line for HEB/GRK/LXX is the verse's original words alone (see
+  // appendTranslationMatchLines), so in a window there is nothing for them to
+  // switch: only the style and color picks apply to it.
+  const showsParts = ORIGINAL_LANGUAGE_IDS.includes(id) && !dialog;
+  chipModeParts.hidden = !showsParts;
+  if (showsParts) syncChipModePartSelection(panelState);
   const host = dialog ?? chipModePopupHome;
   if (chipModePopup.parentElement !== host) host.append(chipModePopup);
   if (chipColorPopup.parentElement !== host) host.append(chipColorPopup);
@@ -8753,7 +8827,8 @@ function applyChipModeColor(color) {
 // One of HEB/GRK's own pronunciation/gloss labels (see
 // toggleOriginalLanguagePart) -- leaves the popup open, same as the B
 // button and swatches above. No TSK refresh needed: its cross-reference
-// list never shows HEB/GRK at all (see embeddedDefaultTranslations).
+// list shows HEB/GRK/LXX as the verse's original words alone (see
+// embeddedDefaultTranslations), which these two labels do not touch.
 // Unlike the style/color picks, this actually changes every verse's own
 // height, so renderPanelBody's anchor restore (and a linked group's
 // row-height sync one frame later -- see scheduleGroupRowHeightSync) scrolls
@@ -9933,6 +10008,85 @@ function joinInterlinearWords(words) {
   ), "");
 }
 
+// ---- HEB, GRK and LXX in the windows with a chip row (copy, highlight, TSK,
+// search, bookmarks) ----------------------------------------------------------
+// What those windows show of an original language is the verse's original
+// words and nothing else -- no transliteration, no English meaning, the way a
+// panel's HEB/GRK/LXX row reads once its TRL and ENG lines are switched off.
+// It is the very string the copy dialog uses (see getInterlinearVerseTextMap)
+// and the search indexes hold (scripts/export_original_search.py).
+
+const originalVerseTextCache = new Map();
+
+// Whether the original language `id` has any text for a book: HEB and LXX only
+// for the Old Testament, GRK only for the New. False for any other id.
+function originalLanguageCovers(id, bookIndex) {
+  const meta = ORIGINAL_LANGUAGE_META[id];
+  return Boolean(meta) && meta.testament === testamentForBook(bookIndex);
+}
+
+// One chapter of one original language as Map(verse -> text). Kept per
+// chapter and language, a few kilobytes each, long after the interlinear
+// chapter it was made from (getInterlinearChapter keeps only the last forty)
+// has gone: a TSK list or the bookmarks can ask for dozens of chapters. A
+// chapter that cannot be read comes back empty, and is asked for again next time.
+function getOriginalVerseTexts(bookIndex, chapter, id) {
+  const key = `${id}:${bookIndex}:${chapter}`;
+  let promise = originalVerseTextCache.get(key);
+  if (!promise) {
+    promise = getInterlinearVerseTextMap(bookIndex, chapter, id).catch(() => {
+      originalVerseTextCache.delete(key);
+      return new Map();
+    });
+    originalVerseTextCache.set(key, promise);
+    if (originalVerseTextCache.size > 400) originalVerseTextCache.delete(originalVerseTextCache.keys().next().value);
+  }
+  return promise;
+}
+
+// getChapter's data with the text of the original languages in `order` that
+// have any for this book added as `originalTexts` ({ HEB: Map(verse -> text) }):
+// what the TSK and bookmark lists and the highlight list read a row's verse
+// texts from (see verseTextsOf), so every version of a row comes from the one
+// load of its chapter. Returns the cached chapter itself when there is
+// nothing to add.
+async function getChapterWithOriginals(bookIndex, chapter, order) {
+  const data = await getChapter(bookIndex, chapter);
+  const ids = [...new Set(order)].filter((id) => originalLanguageCovers(id, bookIndex));
+  if (!ids.length) return data;
+  const maps = await Promise.all(ids.map((id) => getOriginalVerseTexts(bookIndex, chapter, id)));
+  return { ...data, originalTexts: Object.fromEntries(ids.map((id, index) => [id, maps[index]])) };
+}
+
+// What one verse of a chapter says in each version: the chapter file's own
+// `texts` object, with the original-language text of the verse (see
+// getChapterWithOriginals) under HEB/GRK/LXX where there is one. `{}` for a
+// verse the chapter does not have.
+function verseTextsOf(chapterData, verse) {
+  const entry = chapterData?.v.find(([v]) => v === verse);
+  const texts = entry ? entry[1] : {};
+  const originals = chapterData?.originalTexts;
+  if (!originals) return texts;
+  const merged = { ...texts };
+  for (const [id, byVerse] of Object.entries(originals)) {
+    const text = byVerse.get(verse);
+    if (text) merged[id] = text;
+  }
+  return merged;
+}
+
+// Puts a verse's original words into a window's text element (a result line's
+// .search-match-text, or -- `target` -- the highlight mark inside it). Hebrew
+// reads right to left, so its line is dir="rtl" (the CSS packs it against the
+// left edge, as a panel's Hebrew row is, see .interlinear-word-row); the
+// variant and compound marks inside a Greek word get the same line-height-0
+// span a panel gives them (see fillInterlinearOriginal).
+function fillOriginalLanguageText(container, id, text, target = container) {
+  container.lang = translationLanguage(id);
+  if (id === "HEB") container.dir = "rtl";
+  fillInterlinearOriginal(target, text);
+}
+
 // What actually gets copied: the dialog's own range row can only ever
 // display copyStartVerse..copyEndVerse (its own comment on
 // openCopyDialog explains why -- no field for "these specific verses,
@@ -9972,12 +10126,15 @@ function buildCopyText(translations, order, originalTextById) {
 
   if (order === "translation") {
     for (const translation of translations) {
-      lines.push(`${bookNameFor(translation)} ${range}, ${translationMeta(translation).label}`);
+      const block = [];
       for (const [verse, texts] of verses) {
         const text = textFor(texts, verse, translation);
-        if (text) lines.push(`${verse} ${text}`);
+        if (text) block.push(`${verse} ${text}`);
       }
-      lines.push("");
+      // An original language with no text for the passage (the Septuagint
+      // lacks some chapters outright) leaves no heading with nothing under it.
+      if (!block.length && ORIGINAL_LANGUAGE_IDS.includes(translation)) continue;
+      lines.push(`${bookNameFor(translation)} ${range}, ${translationMeta(translation).label}`, ...block, "");
     }
   } else {
     const bookName = bookNameFor(translations[0]);
@@ -10053,10 +10210,16 @@ async function writeClipboard(text) {
 
 async function copySelectedVerses() {
   if (!copyPanelState) return;
-  // A dimmed chip stays in the row but isn't copied.
-  const translations = copyTranslationOrder.filter((id) => !copyTranslationStyle.dimmedTranslations.includes(id));
+  // A dimmed chip stays in the row but isn't copied. Neither is an original
+  // language that has no text in this book's testament (HEB and LXX are the
+  // Old Testament's, GRK the New's): the row keeps its chip, the copy leaves
+  // out the heading it would have had.
+  const chosen = copyTranslationOrder.filter((id) => !copyTranslationStyle.dimmedTranslations.includes(id));
+  const translations = chosen.filter((id) => !ORIGINAL_LANGUAGE_IDS.includes(id) || originalLanguageCovers(id, copyBook));
   if (!translations.length) {
-    copyStatus.textContent = "Select a version.";
+    copyStatus.textContent = chosen.length
+      ? "Nothing to copy here: HEB and LXX are Old Testament texts, GRK the New Testament's."
+      : "Select a version.";
     return;
   }
   // One map per original-language id actually selected, not just the
@@ -11138,9 +11301,12 @@ function createLazyRowHydrator({ root, load, isStillWanted = () => true, concurr
 
 // What a TSK row needs: its chapter's text (a failed fetch leaves the row
 // without text rather than failing anything else).
-function loadChapterForRow(key) {
+// `order` is the list's own version set: the chapter comes back with the
+// original-language text of whichever of HEB/GRK/LXX are in it (see
+// getChapterWithOriginals), for verseTextsOf.
+function loadChapterForRow(key, order = []) {
   const [bookId, chapter] = key.split(":").map(Number);
-  return getChapter(bookId, chapter).catch(() => null);
+  return getChapterWithOriginals(bookId, chapter, order).catch(() => null);
 }
 
 // One <svg> icon button's markup, parsed once and then cloned: a long list
@@ -12045,6 +12211,9 @@ function setupTskControls() {
       pruneDialogTranslationStyle(tskTranslationStyle, order);
     },
     ...dialogTranslationStyleControls(tskTranslationStyle, () => tskDialogBody),
+    // HEB, GRK and LXX are offered too: a reference's line in one is the
+    // verse's original words alone (see appendTranslationMatchLines).
+    offerOriginalLanguages: true,
     onChange: () => {
       renderTskReferenceList();
     },
@@ -12154,7 +12323,7 @@ tskHistoryForwardButton.addEventListener("click", () => {
 // openCrossReferencesFromPanel), else whichever panel is active.
 async function openTskFromResult(bookId, chapter, verse, panelState = activeOrFirstPanel()) {
   if (!tskDialog.open) {
-    tskTranslationOrder = enabledTranslationIds(panelState).filter(isIndexableTranslationId);
+    tskTranslationOrder = enabledTranslationIds(panelState).filter(isDialogTranslationId);
     seedDialogTranslationStyle(tskTranslationStyle, panelState);
     tskTranslationControl?.render();
     tskDialog.showModal();
@@ -12294,9 +12463,7 @@ function buildTskResultRow(bookId, chapter, verse) {
   content.append(body);
 
   const fill = (chapterData) => {
-    const verseEntry = chapterData?.v.find(([v]) => v === verse);
-    const texts = verseEntry ? verseEntry[1] : {};
-    appendTranslationMatchLines(body, texts, tskTranslationOrder, tskTranslationStyle);
+    appendTranslationMatchLines(body, verseTextsOf(chapterData, verse), tskTranslationOrder, tskTranslationStyle, { book: bookId });
   };
 
   const actions = document.createElement("div");
@@ -12367,7 +12534,7 @@ async function renderTskReferenceList() {
   const hydrator = createLazyRowHydrator({
     root: list,
     isStillWanted: () => tskDialog.open && list.isConnected,
-    load: loadChapterForRow,
+    load: (key) => loadChapterForRow(key, tskTranslationOrder),
   });
   tskListHydrator = hydrator;
 
@@ -12436,8 +12603,9 @@ async function openTskDialog(panelState) {
     recordTskHistory(currentPassage(tskViewState));
     // The translation icons only govern which versions' text appears in the
     // cross-reference results below, so default them to whatever this panel is
-    // currently showing (Hebrew/Greek/STR/TSK excluded -- none have TSK-indexed text).
-    tskTranslationOrder = enabledTranslationIds(panelState).filter(isIndexableTranslationId);
+    // currently showing (STR/TSK/NOTE excluded -- they have no text of their own;
+    // HEB/GRK/LXX come along, as just the original words of each verse).
+    tskTranslationOrder = enabledTranslationIds(panelState).filter(isDialogTranslationId);
     // Along with each version's bold/italic/underline/text-color/hidden pick
     // there (see seedDialogTranslationStyle), so its text reads the same as in
     // the panel.
@@ -12447,7 +12615,7 @@ async function openTskDialog(panelState) {
     tskViewState.chapter = 1;
     tskViewState.verse = 1;
     const sourcePanel = activeOrFirstPanel();
-    tskTranslationOrder = enabledTranslationIds(sourcePanel).filter(isIndexableTranslationId);
+    tskTranslationOrder = enabledTranslationIds(sourcePanel).filter(isDialogTranslationId);
     seedDialogTranslationStyle(tskTranslationStyle, sourcePanel);
   }
   tskTranslationControl?.render();
@@ -12569,11 +12737,13 @@ panelOptionsInfoButton.addEventListener("click", () => {
 // chapter fetch doesn't sink the whole batch. Shared by the Highlight and
 // Bookmark list dialogs below, both of which need real verse text for an
 // arbitrary scatter of book/chapter combos across the whole Bible.
-async function fetchChaptersByKey(chapterKeys) {
+// `order` is the versions the list shows, for the original languages among
+// them (see getChapterWithOriginals).
+async function fetchChaptersByKey(chapterKeys, order = []) {
   const settled = await Promise.allSettled(
     [...chapterKeys].map(async (key) => {
       const [bookId, chapter] = key.split(":").map(Number);
-      return [key, await getChapter(bookId, chapter)];
+      return [key, await getChapterWithOriginals(bookId, chapter, order)];
     }),
   );
   return new Map(settled.filter((result) => result.status === "fulfilled").map((result) => result.value));
@@ -12684,7 +12854,10 @@ async function renderHighlightList() {
   }
   showLookupEmpty(highlightListBody, "Loading…");
   const chapterKeys = new Set(groups.map((group) => `${group.book}:${group.chapter}`));
-  const chaptersByKey = await fetchChaptersByKey(chapterKeys);
+  // The versions of the highlights themselves: any HEB, GRK or LXX one needs
+  // its original words fetched along with the chapter.
+  const highlightedVersions = groups.flatMap((group) => group.entries.map((entry) => entry.translation));
+  const chaptersByKey = await fetchChaptersByKey(chapterKeys, highlightedVersions);
   if (!highlightListDialog.open) return;
   const list = document.createElement("div");
   list.className = "tsk-anchor-list";
@@ -12696,9 +12869,7 @@ function buildHighlightResultRow(group, chaptersByKey) {
   const { book: bookId, chapter, verse, entries } = group;
   const { item, body, actions, reference } = buildStateListReferenceRow(bookId, chapter, verse, closeHighlightListDialog);
 
-  const chapterData = chaptersByKey.get(`${bookId}:${chapter}`);
-  const verseEntry = chapterData?.v.find(([v]) => v === verse);
-  const texts = verseEntry ? verseEntry[1] : {};
+  const texts = verseTextsOf(chaptersByKey.get(`${bookId}:${chapter}`), verse);
   for (const entry of entries) {
     const text = texts[entry.translation];
     const hasContent = hasVerseText(text);
@@ -12716,7 +12887,11 @@ function buildHighlightResultRow(group, chaptersByKey) {
       const mark = document.createElement("span");
       mark.className = "translation-text-highlight";
       styleHighlightMark(mark, entry.value);
-      mark.textContent = text;
+      if (ORIGINAL_LANGUAGE_IDS.includes(entry.translation)) {
+        fillOriginalLanguageText(textWrap, entry.translation, text, mark);
+      } else {
+        mark.textContent = text;
+      }
       textWrap.append(mark);
     }
     row.append(textWrap);
@@ -12777,6 +12952,8 @@ function setupBookmarkListControls() {
       pruneDialogTranslationStyle(bookmarkListTranslationStyle, order);
     },
     ...dialogTranslationStyleControls(bookmarkListTranslationStyle, () => bookmarkListBody),
+    // HEB, GRK and LXX are offered too (see setupTskControls).
+    offerOriginalLanguages: true,
     onChange: () => {
       renderBookmarkList();
     },
@@ -12787,7 +12964,7 @@ function setupBookmarkListControls() {
 async function openBookmarkListDialog() {
   if (!bookmarkListTranslationOrder.length) {
     const panelState = activeOrFirstPanel();
-    bookmarkListTranslationOrder = enabledTranslationIds(panelState).filter(isIndexableTranslationId);
+    bookmarkListTranslationOrder = enabledTranslationIds(panelState).filter(isDialogTranslationId);
     seedDialogTranslationStyle(bookmarkListTranslationStyle, panelState);
     bookmarkListTranslationControl.render();
   }
@@ -12816,7 +12993,7 @@ async function renderBookmarkList() {
   }
   showLookupEmpty(bookmarkListBody, "Loading…");
   const chapterKeys = new Set(verses.map((entry) => `${entry.book}:${entry.chapter}`));
-  const chaptersByKey = await fetchChaptersByKey(chapterKeys);
+  const chaptersByKey = await fetchChaptersByKey(chapterKeys, bookmarkListTranslationOrder);
   if (!bookmarkListDialog.open) return;
   const list = document.createElement("div");
   list.className = "tsk-anchor-list";
@@ -12829,10 +13006,8 @@ async function renderBookmarkList() {
 function buildBookmarkResultRow(bookId, chapter, verse, chaptersByKey) {
   const { item, body, actions, reference } = buildStateListReferenceRow(bookId, chapter, verse, closeBookmarkListDialog);
 
-  const chapterData = chaptersByKey.get(`${bookId}:${chapter}`);
-  const verseEntry = chapterData?.v.find(([v]) => v === verse);
-  const texts = verseEntry ? verseEntry[1] : {};
-  appendTranslationMatchLines(body, texts, bookmarkListTranslationOrder, bookmarkListTranslationStyle);
+  const texts = verseTextsOf(chaptersByKey.get(`${bookId}:${chapter}`), verse);
+  appendTranslationMatchLines(body, texts, bookmarkListTranslationOrder, bookmarkListTranslationStyle, { book: bookId });
 
   const copyButton = document.createElement("button");
   copyButton.type = "button";
@@ -12983,11 +13158,12 @@ infoNav.addEventListener("click", (event) => {
 
 function openSearch() {
   // Search isn't tied to a single panel, so default it to whatever the
-  // currently active panel is showing. Hebrew/Greek/STR/TSK have no search
-  // index, so none of them are ever offered here even if the active panel
-  // has one enabled.
+  // currently active panel is showing. STR/TSK/NOTE have no search index, so
+  // none of them are ever offered here even if the active panel has one
+  // enabled; HEB, GRK and LXX each have one (see scripts/export_original_search.py,
+  // and search-worker.js for how their words are matched).
   const activePanel = state.panels.find((panel) => panel.id === activePanelId);
-  searchTranslationOrder = enabledTranslationIds(activePanel).filter(isIndexableTranslationId);
+  searchTranslationOrder = enabledTranslationIds(activePanel).filter(isDialogTranslationId);
   // Whatever that panel has hidden (chip faded) starts out faded here too,
   // and so isn't searched unless its chip is clicked back on.
   searchTranslationStyle.dimmedTranslations = activePanel ? panelHiddenTranslations(activePanel) : [];
@@ -13247,7 +13423,16 @@ function buildSearchResultItem(result, query, translationOrder) {
     label.lang = translationLanguage(line.translation);
     label.textContent = translationMeta(line.translation).label;
     const text = document.createElement("span");
-    appendHighlighted(text, line.text, query);
+    if (ORIGINAL_LANGUAGE_IDS.includes(line.translation)) {
+      // HEB/GRK/LXX: the verse's original words, the terms found in them
+      // through the same folding the worker matched with (see
+      // appendHighlightedOriginal).
+      text.lang = translationLanguage(line.translation);
+      if (line.translation === "HEB") text.dir = "rtl";
+      appendHighlightedOriginal(text, line.text, query);
+    } else {
+      appendHighlighted(text, line.text, query);
+    }
     row.append(label, text);
     body.append(row);
   }
@@ -13303,6 +13488,11 @@ function appendHighlighted(element, text, query) {
       cursor = index + term.length;
     }
   }
+  appendMarkedRanges(element, text, mergeRanges(ranges));
+}
+
+// Sorts [start, end) ranges and joins the ones that overlap or touch.
+function mergeRanges(ranges) {
   ranges.sort((a, b) => a[0] - b[0]);
   const merged = [];
   for (const range of ranges) {
@@ -13313,15 +13503,81 @@ function appendHighlighted(element, text, query) {
       merged.push(range);
     }
   }
+  return merged;
+}
+
+// `text` into `element`, each of the (sorted, disjoint) `ranges` in a <mark>.
+// appendText says how a piece of text gets into a container; plain text by
+// default.
+function appendMarkedRanges(element, text, ranges, appendText = (container, piece) => container.append(document.createTextNode(piece))) {
   let cursor = 0;
-  for (const [start, end] of merged) {
-    if (start > cursor) element.append(document.createTextNode(text.slice(cursor, start)));
+  for (const [start, end] of ranges) {
+    if (start > cursor) appendText(element, text.slice(cursor, start));
     const mark = document.createElement("mark");
-    mark.textContent = text.slice(start, end);
+    appendText(mark, text.slice(start, end));
     element.append(mark);
     cursor = end;
   }
-  if (cursor < text.length) element.append(document.createTextNode(text.slice(cursor)));
+  if (cursor < text.length) appendText(element, text.slice(cursor));
+}
+
+const HEBREW_FINAL_TO_PLAIN = { "ך": "כ", "ם": "מ", "ן": "נ", "ף": "פ", "ץ": "צ" };
+
+// What search-worker.js's foldOriginal makes of a verse of HEB, GRK or LXX
+// (combining marks gone, lower-cased, final sigma and the Hebrew final letters
+// plain, maqaf and dashes spaces, other non-letters dropped) -- done here one
+// character at a time, so that every character of the folded text also
+// remembers where it came from: starts[i] .. ends[i] is the span of the
+// displayed text holding folded character i, with the marks written on that
+// letter included. That is what lets the words a search matched be marked in
+// the verse as it is displayed, points and accents and all.
+function foldOriginalWithMap(text) {
+  let folded = "";
+  const starts = [];
+  const ends = [];
+  let offset = 0;
+  for (const char of text) {
+    const next = offset + char.length;
+    for (const part of char.normalize("NFD")) {
+      if (/\p{M}/u.test(part)) {
+        // A mark belongs to the letter before it.
+        if (ends.length) ends[ends.length - 1] = next;
+        continue;
+      }
+      let kept = part.toLocaleLowerCase().replace(/ς/g, "σ");
+      if (HEBREW_FINAL_TO_PLAIN[kept]) kept = HEBREW_FINAL_TO_PLAIN[kept];
+      if (/[־‐-―-]/.test(kept)) kept = " ";
+      else if (/[^\p{L}\p{N}\s]/u.test(kept)) continue;
+      for (let index = 0; index < kept.length; index += 1) {
+        folded += kept[index];
+        starts.push(offset);
+        ends.push(next);
+      }
+    }
+    offset = next;
+  }
+  return { folded, starts, ends };
+}
+
+// appendHighlighted for a verse of HEB, GRK or LXX. A term is looked for in
+// the folded verse (so "λογος" finds "λόγος" and a Hebrew word typed without
+// its points finds the pointed one), and what it found is marked in the verse
+// as written. The variant and compound marks inside Greek words get their
+// line-height-0 span here too (see fillInterlinearOriginal).
+function appendHighlightedOriginal(element, text, query) {
+  const { folded, starts, ends } = foldOriginalWithMap(text);
+  const terms = foldOriginalWithMap(query.normalize("NFKC")).folded.split(/\s+/).filter(Boolean);
+  const ranges = [];
+  for (const term of terms) {
+    let cursor = 0;
+    while (cursor < folded.length) {
+      const index = folded.indexOf(term, cursor);
+      if (index < 0) break;
+      ranges.push([starts[index], ends[index + term.length - 1]]);
+      cursor = index + term.length;
+    }
+  }
+  appendMarkedRanges(element, text, mergeRanges(ranges), fillInterlinearOriginal);
 }
 
 function searchResultReferenceText(result) {
@@ -13388,11 +13644,12 @@ async function init() {
       // dialogTranslationStyleControls: its "..." popup picks (bold/italic/
       // underline/text color) mean nothing to a copy.
       ...dialogTranslationHideControls(copyTranslationStyle),
-      // No getOriginalLanguageTestament here -- unlike each reading panel's
-      // own picker, the copy dialog's "add version" popup never offers the
-      // Hebrew/Greek interlinear "translations" at all (copying plain text
-      // is the point; there's no sensible verse-by-verse plain-text form of
-      // an interlinear to copy).
+      // HEB, GRK and LXX are offered like any other version -- copied as the
+      // verse's original words alone (see buildCopyText) -- and, unlike a
+      // reading panel's own picker (which passes getOriginalLanguageTestament),
+      // with no testament gating: a passage of the other testament simply
+      // has nothing of that language to copy.
+      offerOriginalLanguages: true,
       onChange: () => {
         copyStatus.textContent = "";
       },
@@ -13412,6 +13669,9 @@ async function init() {
       // a faded one isn't searched (see runSearch), so the onChange below
       // re-runs the search for it just as it does for adding/removing one.
       ...dialogTranslationHideControls(searchTranslationStyle),
+      // HEB, GRK and LXX are searched too, in their own words (see
+      // search-worker.js's foldOriginal).
+      offerOriginalLanguages: true,
       onChange: () => {
         const query = searchInput.value.trim();
         if (searchDialog.open && query) runSearch(query);
@@ -13426,10 +13686,11 @@ async function init() {
       setOrder: (order) => {
         highlightTranslationOrder = order;
       },
-      // No getOriginalLanguageTestament here either, same reasoning as the
-      // copy dialog's own picker above -- Hebrew/Greek has no
-      // .translation-text of its own for buildTranslationLinesInto to hang
-      // a highlight background on (see its isOriginalLanguage branch).
+      // HEB, GRK and LXX are offered here too, like in the copy dialog above.
+      // A highlight on one paints the original word of every word block of the
+      // verse (see buildInterlinearWordRow), and only exists for the testament
+      // the language has text for (see applyHighlight).
+      offerOriginalLanguages: true,
       onChange: () => {
         highlightStatus.textContent = "";
       },

@@ -54,6 +54,35 @@ async function fetchIndexRows(url, translation) {
   return response.json();
 }
 
+// The original-language "translations" (see ORIGINAL_LANGUAGE_META in app.js).
+// Their index rows are the verse's Hebrew or Greek words as written, vowel
+// points, cantillation and accents included, which nobody types into a search
+// box: they are searched in a folded form instead -- see foldOriginal. The
+// rows themselves stay as written, since they are what a result shows.
+const ORIGINAL_LANGUAGES = new Set(["HEB", "GRK", "LXX"]);
+
+const HEBREW_FINAL_TO_PLAIN = { "ך": "כ", "ם": "מ", "ן": "נ", "ף": "פ", "ץ": "צ" };
+
+// Hebrew and Greek text as it is matched: every combining mark gone (Hebrew
+// points and cantillation, Greek accents, breathings and the iota subscript),
+// lower-cased, the Greek final sigma and the five Hebrew final letters written
+// as their plain forms (a term typed as a word, ending in one, has to find that
+// word's stem inside a longer one too), the maqaf and dashes between words made
+// spaces, and every other mark that is not a letter, digit or space (the
+// sof pasuq, the variant and compound marks Bible Hub draws around Greek words)
+// dropped. app.js's foldOriginalWithMap does the same to a displayed verse, so
+// the words a search matched can be marked in it.
+function foldOriginal(text) {
+  return text
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .toLocaleLowerCase()
+    .replace(/ς/g, "σ")
+    .replace(/[ךםןףץ]/g, (letter) => HEBREW_FINAL_TO_PLAIN[letter])
+    .replace(/[־‐-―-]/g, " ")
+    .replace(/[^\p{L}\p{N}\s]/gu, "");
+}
+
 // The text of every verse is normalized (NFKC, lower-cased) once, when its
 // translation is loaded, rather than again for every verse on every search:
 // that was most of what a search cost once the index was in memory. A verse
@@ -63,8 +92,13 @@ function loadTranslation(translation) {
   if (!loaded.has(translation)) {
     const promise = fetchIndexRows(`./data/search/${translation}.json?v=${ASSET_VERSION}`, translation).then((rows) => {
       const normalized = new Array(rows.length);
+      const original = ORIGINAL_LANGUAGES.has(translation);
       for (let index = 0; index < rows.length; index += 1) {
         const text = rows[index][3];
+        if (original) {
+          normalized[index] = foldOriginal(text);
+          continue;
+        }
         const folded = text.normalize("NFKC").toLocaleLowerCase();
         normalized[index] = folded === text ? text : folded;
       }
@@ -102,14 +136,21 @@ self.addEventListener("message", async (event) => {
     // order/position (e.g. "예수 하나님" finds verses containing both words
     // anywhere, not just that exact two-word phrase).
     const terms = query.normalize("NFKC").toLocaleLowerCase().split(/\s+/).filter(Boolean);
+    // The original languages are matched on their folded form (see
+    // foldOriginal), so their terms are the folded query's. A query with
+    // nothing left once folded (only points, say) matches none of them -- it
+    // must not come out as "every term matched", which an empty list would.
+    const originalTerms = foldOriginal(query.normalize("NFKC")).split(/\s+/).filter(Boolean);
     const matches = [];
     const verseKeysByBook = new Map();
     let totalTranslationMatches = 0;
 
     for (const [translation, { rows, normalized }] of datasets) {
+      const wanted = ORIGINAL_LANGUAGES.has(translation) ? originalTerms : terms;
+      if (!wanted.length) continue;
       for (let index = 0; index < rows.length; index += 1) {
         const normalizedText = normalized[index];
-        if (terms.every((term) => normalizedText.includes(term))) {
+        if (wanted.every((term) => normalizedText.includes(term))) {
           const [book, chapter, verse, text] = rows[index];
           totalTranslationMatches += 1;
           if (!verseKeysByBook.has(book)) verseKeysByBook.set(book, new Set());

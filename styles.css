@@ -1735,6 +1735,16 @@ input:focus {
   min-width: 0;
 }
 
+/* HEB's line (the verse's Hebrew words, see fillOriginalLanguageText and
+   buildSearchResultItem in app.js) is dir="rtl", so its words read right to
+   left; text-align: left then packs it against the same edge every other
+   version's line starts at, exactly as a panel's Hebrew row is packed (see
+   .interlinear-word-row[dir="rtl"]) -- left alone, a short verse would float
+   at the right end of the column above and below left-aligned ones. */
+.search-match-line > [dir="rtl"] {
+  text-align: left;
+}
+
 /* Matches .translation-label's own size exactly (the panel body's version
    name) -- align-items: start above matches this row's own box top to the
    text beside it, but its sans-serif font's own ascent metric still sits
