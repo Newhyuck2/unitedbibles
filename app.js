@@ -348,6 +348,18 @@ function styleHighlightMark(mark, color, pick = null) {
   mark.style.setProperty("--highlight-ink", keepPick ? pick : highlightInk(color));
 }
 
+// LXX (the Septuagint interlinear) is switched off for now. ORIGINAL_LANGUAGE_META
+// below leaves it out, and that list is the only way any part of the app
+// learns of it: the panels' version picker, the copy/highlight/TSK/search/
+// bookmark windows' pickers, the search and a save's panel chips (sanitizeState
+// keeps only listed ids, so a panel that had LXX opens without it). Nothing else
+// was taken away: its data (data/interlinear-lxx/, data/search/LXX.json, built
+// by scripts/build_interlinear_lxx.py and export_original_search.py) and every
+// code path that handles it are still here, and highlights made on LXX verses
+// stay saved (the highlight list just leaves them out while it is off -- see
+// groupedStateEntries). Setting this to true brings it all back.
+const LXX_ENABLED = false;
+
 // Hebrew/Greek interlinear "translations" are synthetic: they are not part of
 // manifest.translations (no exported text data exists for them yet), so they
 // are resolved via ORIGINAL_LANGUAGE_META instead of the manifest lookup.
@@ -357,6 +369,7 @@ function styleHighlightMark(mark, color, pick = null) {
 const ORIGINAL_LANGUAGE_META = {
   HEB: { id: "HEB", label: "HEB", name: "Hebrew Interlinear", testament: "old", exclusive: true },
   GRK: { id: "GRK", label: "GRK", name: "Greek Interlinear", testament: "new", exclusive: true },
+  // Listed only while LXX_ENABLED (above) is true.
   // A second, independent OT option -- unlike HEB/GRK (exclusive: true),
   // LXX is a full peer of any other translation: it can sit alongside HEB
   // (even both at once), hides/shows with a plain click like a real
@@ -370,8 +383,15 @@ const ORIGINAL_LANGUAGE_META = {
   // every time, same as before LXX existed (see originalLanguageForTestament,
   // which only ever knows about the exclusive pair) -- LXX is something the
   // reader opts into, never automatic.
-  LXX: { id: "LXX", label: "LXX", name: "Septuagint Interlinear", testament: "old", exclusive: false },
+  ...(LXX_ENABLED
+    ? { LXX: { id: "LXX", label: "LXX", name: "Septuagint Interlinear", testament: "old", exclusive: false } }
+    : {}),
 };
+// Why an original language picked in the copy or highlight window can have
+// nothing to give for a passage (see copySelectedVerses, applyHighlight).
+const ORIGINAL_LANGUAGE_TESTAMENT_NOTE = LXX_ENABLED
+  ? "HEB and LXX are Old Testament texts, GRK the New Testament's."
+  : "HEB is an Old Testament text, GRK the New Testament's.";
 const ORIGINAL_LANGUAGE_IDS = Object.keys(ORIGINAL_LANGUAGE_META);
 // HEB/GRK only -- the one shared "original language" slot (see
 // activeOriginalLanguageId, originalLanguageHidden, syncOriginalLanguageForTestament):
@@ -8175,7 +8195,7 @@ function applyHighlight() {
   const translations = chosen.filter((id) => !ORIGINAL_LANGUAGE_IDS.includes(id) || originalLanguageCovers(id, highlightBook));
   if (!translations.length) {
     highlightStatus.textContent = chosen.length
-      ? "Nothing to highlight here: HEB and LXX are Old Testament texts, GRK the New Testament's."
+      ? `Nothing to highlight here: ${ORIGINAL_LANGUAGE_TESTAMENT_NOTE}`
       : "Select a version.";
     return;
   }
@@ -10218,7 +10238,7 @@ async function copySelectedVerses() {
   const translations = chosen.filter((id) => !ORIGINAL_LANGUAGE_IDS.includes(id) || originalLanguageCovers(id, copyBook));
   if (!translations.length) {
     copyStatus.textContent = chosen.length
-      ? "Nothing to copy here: HEB and LXX are Old Testament texts, GRK the New Testament's."
+      ? `Nothing to copy here: ${ORIGINAL_LANGUAGE_TESTAMENT_NOTE}`
       : "Select a version.";
     return;
   }
@@ -12835,6 +12855,10 @@ function groupedStateEntries(stateMap) {
   const groups = new Map();
   for (const key of Object.keys(stateMap)) {
     const [translation, book, chapter, verse] = key.split(":");
+    // A highlight on a version the app doesn't offer right now (LXX while it
+    // is switched off -- see LXX_ENABLED) stays saved, just out of the list,
+    // and so out of reach of the row's remove button too.
+    if (!translationMeta(translation)) continue;
     const groupKey = `${book}:${chapter}:${verse}`;
     if (!groups.has(groupKey)) {
       groups.set(groupKey, { book: Number(book), chapter: Number(chapter), verse: Number(verse), entries: [] });
