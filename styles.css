@@ -1110,11 +1110,11 @@ input:focus {
    rather widen the whole panel into a horizontal scrollbar than wrap.
    overflow-wrap: anywhere breaks at normal word boundaries first, and only
    mid-word if a token alone still doesn't fit. The transliteration and
-   English gloss lines run 4px (four steps of the font size control) under
+   English gloss lines run 3px (three steps of the font size control) under
    the original word's size. */
 .interlinear-translit {
   color: var(--link-blue);
-  font-size: calc(var(--verse-font-size) - 4px);
+  font-size: calc(var(--verse-font-size) - 3px);
   overflow-wrap: anywhere;
 }
 
@@ -1127,7 +1127,7 @@ input:focus {
 
 .interlinear-gloss {
   color: var(--emphasis-orange);
-  font-size: calc(var(--verse-font-size) - 4px);
+  font-size: calc(var(--verse-font-size) - 3px);
   overflow-wrap: anywhere;
 }
 
