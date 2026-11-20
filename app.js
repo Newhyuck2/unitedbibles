@@ -8,6 +8,9 @@ const STORAGE_KEY = "side-by-side-bible:v1";
 // green -- LXX's, a light green, is the faintest on the light page at about
 // 2.8:1); the others were picked to stay apart: no two of these twenty are
 // closer than about 12 in CIEDE2000, and all but LXX read at 3:1 or better.
+// KLB's brick red (dark red berry 1) replaced the vivid #cc0000 for a calmer
+// tone; the darker reds (#a61c00, #990000, #660000, #5b0f00) all sit within
+// 4-9 of NRSV's #85200c, so this is the calmest red cell that keeps the 12.
 const TRANSLATION_COLORS = {
   ESV: "#b45f06",
   NIV: "#3c78d8",
@@ -19,7 +22,7 @@ const TRANSLATION_COLORS = {
   KRV: "#a64d79",
   SAENEW: "#674ea7",
   WLB: "#741b47",
-  KLB: "#cc0000",
+  KLB: "#cc4125",
   EASY: "#38761d",
   CNV: "#073763",
   TB: "#783f04",
