@@ -1064,7 +1064,8 @@ input:focus {
    the words against the row's own start edge -- physically the right -- so
    a verse shorter than the panel, and the last line of a wrapped one, ends
    flush right with its empty space on the left. Don't add flex-end here: it
-   packs toward dir="rtl"'s end edge, i.e. back to the left. */
+   packs toward dir="rtl"'s end edge, i.e. back to the left. The windows' HEB
+   lines follow suit, see .search-match-line > [dir="rtl"]. */
 
 .interlinear-word {
   display: flex;
@@ -1735,12 +1736,12 @@ input:focus {
 
 /* HEB's line (the verse's Hebrew words, see fillOriginalLanguageText and
    buildSearchResultItem in app.js) is dir="rtl", so its words read right to
-   left; text-align: left then packs it against the same edge every other
-   version's line starts at -- left alone, a short verse would float at the
-   right end of the column above and below left-aligned ones. (A panel's
-   Hebrew interlinear row is right-aligned instead, see .interlinear-word-row.) */
+   left, and it is right-aligned the way Hebrew is set, exactly as a panel's
+   Hebrew interlinear row is packed (see .interlinear-word-row): a short verse
+   and the last line of a wrapped one end flush against the column's right
+   edge, ragged on the left -- not justified like the other versions' lines. */
 .search-match-line > [dir="rtl"] {
-  text-align: left;
+  text-align: right;
 }
 
 /* Matches .translation-label's own size exactly (the panel body's version

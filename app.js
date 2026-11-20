@@ -10097,8 +10097,8 @@ function verseTextsOf(chapterData, verse) {
 
 // Puts a verse's original words into a window's text element (a result line's
 // .search-match-text, or -- `target` -- the highlight mark inside it). Hebrew
-// reads right to left, so its line is dir="rtl" (the CSS packs it against the
-// left edge, see .search-match-line > [dir="rtl"]); the
+// reads right to left, so its line is dir="rtl" (the CSS right-aligns it, as a
+// panel's Hebrew row is, see .search-match-line > [dir="rtl"]); the
 // variant and compound marks inside a Greek word get the same line-height-0
 // span a panel gives them (see fillInterlinearOriginal).
 function fillOriginalLanguageText(container, id, text, target = container) {
