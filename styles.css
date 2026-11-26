@@ -3559,6 +3559,16 @@ mark {
   margin-top: 10px;
 }
 
+/* A nav click brings its section to the top of the list (see
+   scrollListItemIntoView in app.js) -- the last one too, however few rows it
+   has: it is at least as tall as the list itself, so there is always room
+   below it to scroll it up that far. Without it, a short last section (or
+   any section close enough to the end) could only come part of the way up. */
+.tsk-anchor-section:last-child,
+.concordance-group:last-child {
+  min-height: 100%;
+}
+
 .tsk-anchor-heading {
   margin-bottom: 8px;
   color: var(--emphasis-orange);

@@ -11160,8 +11160,14 @@ function scrollListItemIntoView(list, target) {
   // Rows that fill in while the list is still gliding to its target would
   // change the height of everything between here and there and leave it
   // landing short; a list with lazily filled rows (createLazyRowHydrator) is
-  // told to wait until the glide has settled.
-  lazyRowHydrators.get(list)?.hold();
+  // told to wait until the glide has settled, and to keep the target at its
+  // top edge through the fills that follow (see pin there): the rows around
+  // where it lands are still bare when the glide is aimed, so their filling
+  // in afterwards moves it -- and a list whose rows are still bare can be too
+  // short to bring a late section to the top at all until they fill.
+  const hydrator = lazyRowHydrators.get(list);
+  hydrator?.hold();
+  hydrator?.pin(target);
   const delta = target.getBoundingClientRect().top - list.getBoundingClientRect().top;
   list.scrollTo({ top: list.scrollTop + delta, behavior: "smooth" });
 }
@@ -11191,6 +11197,12 @@ function scrollListItemIntoView(list, target) {
 //   along by however far it was pushed.
 // - hold() pauses new fetches and fills until the list has stopped scrolling
 //   (see scrollListItemIntoView).
+// - pin(element) is the section a nav click sent the list to: until the reader
+//   scrolls or presses the list themselves, every fill puts it back at the
+//   list's top edge instead of holding the first row in view still -- the
+//   rows that fill in once the list lands are the bare ones around the target
+//   (and, through their chapters, others far above it), and holding the first
+//   row in view still let them push the target down out of sight.
 const lazyRowHydrators = new WeakMap();
 
 function createLazyRowHydrator({ root, load, isStillWanted = () => true, concurrency = 6, lookahead = 800 }) {
@@ -11204,6 +11216,7 @@ function createLazyRowHydrator({ root, load, isStillWanted = () => true, concurr
   let held = false;
   let releaseTimer = 0;
   let disposed = false;
+  let pinned = null;
 
   // Rows that show less than this much of themselves above the top edge don't
   // count as being read: a row grazing the edge by a pixel or two (a scroll
@@ -11211,9 +11224,25 @@ function createLazyRowHydrator({ root, load, isStillWanted = () => true, concurr
   // the scroll still.
   const SLIVER = 8;
 
+  // Brings the pinned section (see pin) back to the list's top edge. While the
+  // glide to it is still under way (held), the glide is aimed again rather than
+  // cut short by a jump; once it has settled, the list just moves by the gap.
+  function alignPinned() {
+    const offset = pinned.getBoundingClientRect().top - root.getBoundingClientRect().top;
+    if (Math.abs(offset) < 0.5) return;
+    if (held) root.scrollTo({ top: root.scrollTop + offset, behavior: "smooth" });
+    else root.scrollTop += offset;
+  }
+
   function fillRows(key, data) {
     const rows = rowsByKey.get(key);
     if (!rows) return;
+    if (pinned && !pinned.isConnected) pinned = null;
+    if (pinned) {
+      for (const row of rows) row.fill(data);
+      alignPinned();
+      return;
+    }
     const rootTop = root.getBoundingClientRect().top;
     let anchor = null;
     let anchorTop = Infinity;
@@ -11311,6 +11340,17 @@ function createLazyRowHydrator({ root, load, isStillWanted = () => true, concurr
     releaseTimer = setTimeout(release, 140);
   }, { passive: true });
 
+  // The reader taking the list over -- a wheel turn, a touch, a press (the
+  // scrollbar's included) or a key -- ends the pin: from then on a fill holds
+  // what they are reading still, as for any other scroll. The list's own
+  // programmatic scrolls make none of these, so they never end it.
+  const unpin = () => {
+    pinned = null;
+  };
+  for (const type of ["wheel", "touchstart", "pointerdown", "keydown"]) {
+    root.addEventListener(type, unpin, { passive: true });
+  }
+
   const api = {
     register(element, key, fill) {
       const row = { element, key, fill };
@@ -11325,8 +11365,12 @@ function createLazyRowHydrator({ root, load, isStillWanted = () => true, concurr
       clearTimeout(releaseTimer);
       releaseTimer = setTimeout(release, 600);
     },
+    pin(element) {
+      pinned = element;
+    },
     dispose() {
       disposed = true;
+      pinned = null;
       observer?.disconnect();
       waiting.length = 0;
       clearTimeout(releaseTimer);
