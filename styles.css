@@ -8048,6 +8048,7 @@ body * {
 #tsk-translations .translation-chip.chip-dimmed .translation-name,
 #bookmark-list-translations .translation-chip.chip-dimmed .translation-name,
 #copy-translations .translation-chip.chip-dimmed .translation-name,
+#highlight-translations .translation-chip.chip-dimmed .translation-name,
 #search-translation-list .translation-chip.chip-dimmed .translation-name {
   color: var(--translation-color-dim);
 }

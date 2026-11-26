@@ -589,6 +589,12 @@ let highlightStartVerseCombo = null;
 let highlightEndVerseCombo = null;
 let highlightPanelState = null;
 let highlightTranslationOrder = [];
+// Like copyTranslationStyle: the highlight dialog's chips can be dimmed, and a
+// dimmed one stays in the row but isn't highlighted (see applyHighlight).
+// Seeded from the panel's own hidden picks each time the dialog opens (see
+// setHighlightTranslations); only dimmedTranslations is used.
+// createDialogTranslationStyle is hoisted, so it can be called up here.
+const highlightTranslationStyle = createDialogTranslationStyle();
 let highlightTranslationControl = null;
 // The verse+translation a still-open highlight-manage popup (see
 // showHighlightManagePopup) is currently pointed at -- null whenever it's
@@ -2208,9 +2214,9 @@ function restyleTranslationMatchLines(container, style) {
 
 // Just the hide/show half of a panel's chip behavior (see
 // createPanelElement), on the dialog's own style: a chip body click fades or
-// unfades that translation. For the copy and search dialogs, where a faded
-// chip means "left out of the copy / the search" and there is no result
-// line to restyle in place.
+// unfades that translation. For the copy, highlight and search dialogs, where
+// a faded chip means "left out of the copy / the highlight / the search" and
+// there is no result line to restyle in place.
 function dialogTranslationHideControls(style) {
   return {
     getEmphasis: (id) => (style.dimmedTranslations.includes(id) ? "dim" : "normal"),
@@ -8101,6 +8107,14 @@ function setupHighlightRangeControls() {
   });
 }
 
+// Replaces the versions the highlight dialog offers, like setCopyTranslations:
+// `dimmed` is which of them start out faded (and so unhighlighted), and every
+// opening has to say, or the last opening's dimming would carry into the next.
+function setHighlightTranslations(order, dimmed = []) {
+  highlightTranslationOrder = order;
+  highlightTranslationStyle.dimmedTranslations = dimmed.filter((id) => order.includes(id));
+}
+
 function populateHighlightDialogAndShow() {
   highlightBookCombo.setValue(highlightBook);
   highlightChapterCombo.setItems(chapterItems(highlightBook));
@@ -8128,9 +8142,12 @@ function openHighlightDialog(panelState) {
   highlightSelectedVerseNumbers = [...selectedVerses];
   highlightSelectedVerseNumbersBook = highlightBook;
   highlightSelectedVerseNumbersChapter = highlightChapter;
+  // The panel's versions in its reading order, as the copy dialog takes them
+  // (see openCopyDialog): whatever the panel has hidden (chip faded) starts out
+  // faded here too, and so isn't highlighted unless its chip is clicked back on.
   const enabled = enabledTranslationIds(panelState);
   const offered = enabled.filter(isDialogTranslationId);
-  highlightTranslationOrder = offered.length ? offered : enabled;
+  setHighlightTranslations(offered.length ? offered : enabled, panelHiddenTranslations(panelState));
   populateHighlightDialogAndShow();
 }
 
@@ -8191,10 +8208,12 @@ function highlightEffectiveVerseNumbers() {
 // same passage) should show the same highlight too.
 function applyHighlight() {
   if (!highlightPanelState) return;
-  // An original language only has text, and so only something to paint, in its
-  // own testament (HEB and LXX the Old, GRK the New): for a passage of the
-  // other one it is left out, rather than saving highlights nothing can show.
-  const chosen = [...highlightTranslationOrder];
+  // A faded chip stays in the row but is left out, as in the copy dialog (see
+  // copySelectedVerses). An original language only has text, and so only
+  // something to paint, in its own testament (HEB and LXX the Old, GRK the
+  // New): for a passage of the other one it is left out, rather than saving
+  // highlights nothing can show.
+  const chosen = highlightTranslationOrder.filter((id) => !highlightTranslationStyle.dimmedTranslations.includes(id));
   const translations = chosen.filter((id) => !ORIGINAL_LANGUAGE_IDS.includes(id) || originalLanguageCovers(id, highlightBook));
   if (!translations.length) {
     highlightStatus.textContent = chosen.length
@@ -13712,7 +13731,11 @@ async function init() {
       getOrder: () => highlightTranslationOrder,
       setOrder: (order) => {
         highlightTranslationOrder = order;
+        pruneDialogTranslationStyle(highlightTranslationStyle, order);
       },
+      // A chip body click fades/unfades it, as in the copy dialog above -- a
+      // faded one is left out of the highlight (see applyHighlight).
+      ...dialogTranslationHideControls(highlightTranslationStyle),
       // HEB, GRK and LXX are offered here too, like in the copy dialog above.
       // A highlight on one paints the original word of every word block of the
       // verse (see buildInterlinearWordRow), and only exists for the testament
